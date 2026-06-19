@@ -1,0 +1,41 @@
+import Image from "next/image";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { LoginForm } from "@/components/login-form";
+
+export const metadata = {
+  title: "Sign in | Protein Thaw Manager",
+};
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const { next = "/" } = await searchParams;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    redirect(next.startsWith("/") ? next : "/");
+  }
+
+  return (
+    <div className="flex min-h-full flex-1 flex-col items-center justify-center bg-gradient-to-b from-background via-background to-muted/40 px-6 py-16">
+      <Image
+        src="/logo.png"
+        alt="Avatar Natural Foods"
+        width={200}
+        height={64}
+        className="mb-8 h-auto w-full max-w-[180px] object-contain"
+        priority
+      />
+      <LoginForm next={next.startsWith("/") ? next : "/"} />
+      <p className="mt-6 text-center text-xs text-muted-foreground">
+        &copy; {new Date().getFullYear()} Avatar Natural Foods. All rights reserved.
+      </p>
+    </div>
+  );
+}
