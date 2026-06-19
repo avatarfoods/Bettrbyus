@@ -26,6 +26,10 @@ export const movingOutDateTimeSchema = z.object({
 // Used for "moving in" — prep date, best by, lot number
 export const movingInDetailsSchema = z.object({
   prepDate: z.string().min(1, "Select a prep date"),
+  prepTime: z
+    .string()
+    .min(1, "Select a prep time")
+    .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Enter a valid time"),
   bestByDate: z.string().min(1, "Select a best by date"),
   bestByTime: z
     .string()
@@ -42,15 +46,18 @@ export type MovingInDetailsValues = z.infer<typeof movingInDetailsSchema>;
 
 export type MovingFormData = {
   direction: "in" | "out";
+  poNumber: string;
   amount: number;
   // moving in
   itemId?: string;
   itemCode?: string | null;
   itemName?: string | null;
   prepDate?: string;
+  prepTime?: string;
   bestByDate?: string;
   bestByTime?: string;
   lotNumber?: string;
+  storageType?: "original_case" | "black_container";
   // moving out
   movedOutDate?: string;
   movedOutTime?: string;
