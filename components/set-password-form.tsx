@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { establishSessionFromUrl } from "@/lib/auth/establish-session-from-url";
 import {
   setPasswordWithProfileSchema,
   type SetPasswordWithProfileFormValues,
@@ -46,9 +47,16 @@ export function SetPasswordForm() {
   useEffect(() => {
     const supabase = createClient();
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    void (async () => {
+      const { session, error } = await establishSessionFromUrl(supabase);
+
+      if (error) {
+        setAuthError(error);
+      }
+
       setHasSession(!!session);
       setSessionReady(true);
+
       if (session?.user.user_metadata?.full_name) {
         reset({
           fullName: String(session.user.user_metadata.full_name),
@@ -56,7 +64,7 @@ export function SetPasswordForm() {
           confirmPassword: "",
         });
       }
-    });
+    })();
   }, [reset]);
 
   async function onSubmit(values: SetPasswordWithProfileFormValues) {

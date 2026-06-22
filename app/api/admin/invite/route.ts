@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSetPasswordRedirectUrl } from "@/lib/auth/app-url";
 import { getCurrentUserProfile, isAdminProfile } from "@/lib/auth/profile";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -32,8 +33,7 @@ export async function POST(request: Request) {
   }
 
   const { email, fullName } = parsed.data;
-  const origin = new URL(request.url).origin;
-  const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent("/set-password")}`;
+  const redirectTo = getSetPasswordRedirectUrl(new URL(request.url).origin);
 
   try {
     const admin = createAdminClient();
