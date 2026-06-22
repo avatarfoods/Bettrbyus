@@ -1,4 +1,4 @@
-import { isAfter, parseISO } from "date-fns";
+import { addDays, format, isAfter, parseISO } from "date-fns";
 
 export type ThawRange = {
   minDays: number;
@@ -8,11 +8,14 @@ export type ThawRange = {
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export function parseThawRangeDays(
-  value: string | null | undefined
+  value: string | number | null | undefined
 ): ThawRange | null {
-  if (!value?.trim()) return null;
+  if (value === null || value === undefined) return null;
 
-  const rangeMatch = value.trim().match(/^(\d+)\s*-\s*(\d+)$/);
+  const text = String(value).trim();
+  if (!text) return null;
+
+  const rangeMatch = text.match(/^(\d+)\s*-\s*(\d+)$/);
   if (rangeMatch) {
     const first = Number(rangeMatch[1]);
     const second = Number(rangeMatch[2]);
@@ -22,7 +25,7 @@ export function parseThawRangeDays(
     };
   }
 
-  const singleMatch = value.trim().match(/^(\d+)$/);
+  const singleMatch = text.match(/^(\d+)$/);
   if (singleMatch) {
     const days = Number(singleMatch[1]);
     return { minDays: days, maxDays: days };
@@ -41,42 +44,106 @@ function daysBetween(start: Date, end: Date): number {
 
 export const THAW_WARNING_DAYS = 3;
 
-export function getThawExpiryWarning(
+function parseIsoDate(value: string): Date | null {
+  const date = parseISO(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** Move-out deadline = best by, or prep + max thaw days when best by is missing. */
+export function getMoveOutDeadline(
   prepDateIso: string | null,
   bestByIso: string | null,
-  thawRangeDays: string | null | undefined,
-  now: Date = new Date()
-): string | null {
+  thawRangeDays: string | number | null | undefined
+): Date | null {
+  if (bestByIso) {
+    const bestByAt = parseIsoDate(bestByIso);
+    if (bestByAt) return bestByAt;
+  }
+
   const range = parseThawRangeDays(thawRangeDays);
   if (!range || !prepDateIso) return null;
 
-  const prepAt = parseISO(prepDateIso);
+  const prepAt = parseIsoDate(prepDateIso);
+  if (!prepAt) return null;
+
+  return addDays(prepAt, range.maxDays);
+}
+
+export function getThawExpiryWarning(
+  prepDateIso: string | null,
+  bestByIso: string | null,
+  thawRangeDays: string | number | null | undefined,
+  now: Date = new Date()
+): string | null {
+  const deadline = getMoveOutDeadline(prepDateIso, bestByIso, thawRangeDays);
+  if (!deadline) return null;
+
+  const daysUntilMoveOut = daysBetween(now, deadline);
+  const rangeLabel = formatThawRangeLabel(thawRangeDays);
+
+  if (daysUntilMoveOut <= 0) {
+    return rangeLabel
+      ? `Past ${rangeLabel} thaw limit — move out now`
+      : "Past move out date";
+  }
+
+  if (daysUntilMoveOut <= THAW_WARNING_DAYS) {
+    const days = Math.ceil(daysUntilMoveOut);
+    return rangeLabel
+      ? `Move out in ${days} day${days === 1 ? "" : "s"} (${rangeLabel} thaw)`
+      : `Move out in ${days} day${days === 1 ? "" : "s"}`;
+  }
+
+  return null;
+}
+
+export function formatThawRangeLabel(
+  thawRangeDays: string | number | null | undefined
+): string | null {
+  const range = parseThawRangeDays(thawRangeDays);
+  if (!range) return null;
+  if (range.minDays === range.maxDays) {
+    return `${range.minDays} day${range.minDays === 1 ? "" : "s"}`;
+  }
+  return `${range.minDays}–${range.maxDays} days`;
+}
+
+/** Best by = prep + max days from thaw range (14-14 → exactly 14 days later). */
+export function calculateBestByFromPrep(
+  prepDate: string,
+  prepTime: string,
+  thawRangeDays: string | null | undefined
+): { bestByDate: string; bestByTime: string } | null {
+  const range = parseThawRangeDays(thawRangeDays);
+  if (!range) return null;
+
+  const prepAt = combineDateAndTime(prepDate, prepTime);
   if (Number.isNaN(prepAt.getTime())) return null;
 
-  const daysSincePrep = daysBetween(prepAt, now);
-  const remainingInThawWindow = range.maxDays - daysSincePrep;
+  const bestByAt = addDays(prepAt, range.maxDays);
+  return {
+    bestByDate: format(bestByAt, "yyyy-MM-dd"),
+    bestByTime: format(bestByAt, "HH:mm"),
+  };
+}
 
-  if (remainingInThawWindow <= 0) {
-    return `Past ${range.maxDays}-day thaw limit`;
+export function validatePrepForMovingIn(
+  prepDate: string,
+  prepTime: string,
+  thawRangeDays: string | null | undefined,
+  now: Date = new Date()
+): string | null {
+  if (!parseThawRangeDays(thawRangeDays)) {
+    return "This item has no thaw range configured";
   }
 
-  if (remainingInThawWindow <= THAW_WARNING_DAYS) {
-    const days = Math.ceil(remainingInThawWindow);
-    return `Thaw limit in ${days} day${days === 1 ? "" : "s"} (${range.minDays}–${range.maxDays})`;
+  const prepAt = combineDateAndTime(prepDate, prepTime);
+  if (Number.isNaN(prepAt.getTime())) {
+    return "Invalid prep date or time";
   }
 
-  if (bestByIso) {
-    const bestByAt = parseISO(bestByIso);
-    if (!Number.isNaN(bestByAt.getTime())) {
-      const daysUntilBestBy = daysBetween(now, bestByAt);
-      if (daysUntilBestBy <= 0) {
-        return "Past best by date";
-      }
-      if (daysUntilBestBy <= THAW_WARNING_DAYS) {
-        const days = Math.ceil(daysUntilBestBy);
-        return `Best by in ${days} day${days === 1 ? "" : "s"}`;
-      }
-    }
+  if (isAfter(prepAt, now)) {
+    return "Prep date and time cannot be in the future";
   }
 
   return null;
@@ -90,43 +157,25 @@ export function validateMovingInThawRange(
   thawRangeDays: string | null | undefined,
   now: Date = new Date()
 ): { field: "prepDate" | "bestByDate"; message: string } | null {
-  const range = parseThawRangeDays(thawRangeDays);
-  if (!range) return null;
-
-  const prepAt = combineDateAndTime(prepDate, prepTime);
-  const bestByAt = combineDateAndTime(bestByDate, bestByTime);
-
-  if (Number.isNaN(prepAt.getTime()) || Number.isNaN(bestByAt.getTime())) {
-    return { field: "prepDate", message: "Invalid prep or best by date and time" };
+  const prepError = validatePrepForMovingIn(
+    prepDate,
+    prepTime,
+    thawRangeDays,
+    now
+  );
+  if (prepError) {
+    return { field: "prepDate", message: prepError };
   }
 
-  if (isAfter(prepAt, now)) {
-    return {
-      field: "prepDate",
-      message: "Prep date and time cannot be in the future",
-    };
-  }
-
-  if (!isAfter(bestByAt, prepAt)) {
+  const calculated = calculateBestByFromPrep(prepDate, prepTime, thawRangeDays);
+  if (
+    !calculated ||
+    calculated.bestByDate !== bestByDate ||
+    calculated.bestByTime !== bestByTime
+  ) {
     return {
       field: "bestByDate",
-      message: "Best by date and time must be after prep date and time",
-    };
-  }
-
-  const elapsedDays = daysBetween(prepAt, bestByAt);
-
-  if (elapsedDays > range.maxDays) {
-    return {
-      field: "bestByDate",
-      message: `Best by cannot be more than ${range.maxDays} days after prep (thaw range: ${range.minDays}–${range.maxDays} days)`,
-    };
-  }
-
-  if (elapsedDays < range.minDays) {
-    return {
-      field: "bestByDate",
-      message: `Best by must be at least ${range.minDays} days after prep (thaw range: ${range.minDays}–${range.maxDays} days)`,
+      message: "Best by date could not be calculated from thaw range",
     };
   }
 

@@ -33,12 +33,6 @@ function formatIsoDateTime(value: string | null) {
   }
 }
 
-function formatStorageType(value: string | null) {
-  if (value === "original_case") return "Original case";
-  if (value === "black_container") return "Black container";
-  return "—";
-}
-
 export function AvailableLotsTable() {
   const [movings, setMovings] = useState<MovingRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -161,7 +155,7 @@ export function AvailableLotsTable() {
       <p className="text-sm text-muted-foreground">
         Showing {filteredMovings.length} of {movings.length} lot
         {movings.length === 1 ? "" : "s"} in thaw. Warnings appear when a lot is
-        within 3 days of its thaw limit or best by date.
+        within 3 days of its move out date (prep + thaw range).
       </p>
     </div>
   );

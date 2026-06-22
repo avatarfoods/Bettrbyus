@@ -23,17 +23,12 @@ export const movingOutDateTimeSchema = z.object({
     .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Enter a valid time"),
 });
 
-// Used for "moving in" — prep date, best by, lot number
+// Used for "moving in" — prep date, lot number (best by is auto-calculated)
 export const movingInDetailsSchema = z.object({
   prepDate: z.string().min(1, "Select a prep date"),
   prepTime: z
     .string()
     .min(1, "Select a prep time")
-    .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Enter a valid time"),
-  bestByDate: z.string().min(1, "Select a best by date"),
-  bestByTime: z
-    .string()
-    .min(1, "Select a best by time")
     .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Enter a valid time"),
   lotNumber: z.string().min(1, "Enter a lot number"),
 });

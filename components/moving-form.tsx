@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import {
@@ -27,7 +27,11 @@ import {
   type MovingFormData,
 } from "@/lib/validations/moving";
 import { createClient } from "@/lib/supabase/client";
-import { validateMovingInThawRange } from "@/lib/thaw-range";
+import {
+  calculateBestByFromPrep,
+  formatThawRangeLabel,
+  validatePrepForMovingIn,
+} from "@/lib/thaw-range";
 import {
   MOVING_SUBMIT_ERROR_MESSAGE,
   MOVING_SUBMIT_SUCCESS_MESSAGE,
@@ -158,8 +162,6 @@ export function MovingForm() {
   // Moving-in details
   const [prepDate, setPrepDate] = useState("");
   const [prepTime, setPrepTime] = useState("");
-  const [bestByDate, setBestByDate] = useState("");
-  const [bestByTime, setBestByTime] = useState("");
   const [lotNumber, setLotNumber] = useState("");
   const [storageType, setStorageType] = useState<"original_case" | "black_container" | "">("");
 
@@ -174,8 +176,6 @@ export function MovingForm() {
   const [amountError, setAmountError] = useState<string | null>(null);
   const [prepDateError, setPrepDateError] = useState<string | null>(null);
   const [prepTimeError, setPrepTimeError] = useState<string | null>(null);
-  const [bestByDateError, setBestByDateError] = useState<string | null>(null);
-  const [bestByTimeError, setBestByTimeError] = useState<string | null>(null);
   const [lotNumberError, setLotNumberError] = useState<string | null>(null);
   const [storageTypeError, setStorageTypeError] = useState<string | null>(null);
   const [movedOutDateError, setMovedOutDateError] = useState<string | null>(null);
@@ -211,6 +211,18 @@ export function MovingForm() {
     "e7b15300-8319-4d82-8920-1166d195a59b",
   ];
   const requiresStorageType = STORAGE_TYPE_ITEM_IDS.includes(selectedItem?.id ?? "");
+  const selectedThawRangeDays = selectedItem?.thaw_range_days ?? null;
+
+  const calculatedBestBy = useMemo(() => {
+    if (!prepDate || !prepTime || !selectedThawRangeDays) return null;
+    return calculateBestByFromPrep(
+      prepDate,
+      prepTime,
+      selectedThawRangeDays
+    );
+  }, [prepDate, prepTime, selectedThawRangeDays]);
+
+  const thawRangeLabel = formatThawRangeLabel(selectedThawRangeDays);
 
   // Load items when entering the item step
   useEffect(() => {
@@ -287,24 +299,32 @@ export function MovingForm() {
   function getMovingInThawRangeError(
     prepDateValue: string,
     prepTimeValue: string,
-    bestByDateValue: string,
-    bestByTimeValue: string,
     item: ItemOption | undefined
   ) {
     if (!item) return { field: "prepDate" as const, message: "Select an item" };
-    if (!item.thaw_range_days?.trim()) {
-      return {
-        field: "prepDate" as const,
-        message: "This item has no thaw range configured",
-      };
-    }
-    return validateMovingInThawRange(
+
+    const prepError = validatePrepForMovingIn(
       prepDateValue,
       prepTimeValue,
-      bestByDateValue,
-      bestByTimeValue,
       item.thaw_range_days
     );
+    if (prepError) {
+      return { field: "prepDate" as const, message: prepError };
+    }
+
+    const bestBy = calculateBestByFromPrep(
+      prepDateValue,
+      prepTimeValue,
+      item.thaw_range_days
+    );
+    if (!bestBy) {
+      return {
+        field: "prepDate" as const,
+        message: "Cannot calculate best by from thaw range",
+      };
+    }
+
+    return null;
   }
 
   function handleDetailsNext() {
@@ -314,16 +334,12 @@ export function MovingForm() {
       const result = movingInDetailsSchema.safeParse({
         prepDate,
         prepTime,
-        bestByDate,
-        bestByTime,
         lotNumber,
       });
       if (!result.success) {
         const issues = result.error.issues;
         setPrepDateError(issues.find((i) => i.path[0] === "prepDate")?.message ?? null);
         setPrepTimeError(issues.find((i) => i.path[0] === "prepTime")?.message ?? null);
-        setBestByDateError(issues.find((i) => i.path[0] === "bestByDate")?.message ?? null);
-        setBestByTimeError(issues.find((i) => i.path[0] === "bestByTime")?.message ?? null);
         setLotNumberError(issues.find((i) => i.path[0] === "lotNumber")?.message ?? null);
         return;
       }
@@ -334,24 +350,23 @@ export function MovingForm() {
       const thawRangeError = getMovingInThawRangeError(
         result.data.prepDate,
         result.data.prepTime,
-        result.data.bestByDate,
-        result.data.bestByTime,
         selectedItem
       );
       if (thawRangeError) {
-        if (thawRangeError.field === "prepDate") {
-          setPrepDateError(thawRangeError.message);
-          setBestByDateError(null);
-        } else {
-          setBestByDateError(thawRangeError.message);
-          setPrepDateError(null);
-        }
+        setPrepDateError(thawRangeError.message);
+        return;
+      }
+      const bestBy = calculateBestByFromPrep(
+        result.data.prepDate,
+        result.data.prepTime,
+        selectedItem?.thaw_range_days
+      );
+      if (!bestBy) {
+        setPrepDateError("Cannot calculate best by from thaw range");
         return;
       }
       setPrepDateError(null);
       setPrepTimeError(null);
-      setBestByDateError(null);
-      setBestByTimeError(null);
       setLotNumberError(null);
       setStorageTypeError(null);
       setSubmitted({
@@ -363,8 +378,8 @@ export function MovingForm() {
         amount: Number(amount),
         prepDate: result.data.prepDate,
         prepTime: result.data.prepTime,
-        bestByDate: result.data.bestByDate,
-        bestByTime: result.data.bestByTime,
+        bestByDate: bestBy.bestByDate,
+        bestByTime: bestBy.bestByTime,
         lotNumber: result.data.lotNumber,
         storageType: requiresStorageType ? (storageType as "original_case" | "black_container") : undefined,
       });
@@ -420,26 +435,16 @@ export function MovingForm() {
       submitted.direction === "in" &&
       submitted.prepDate &&
       submitted.prepTime &&
-      submitted.bestByDate &&
-      submitted.bestByTime &&
       submitted.itemId
     ) {
       const item = items.find((i) => i.id === submitted.itemId);
       const thawRangeError = getMovingInThawRangeError(
         submitted.prepDate,
         submitted.prepTime,
-        submitted.bestByDate,
-        submitted.bestByTime,
         item
       );
       if (thawRangeError) {
-        if (thawRangeError.field === "prepDate") {
-          setPrepDateError(thawRangeError.message);
-          setBestByDateError(null);
-        } else {
-          setBestByDateError(thawRangeError.message);
-          setPrepDateError(null);
-        }
+        setPrepDateError(thawRangeError.message);
         setConfirmError(thawRangeError.message);
         setStep("details");
         return;
@@ -470,9 +475,7 @@ export function MovingForm() {
     setAmount("");
     setPrepDate("");
     setPrepTime("");
-    setBestByDate("");
     setStorageType("");
-    setBestByTime("");
     setLotNumber("");
     setMovedOutDate("");
     setMovedOutTime("");
@@ -482,8 +485,6 @@ export function MovingForm() {
     setItemsLoadError(null);
     setAmountError(null);
     setPrepDateError(null);
-    setBestByDateError(null);
-    setBestByTimeError(null);
     setLotNumberError(null);
     setMovedOutDateError(null);
     setMovedOutTimeError(null);
@@ -811,7 +812,7 @@ export function MovingForm() {
             <CardHeader>
               <CardTitle className="text-xl">Details</CardTitle>
               <CardDescription>
-                Fill in the prep, best by, and lot information.
+                Enter prep date and lot number. Best by is calculated from the item thaw range.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-6 pb-8">
@@ -870,55 +871,29 @@ export function MovingForm() {
 
               <div className="h-px bg-border" />
 
-              {/* ── Best by section ── */}
-              <div className="flex flex-col gap-3">
-                <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">Best by</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Best by date */}
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="best-by-date">Date</Label>
-                    <div className="relative grid grid-cols-1">
-                      <CalendarDays className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                      <input
-                        id="best-by-date"
-                        type="date"
-                        value={bestByDate}
-                        onChange={(e) => {
-                          setBestByDate(e.target.value);
-                          setBestByDateError(null);
-                        }}
-                        aria-invalid={!!bestByDateError}
-                        className={cn(
-                          "h-12 min-w-0 rounded-lg border border-input bg-background pl-9 pr-2 text-base outline-none transition-colors focus:border-ring focus:ring-3 focus:ring-ring/50",
-                          bestByDateError && "border-destructive ring-3 ring-destructive/20"
-                        )}
-                      />
-                    </div>
-                    {bestByDateError && <p className="text-xs text-destructive">{bestByDateError}</p>}
-                  </div>
-
-                  {/* Best by time */}
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="best-by-time">Time</Label>
-                    <div className="relative grid grid-cols-1">
-                      <Clock className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                      <input
-                        id="best-by-time"
-                        type="time"
-                        value={bestByTime}
-                        onChange={(e) => {
-                          setBestByTime(e.target.value);
-                          setBestByTimeError(null);
-                        }}
-                        aria-invalid={!!bestByTimeError}
-                        className={cn(
-                          "h-12 min-w-0 rounded-lg border border-input bg-background pl-9 pr-2 text-base outline-none transition-colors focus:border-ring focus:ring-3 focus:ring-ring/50",
-                          bestByTimeError && "border-destructive ring-3 ring-destructive/20"
-                        )}
-                      />
-                    </div>
-                    {bestByTimeError && <p className="text-xs text-destructive">{bestByTimeError}</p>}
-                  </div>
+              {/* ── Best by (auto-calculated) ── */}
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+                  Best by
+                </p>
+                <div className="rounded-lg border bg-muted/30 px-4 py-3">
+                  {calculatedBestBy ? (
+                    <p className="text-base font-semibold">
+                      {formatDateTimeStr(
+                        calculatedBestBy.bestByDate,
+                        calculatedBestBy.bestByTime
+                      )}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Enter prep date and time to calculate best by.
+                    </p>
+                  )}
+                  {thawRangeLabel && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Calculated from thaw range: {thawRangeLabel} after prep
+                    </p>
+                  )}
                 </div>
               </div>
 

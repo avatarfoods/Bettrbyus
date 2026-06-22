@@ -21,16 +21,14 @@ export function AvailableItemsSummary({
   movings: movingsProp,
   className,
 }: AvailableItemsSummaryProps) {
-  const [movings, setMovings] = useState<MovingRecord[]>(movingsProp ?? []);
+  const [fetchedMovings, setFetchedMovings] = useState<MovingRecord[]>([]);
   const [isLoading, setIsLoading] = useState(!movingsProp);
   const [error, setError] = useState<string | null>(null);
 
+  const movings = movingsProp ?? fetchedMovings;
+
   useEffect(() => {
-    if (movingsProp) {
-      setMovings(movingsProp);
-      setIsLoading(false);
-      return;
-    }
+    if (movingsProp) return;
 
     let active = true;
     (async () => {
@@ -40,7 +38,7 @@ export function AvailableItemsSummary({
       const result = await fetchMovingsForOut(supabase);
       if (!active) return;
       if (result.error) setError(result.error);
-      setMovings(result.data);
+      setFetchedMovings(result.data);
       setIsLoading(false);
     })();
     return () => {
