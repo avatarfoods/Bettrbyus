@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/card";
 import { AvailableItemsSummary } from "@/components/available-items-summary";
 import { AvailableLotsTable } from "@/components/available-lots-table";
+import { formatTimeInFreezer } from "@/lib/movings/format-freezer-duration";
 
 function formatIsoDateTime(value: string | null) {
   if (!value) return "—";
@@ -186,9 +187,10 @@ export function MovingHistoryTable() {
               <TableHead>Removed</TableHead>
               <TableHead>Item</TableHead>
               <TableHead>Amount</TableHead>
+              <TableHead>Lot</TableHead>
+              <TableHead>Time in freezer</TableHead>
               <TableHead>In PO</TableHead>
               <TableHead>Out PO</TableHead>
-              <TableHead>Lot</TableHead>
               <TableHead>Moved in by</TableHead>
               <TableHead>Removed by</TableHead>
             </TableRow>
@@ -196,7 +198,7 @@ export function MovingHistoryTable() {
           <TableBody>
             {filteredMovings.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                   No removal history matches your search or filters.
                 </TableCell>
               </TableRow>
@@ -211,9 +213,12 @@ export function MovingHistoryTable() {
                       {item ? `${item.code ?? "—"} – ${item.item_name ?? "Unnamed"}` : "—"}
                     </TableCell>
                     <TableCell>{moving.amount}</TableCell>
+                    <TableCell>{moving.lot_number ?? "—"}</TableCell>
+                    <TableCell>
+                      {formatTimeInFreezer(moving.prep_date, moving.moved_at)}
+                    </TableCell>
                     <TableCell>{moving.po_number}</TableCell>
                     <TableCell>{moving.out_po_number ?? "—"}</TableCell>
-                    <TableCell>{moving.lot_number ?? "—"}</TableCell>
                     <TableCell>
                       <div className="flex flex-col">
                         <span>{getProfileDisplayName(moving.starter)}</span>

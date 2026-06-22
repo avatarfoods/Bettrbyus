@@ -12,6 +12,7 @@ import {
   type MovingRecord,
 } from "@/lib/movings/types";
 import { ThawWarningBadge } from "@/components/thaw-warning-badge";
+import { formatTimeInFreezer } from "@/lib/movings/format-freezer-duration";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -109,13 +110,14 @@ export function AvailableLotsTable() {
               <TableHead>Prep</TableHead>
               <TableHead>Best by</TableHead>
               <TableHead>Lot</TableHead>
+              <TableHead>In freezer</TableHead>
               <TableHead>Warning</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredMovings.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                   No lots in thaw match your search.
                 </TableCell>
               </TableRow>
@@ -141,6 +143,9 @@ export function AvailableLotsTable() {
                     <TableCell>{formatIsoDateTime(moving.prep_date)}</TableCell>
                     <TableCell>{formatIsoDateTime(moving.best_by)}</TableCell>
                     <TableCell>{moving.lot_number ?? "—"}</TableCell>
+                    <TableCell>
+                      {formatTimeInFreezer(moving.prep_date)}
+                    </TableCell>
                     <TableCell className="max-w-xs whitespace-normal">
                       <ThawWarningBadge message={warning} />
                     </TableCell>
