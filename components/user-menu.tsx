@@ -1,16 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOut } from "lucide-react";
+import { LogOut, UserPlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type UserMenuProps = {
   email: string;
+  isAdmin?: boolean;
 };
 
-export function UserMenu({ email }: UserMenuProps) {
+export function UserMenu({ email, isAdmin = false }: UserMenuProps) {
   const router = useRouter();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
@@ -27,6 +30,15 @@ export function UserMenu({ email }: UserMenuProps) {
       <span className="min-w-0 truncate text-right text-sm text-muted-foreground sm:max-w-xs">
         {email}
       </span>
+      {isAdmin && (
+        <Link
+          href="/admin/invite"
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}
+        >
+          <UserPlus />
+          <span className="hidden sm:inline">Invite</span>
+        </Link>
+      )}
       <Button
         type="button"
         variant="outline"

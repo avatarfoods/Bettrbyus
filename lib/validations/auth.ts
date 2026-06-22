@@ -27,3 +27,28 @@ export const setPasswordSchema = z
   });
 
 export type SetPasswordFormValues = z.infer<typeof setPasswordSchema>;
+
+export const inviteUserSchema = z.object({
+  email: z
+    .string()
+    .min(1, "Email is required")
+    .email("Enter a valid email address"),
+  fullName: z
+    .string()
+    .min(1, "Full name is required")
+    .max(120, "Full name is too long"),
+});
+
+export type InviteUserFormValues = z.infer<typeof inviteUserSchema>;
+
+export const setPasswordWithProfileSchema = setPasswordSchema
+  .extend({
+    fullName: z
+      .string()
+      .min(1, "Full name is required")
+      .max(120, "Full name is too long"),
+  });
+
+export type SetPasswordWithProfileFormValues = z.infer<
+  typeof setPasswordWithProfileSchema
+>;

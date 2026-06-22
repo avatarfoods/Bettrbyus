@@ -8,8 +8,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  setPasswordSchema,
-  type SetPasswordFormValues,
+  setPasswordWithProfileSchema,
+  type SetPasswordWithProfileFormValues,
 } from "@/lib/validations/auth";
 import { POST_LOGIN_PATH } from "@/lib/auth/redirect";
 import { Button } from "@/components/ui/button";
@@ -32,10 +32,12 @@ export function SetPasswordForm() {
   const {
     register,
     handleSubmit,
+    reset,
     formState: { errors, isSubmitting },
-  } = useForm<SetPasswordFormValues>({
-    resolver: zodResolver(setPasswordSchema),
+  } = useForm<SetPasswordWithProfileFormValues>({
+    resolver: zodResolver(setPasswordWithProfileSchema),
     defaultValues: {
+      fullName: "",
       password: "",
       confirmPassword: "",
     },
@@ -47,10 +49,17 @@ export function SetPasswordForm() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setHasSession(!!session);
       setSessionReady(true);
+      if (session?.user.user_metadata?.full_name) {
+        reset({
+          fullName: String(session.user.user_metadata.full_name),
+          password: "",
+          confirmPassword: "",
+        });
+      }
     });
-  }, []);
+  }, [reset]);
 
-  async function onSubmit(values: SetPasswordFormValues) {
+  async function onSubmit(values: SetPasswordWithProfileFormValues) {
     setAuthError(null);
 
     const supabase = createClient();
@@ -67,12 +76,18 @@ export function SetPasswordForm() {
 
     const { error } = await supabase.auth.updateUser({
       password: values.password,
+      data: { full_name: values.fullName },
     });
 
     if (error) {
       setAuthError(error.message);
       return;
     }
+
+    await supabase
+      .from("profiles")
+      .update({ full_name: values.fullName })
+      .eq("id", session.user.id);
 
     router.push(POST_LOGIN_PATH);
     router.refresh();
@@ -95,7 +110,7 @@ export function SetPasswordForm() {
           Set your password
         </CardTitle>
         <CardDescription>
-          Choose a password for your account.
+          Complete your account by setting your name and password.
         </CardDescription>
       </CardHeader>
 
@@ -120,6 +135,22 @@ export function SetPasswordForm() {
         )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="fullName">Full name</Label>
+            <Input
+              id="fullName"
+              type="text"
+              placeholder="Jane Smith"
+              autoComplete="name"
+              className="h-10"
+              aria-invalid={!!errors.fullName}
+              {...register("fullName")}
+            />
+            {errors.fullName && (
+              <p className="text-sm text-destructive">{errors.fullName.message}</p>
+            )}
+          </div>
+
           <div className="flex flex-col gap-2">
             <Label htmlFor="password">Password</Label>
             <Input
