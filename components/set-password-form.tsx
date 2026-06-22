@@ -11,6 +11,7 @@ import {
   setPasswordSchema,
   type SetPasswordFormValues,
 } from "@/lib/validations/auth";
+import { POST_LOGIN_PATH } from "@/lib/auth/redirect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -73,7 +74,7 @@ export function SetPasswordForm() {
       return;
     }
 
-    router.push("/");
+    router.push(POST_LOGIN_PATH);
     router.refresh();
   }
 

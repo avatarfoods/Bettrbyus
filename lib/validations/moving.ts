@@ -46,7 +46,7 @@ export type MovingInDetailsValues = z.infer<typeof movingInDetailsSchema>;
 
 export type MovingFormData = {
   direction: "in" | "out";
-  poNumber: string;
+  poNumber?: string;
   amount: number;
   // moving in
   itemId?: string;
@@ -59,6 +59,11 @@ export type MovingFormData = {
   lotNumber?: string;
   storageType?: "original_case" | "black_container";
   // moving out
+  movingId?: string;
+  inPoNumber?: string;
+  outPoNumber?: string;
+  prepDateIso?: string | null;
+  bestByIso?: string | null;
   movedOutDate?: string;
   movedOutTime?: string;
 };

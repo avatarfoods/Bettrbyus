@@ -1,5 +1,14 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { POST_LOGIN_PATH, resolvePostLoginPath } from "@/lib/auth/redirect";
+
+const PUBLIC_ROUTES = ["/login", "/auth/callback", "/set-password"];
+
+function isPublicRoute(pathname: string) {
+  return PUBLIC_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
+  );
+}
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -25,6 +34,32 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { pathname } = request.nextUrl;
+
+  if (!user && !isPublicRoute(pathname)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("next", resolvePostLoginPath(pathname));
+    return NextResponse.redirect(url);
+  }
+
+  if (user && pathname === "/") {
+    const url = request.nextUrl.clone();
+    url.pathname = POST_LOGIN_PATH;
+    return NextResponse.redirect(url);
+  }
+
+  if (user && pathname === "/login") {
+    const next = request.nextUrl.searchParams.get("next");
+    const url = request.nextUrl.clone();
+    url.pathname = resolvePostLoginPath(next);
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
   return supabaseResponse;
 }

@@ -2,6 +2,7 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { LoginForm } from "@/components/login-form";
+import { resolvePostLoginPath } from "@/lib/auth/redirect";
 
 export const metadata = {
   title: "Sign in | Protein Thaw Manager",
@@ -12,14 +13,15 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ next?: string }>;
 }) {
-  const { next = "/" } = await searchParams;
+  const { next } = await searchParams;
+  const redirectTo = resolvePostLoginPath(next);
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (user) {
-    redirect(next.startsWith("/") ? next : "/");
+    redirect(redirectTo);
   }
 
   return (
@@ -32,7 +34,7 @@ export default async function LoginPage({
         className="mb-8 h-auto w-full max-w-[180px] object-contain"
         priority
       />
-      <LoginForm next={next.startsWith("/") ? next : "/"} />
+      <LoginForm next={redirectTo} />
       <p className="mt-6 text-center text-xs text-muted-foreground">
         &copy; {new Date().getFullYear()} Avatar Natural Foods. All rights reserved.
       </p>

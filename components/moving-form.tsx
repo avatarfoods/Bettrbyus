@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import {
   ArrowDownToLine,
@@ -10,8 +11,10 @@ import {
   ChevronLeft,
   Clock,
   Hash,
+  History,
   Loader2,
   Package,
+  CheckCircle2,
   Snowflake,
 } from "lucide-react";
 import {
@@ -24,6 +27,14 @@ import {
   type MovingFormData,
 } from "@/lib/validations/moving";
 import { createClient } from "@/lib/supabase/client";
+import { validateMovingInThawRange } from "@/lib/thaw-range";
+import {
+  MOVING_SUBMIT_ERROR_MESSAGE,
+  MOVING_SUBMIT_SUCCESS_MESSAGE,
+  submitMoving,
+} from "@/lib/movings/submit-moving";
+import { getMovingItem, type MovingRecord } from "@/lib/movings/types";
+import { MovingOutTable } from "@/components/moving-out-table";
 import { cn } from "@/lib/utils";
 import {
   Card,
@@ -43,13 +54,14 @@ import { Separator } from "@/components/ui/separator";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Step = "direction" | "po" | "item" | "amount" | "details" | "complete";
+type Step = "direction" | "po" | "item" | "amount" | "select" | "details" | "complete" | "saved";
 type Direction = MovingDirectionValues["direction"];
 
 type ItemOption = {
   id: string;
   code: string | null;
   item_name: string | null;
+  thaw_range_days: string | null;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -57,7 +69,7 @@ type ItemOption = {
 function stepsFor(direction: Direction | null): Step[] {
   return direction === "in"
     ? ["direction", "po", "item", "amount", "details"]
-    : ["direction", "po", "amount", "details"];
+    : ["direction", "select", "po", "details"];
 }
 
 function formatDateStr(dateStr: string) {
@@ -81,6 +93,15 @@ function formatDateTimeStr(dateStr: string, timeStr: string) {
     return format(parseISO(`${dateStr}T${timeStr}`), "MMM d, yyyy · h:mm a");
   } catch {
     return `${dateStr} ${timeStr}`;
+  }
+}
+
+function formatIsoDateTime(value: string | null | undefined) {
+  if (!value) return "—";
+  try {
+    return format(parseISO(value), "MMM d, yyyy · h:mm a");
+  } catch {
+    return value;
   }
 }
 
@@ -159,19 +180,29 @@ export function MovingForm() {
   const [storageTypeError, setStorageTypeError] = useState<string | null>(null);
   const [movedOutDateError, setMovedOutDateError] = useState<string | null>(null);
   const [movedOutTimeError, setMovedOutTimeError] = useState<string | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Moving out selection
+  const [selectedMoving, setSelectedMoving] = useState<MovingRecord | null>(null);
+  const [selectError, setSelectError] = useState<string | null>(null);
+  const [movingsLoadError, setMovingsLoadError] = useState<string | null>(null);
 
   const [submitted, setSubmitted] = useState<MovingFormData | null>(null);
 
   // Progress
   const inputSteps = stepsFor(step === "item" ? "in" : step === "po" ? direction : direction);
   const displayStep =
-    step === "complete" ? inputSteps.length : inputSteps.indexOf(step) + 1;
+    step === "complete" || step === "saved"
+      ? inputSteps.length
+      : inputSteps.indexOf(step) + 1;
   const progressValue =
-    step === "complete"
+    step === "complete" || step === "saved"
       ? 100
       : ((inputSteps.indexOf(step) + 1) / inputSteps.length) * 100;
 
   const isMovingIn = direction === "in";
+  const contentMaxWidth = step === "select" ? "max-w-6xl" : "max-w-lg";
 
   const selectedItem = items.find((i) => i.id === itemId);
 
@@ -191,7 +222,7 @@ export function MovingForm() {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("items")
-        .select("id, code, item_name")
+        .select("id, code, item_name, thaw_range_days")
         .order("code", { ascending: true });
       if (!active) return;
       if (error) setItemsLoadError(error.message);
@@ -210,6 +241,17 @@ export function MovingForm() {
       return;
     }
     setDirectionError(null);
+    setStep(result.data.direction === "in" ? "po" : "select");
+  }
+
+  function handleSelectNext() {
+    if (!selectedMoving) {
+      setSelectError("Select a moving from the table");
+      return;
+    }
+    setSelectError(null);
+    setPoNumber("");
+    setPoNumberError(null);
     setStep("po");
   }
 
@@ -219,7 +261,7 @@ export function MovingForm() {
       return;
     }
     setPoNumberError(null);
-    setStep(direction === "in" ? "item" : "amount");
+    setStep(isMovingIn ? "item" : "details");
   }
 
   function handleItemNext() {
@@ -240,6 +282,29 @@ export function MovingForm() {
     }
     setAmountError(null);
     setStep("details");
+  }
+
+  function getMovingInThawRangeError(
+    prepDateValue: string,
+    prepTimeValue: string,
+    bestByDateValue: string,
+    bestByTimeValue: string,
+    item: ItemOption | undefined
+  ) {
+    if (!item) return { field: "prepDate" as const, message: "Select an item" };
+    if (!item.thaw_range_days?.trim()) {
+      return {
+        field: "prepDate" as const,
+        message: "This item has no thaw range configured",
+      };
+    }
+    return validateMovingInThawRange(
+      prepDateValue,
+      prepTimeValue,
+      bestByDateValue,
+      bestByTimeValue,
+      item.thaw_range_days
+    );
   }
 
   function handleDetailsNext() {
@@ -266,6 +331,23 @@ export function MovingForm() {
         setStorageTypeError("Select a storage type");
         return;
       }
+      const thawRangeError = getMovingInThawRangeError(
+        result.data.prepDate,
+        result.data.prepTime,
+        result.data.bestByDate,
+        result.data.bestByTime,
+        selectedItem
+      );
+      if (thawRangeError) {
+        if (thawRangeError.field === "prepDate") {
+          setPrepDateError(thawRangeError.message);
+          setBestByDateError(null);
+        } else {
+          setBestByDateError(thawRangeError.message);
+          setPrepDateError(null);
+        }
+        return;
+      }
       setPrepDateError(null);
       setPrepTimeError(null);
       setBestByDateError(null);
@@ -287,6 +369,12 @@ export function MovingForm() {
         storageType: requiresStorageType ? (storageType as "original_case" | "black_container") : undefined,
       });
     } else {
+      if (!selectedMoving) {
+        setSelectError("Select a moving from the table");
+        setStep("select");
+        return;
+      }
+
       const result = movingOutDateTimeSchema.safeParse({ movedOutDate, movedOutTime });
       if (!result.success) {
         const issues = result.error.issues;
@@ -296,16 +384,82 @@ export function MovingForm() {
       }
       setMovedOutDateError(null);
       setMovedOutTimeError(null);
+
+      const item = getMovingItem(selectedMoving);
       setSubmitted({
         direction,
-        poNumber,
-        amount: Number(amount),
+        movingId: selectedMoving.id,
+        inPoNumber: selectedMoving.po_number,
+        outPoNumber: poNumber.trim(),
+        amount: selectedMoving.amount,
+        itemId: item?.id,
+        itemCode: item?.code,
+        itemName: item?.item_name,
+        lotNumber: selectedMoving.lot_number ?? undefined,
+        storageType:
+          selectedMoving.storage_type === "original_case" ||
+          selectedMoving.storage_type === "black_container"
+            ? selectedMoving.storage_type
+            : undefined,
+        prepDateIso: selectedMoving.prep_date,
+        bestByIso: selectedMoving.best_by,
         movedOutDate: result.data.movedOutDate,
         movedOutTime: result.data.movedOutTime,
       });
     }
 
     setStep("complete");
+  }
+
+  function handleConfirm() {
+    if (!submitted || isSubmitting) return;
+
+    setConfirmError(null);
+
+    if (
+      submitted.direction === "in" &&
+      submitted.prepDate &&
+      submitted.prepTime &&
+      submitted.bestByDate &&
+      submitted.bestByTime &&
+      submitted.itemId
+    ) {
+      const item = items.find((i) => i.id === submitted.itemId);
+      const thawRangeError = getMovingInThawRangeError(
+        submitted.prepDate,
+        submitted.prepTime,
+        submitted.bestByDate,
+        submitted.bestByTime,
+        item
+      );
+      if (thawRangeError) {
+        if (thawRangeError.field === "prepDate") {
+          setPrepDateError(thawRangeError.message);
+          setBestByDateError(null);
+        } else {
+          setBestByDateError(thawRangeError.message);
+          setPrepDateError(null);
+        }
+        setConfirmError(thawRangeError.message);
+        setStep("details");
+        return;
+      }
+    }
+
+    void (async () => {
+      setIsSubmitting(true);
+      const supabase = createClient();
+      const result = await submitMoving(supabase, submitted);
+      setIsSubmitting(false);
+
+      if (result.success) {
+        setConfirmError(null);
+        setStep("saved");
+        return;
+      }
+
+      setConfirmError(MOVING_SUBMIT_ERROR_MESSAGE);
+    })();
   }
 
   function handleStartOver() {
@@ -333,17 +487,28 @@ export function MovingForm() {
     setLotNumberError(null);
     setMovedOutDateError(null);
     setMovedOutTimeError(null);
+    setConfirmError(null);
+    setIsSubmitting(false);
+    setSelectedMoving(null);
+    setSelectError(null);
+    setMovingsLoadError(null);
     setSubmitted(null);
   }
 
   function goBack() {
-    if (step === "po") setStep("direction");
+    if (step === "po") setStep(isMovingIn ? "direction" : "select");
+    else if (step === "select") setStep("direction");
     else if (step === "item") setStep("po");
-    else if (step === "amount") setStep(isMovingIn ? "item" : "po");
-    else if (step === "details") setStep("amount");
+    else if (step === "amount") setStep("item");
+    else if (step === "details") setStep(isMovingIn ? "amount" : "po");
   }
 
-  const showBack = step === "po" || step === "item" || step === "amount" || step === "details";
+  const showBack =
+    step === "po" ||
+    step === "select" ||
+    step === "item" ||
+    step === "amount" ||
+    step === "details";
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -351,7 +516,7 @@ export function MovingForm() {
     <div className="flex min-h-full flex-1 flex-col">
       {/* Header */}
       <header className="sticky top-0 z-10 border-b bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="mx-auto flex w-full max-w-lg flex-col gap-3">
+        <div className={cn("mx-auto flex w-full flex-col gap-3", contentMaxWidth)}>
           <div className="flex items-center gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
               <Snowflake className="size-5" />
@@ -364,11 +529,21 @@ export function MovingForm() {
                 {step === "direction" && "Direction"}
                 {step === "po" && "PO number"}
                 {step === "item" && "Select item"}
+                {step === "select" && "Select moving"}
                 {step === "amount" && "Amount"}
                 {step === "details" && (isMovingIn ? "Details" : "Date & time")}
                 {step === "complete" && "Review"}
+                {step === "saved" && "Saved"}
               </h1>
             </div>
+            <Link
+              href="/movings/history"
+              className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-input bg-background text-foreground transition-colors hover:bg-muted"
+              aria-label="View removal history"
+              title="Removal history"
+            >
+              <History className="size-5" />
+            </Link>
           </div>
           <Progress value={progressValue}>
             <ProgressTrack className="h-1.5">
@@ -379,7 +554,7 @@ export function MovingForm() {
       </header>
 
       {/* Main content */}
-      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col px-4 py-6">
+      <main className={cn("mx-auto flex w-full flex-1 flex-col px-4 py-6", contentMaxWidth)}>
 
         {/* ── Direction ─────────────────────────────────────────────────────── */}
         {step === "direction" && (
@@ -447,16 +622,52 @@ export function MovingForm() {
           </Card>
         )}
 
+        {/* ── Select moving (moving out) ─────────────────────────────────────── */}
+        {step === "select" && (
+          <Card className="border shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-xl">Select a moving</CardTitle>
+              <CardDescription>
+                Choose the protein lot leaving the freezer. Use search and filters to find it.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <MovingOutTable
+                selectedId={selectedMoving?.id ?? null}
+                onSelect={(moving) => {
+                  setSelectedMoving(moving);
+                  setSelectError(null);
+                }}
+                error={movingsLoadError}
+                onErrorChange={setMovingsLoadError}
+              />
+              {selectError && (
+                <p className="text-sm text-destructive">{selectError}</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* ── PO number ─────────────────────────────────────────────────────── */}
         {step === "po" && (
           <Card className="border shadow-sm">
             <CardHeader>
               <CardTitle className="text-xl">PO number</CardTitle>
               <CardDescription>
-                Enter the purchase order number for this movement.
+                {isMovingIn
+                  ? "Enter the purchase order number for this movement."
+                  : "Enter the PO for this move out. It may differ from the original moving-in PO."}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
+              {!isMovingIn && selectedMoving && (
+                <p className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                  Original PO (moving in):{" "}
+                  <span className="font-medium text-foreground">
+                    {selectedMoving.po_number}
+                  </span>
+                </p>
+              )}
               <div className="flex flex-col gap-2">
                 <Label htmlFor="po-number">PO number</Label>
                 <Input
@@ -541,7 +752,7 @@ export function MovingForm() {
         )}
 
         {/* ── Amount ────────────────────────────────────────────────────────── */}
-        {step === "amount" && (
+        {step === "amount" && isMovingIn && (
           <Card className="border shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl">
@@ -715,14 +926,14 @@ export function MovingForm() {
 
               {/* ── Lot number ── */}
               <div className="flex flex-col gap-2">
-                <Label htmlFor="lot-number">Lot number</Label>
+                <Label htmlFor="lot-number">Lot#</Label>
                 <div className="relative">
                   <Hash className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="lot-number"
                     type="text"
                     inputMode="text"
-                    placeholder="e.g. LOT-2024-001"
+                    placeholder="e.g. 06122026"
                     value={lotNumber}
                     onChange={(e) => {
                       setLotNumber(e.target.value);
@@ -790,6 +1001,23 @@ export function MovingForm() {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-5 pb-8">
+              {selectedMoving && (
+                <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+                  <p className="mb-2 font-medium">Selected moving</p>
+                  <dl className="grid gap-1 text-muted-foreground">
+                    <div>PO {selectedMoving.po_number} · Amount {selectedMoving.amount}</div>
+                    <div>
+                      {(() => {
+                        const item = getMovingItem(selectedMoving);
+                        return item
+                          ? `${item.code ?? "—"} – ${item.item_name ?? "Unnamed"}`
+                          : "—";
+                      })()}
+                    </div>
+                    <div>Lot {selectedMoving.lot_number ?? "—"}</div>
+                  </dl>
+                </div>
+              )}
               <div className="flex flex-col gap-2">
                 <Label htmlFor="moved-out-date">Date</Label>
                 <div className="grid grid-cols-1">
@@ -844,6 +1072,11 @@ export function MovingForm() {
               <CardDescription>Review the details before confirming.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
+              {confirmError && (
+                <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                  {confirmError}
+                </p>
+              )}
               <div className="rounded-lg border bg-muted/30 p-4">
                 <dl className="flex flex-col gap-4">
 
@@ -852,7 +1085,15 @@ export function MovingForm() {
                   </ReviewRow>
 
                   <Separator />
-                  <ReviewRow label="PO number">{submitted.poNumber}</ReviewRow>
+                  {submitted.direction === "in" ? (
+                    <ReviewRow label="PO number">{submitted.poNumber}</ReviewRow>
+                  ) : (
+                    <>
+                      <ReviewRow label="Original PO">{submitted.inPoNumber ?? "—"}</ReviewRow>
+                      <Separator />
+                      <ReviewRow label="Out PO">{submitted.outPoNumber ?? "—"}</ReviewRow>
+                    </>
+                  )}
 
                   {submitted.itemId && (
                     <>
@@ -876,11 +1117,27 @@ export function MovingForm() {
                       </ReviewRow>
                     </>
                   )}
+                  {submitted.prepDateIso && !submitted.prepDate && (
+                    <>
+                      <Separator />
+                      <ReviewRow label="Prep date">
+                        {formatIsoDateTime(submitted.prepDateIso)}
+                      </ReviewRow>
+                    </>
+                  )}
                   {submitted.bestByDate && submitted.bestByTime && (
                     <>
                       <Separator />
                       <ReviewRow label="Best by">
                         {formatDateTimeStr(submitted.bestByDate, submitted.bestByTime)}
+                      </ReviewRow>
+                    </>
+                  )}
+                  {submitted.bestByIso && !submitted.bestByDate && (
+                    <>
+                      <Separator />
+                      <ReviewRow label="Best by">
+                        {formatIsoDateTime(submitted.bestByIso)}
                       </ReviewRow>
                     </>
                   )}
@@ -909,18 +1166,37 @@ export function MovingForm() {
                     </>
                   )}
 
-                  <Separator />
-                  <ReviewRow label="Storage">Freezer</ReviewRow>
+                  {submitted.direction === "in" && (
+                    <>
+                      <Separator />
+                      <ReviewRow label="Storage">Freezer</ReviewRow>
+                    </>
+                  )}
                 </dl>
               </div>
             </CardContent>
+          </Card>
+        )}
+
+        {/* ── Success ───────────────────────────────────────────────────────── */}
+        {step === "saved" && (
+          <Card className="border shadow-sm">
+            <CardHeader className="items-center text-center">
+              <div className="mx-auto mb-2 flex size-14 items-center justify-center rounded-full bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400">
+                <CheckCircle2 className="size-8" />
+              </div>
+              <CardTitle className="text-xl">{MOVING_SUBMIT_SUCCESS_MESSAGE}</CardTitle>
+              <CardDescription>
+                Your moving has been recorded and saved to the system.
+              </CardDescription>
+            </CardHeader>
           </Card>
         )}
       </main>
 
       {/* Footer */}
       <footer className="sticky bottom-0 border-t bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="mx-auto flex w-full max-w-lg gap-3">
+        <div className={cn("mx-auto flex w-full gap-3", contentMaxWidth)}>
           {showBack && (
             <ActionButton variant="outline" onClick={goBack}>
               <ChevronLeft className="size-4" />
@@ -940,6 +1216,15 @@ export function MovingForm() {
             </ActionButton>
           )}
 
+          {step === "select" && (
+            <ActionButton
+              onClick={handleSelectNext}
+              disabled={!!movingsLoadError}
+            >
+              Next <ArrowRight className="size-4" />
+            </ActionButton>
+          )}
+
           {step === "item" && (
             <ActionButton
               onClick={handleItemNext}
@@ -949,7 +1234,7 @@ export function MovingForm() {
             </ActionButton>
           )}
 
-          {step === "amount" && (
+          {step === "amount" && isMovingIn && (
             <ActionButton onClick={handleAmountNext}>
               Next <ArrowRight className="size-4" />
             </ActionButton>
@@ -963,11 +1248,24 @@ export function MovingForm() {
 
           {step === "complete" && (
             <>
-              <ActionButton variant="outline" onClick={handleStartOver}>
+              <ActionButton variant="outline" onClick={handleStartOver} disabled={isSubmitting}>
                 Start over
               </ActionButton>
-              <ActionButton onClick={() => {}}>Confirm</ActionButton>
+              <ActionButton onClick={handleConfirm} disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Saving…
+                  </>
+                ) : (
+                  "Confirm"
+                )}
+              </ActionButton>
             </>
+          )}
+
+          {step === "saved" && (
+            <ActionButton onClick={handleStartOver}>New moving</ActionButton>
           )}
         </div>
       </footer>

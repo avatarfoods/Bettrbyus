@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { loginSchema, type LoginFormValues } from "@/lib/validations/auth";
+import { POST_LOGIN_PATH } from "@/lib/auth/redirect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +18,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-export function LoginForm({ next = "/" }: { next?: string }) {
+export function LoginForm({ next = POST_LOGIN_PATH }: { next?: string }) {
   const router = useRouter();
   const [authError, setAuthError] = useState<string | null>(null);
 
