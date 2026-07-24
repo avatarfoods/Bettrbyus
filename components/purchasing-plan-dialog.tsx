@@ -116,6 +116,15 @@ function formatWeekday(value: string) {
   }
 }
 
+function formatPlanQty(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value) || value === 0) return "";
+  const rounded =
+    Math.abs(value - Math.round(value)) < 1e-9
+      ? Math.round(value)
+      : Math.round(value * 100) / 100;
+  return rounded.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
 export function PurchasingPlanDialog({
   importId,
   open,
@@ -417,12 +426,12 @@ export function PurchasingPlanDialog({
                                     qty ? "font-medium" : "text-muted-foreground/50"
                                   )}
                                 >
-                                  {qty ? Math.round(qty).toLocaleString() : ""}
+                                  {formatPlanQty(qty)}
                                 </td>
                               );
                             })}
                             <td className="px-2 py-1 text-right text-xs font-semibold whitespace-nowrap tabular-nums">
-                              {Math.round(row.total).toLocaleString()}
+                              {formatPlanQty(row.total)}
                             </td>
                           </tr>
                         );

@@ -105,14 +105,31 @@ function parseNumeric(value: string): number | null {
 }
 
 function parseDateText(value: string): string | null {
-  const match = value.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-  if (!match) return null;
-  const month = Number(match[1]);
-  const day = Number(match[2]);
-  let year = Number(match[3]);
-  if (year < 100) year += 2000;
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (match) {
+    const month = Number(match[1]);
+    const day = Number(match[2]);
+    let year = Number(match[3]);
+    if (year < 100) year += 2000;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  // Excel serial date (days since 1899-12-30), when sheet exports a bare number.
+  const serial = Number(trimmed.replace(/,/g, ""));
+  if (Number.isFinite(serial) && serial > 20000 && serial < 100000) {
+    const utc = Date.UTC(1899, 11, 30) + Math.round(serial) * 86_400_000;
+    const date = new Date(utc);
+    const year = date.getUTCFullYear();
+    const month = date.getUTCMonth() + 1;
+    const day = date.getUTCDate();
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  return null;
 }
 
 function parseMatrix(workbook: XLSX.WorkBook, warnings: string[]): ParsedMatrixItem[] {
@@ -301,6 +318,96 @@ function parseRecipeSheet(
   return recipes;
 }
 
+function parseDepartmentScheduleOverlay(
+  workbook: XLSX.WorkBook,
+  warnings: string[]
+): Map<string, number> {
+  // PRODUCTION SCHEDULE Finished/Kitchen cells are often formulas that pull from
+  // "{DEPARTMENT} SCHEDULE". xlsx cannot evaluate those (cached #VALUE!), so we
+  // read the department sheets directly and fill missing quantities.
+  const overlay = new Map<string, number>();
+
+  for (const sheetName of workbook.SheetNames) {
+    if (!/ schedule$/i.test(sheetName)) continue;
+    if (/^(production|initial) schedule$/i.test(sheetName.trim())) continue;
+
+    const rows = toRows(workbook, sheetName);
+    if (rows.length === 0) continue;
+
+    const headerIndex = rows.findIndex((row) => {
+      const cells = row.map((cell) => String(cell).trim().toUpperCase());
+      return (
+        cells.includes("ITEM #") ||
+        (cells.includes("RECIPE") && cells.includes("DEPARTMENT"))
+      );
+    });
+    if (headerIndex === -1) {
+      warnings.push(`Header row not found in "${sheetName}".`);
+      continue;
+    }
+
+    const header = rows[headerIndex].map((cell) =>
+      String(cell).trim().toUpperCase()
+    );
+    const deptCol = header.indexOf("DEPARTMENT");
+    const codeCol = header.indexOf("ITEM #");
+    const recipeCol = header.indexOf("RECIPE");
+    const deptFromSheet = sheetName.replace(/\s+SCHEDULE$/i, "").trim();
+
+    let dateByCol = new Map<number, string>();
+    for (
+      let r = Math.max(0, headerIndex - 5);
+      r <= headerIndex;
+      r++
+    ) {
+      const candidate = new Map<number, string>();
+      const row = rows[r] ?? [];
+      for (let c = 0; c < row.length; c++) {
+        const isoDate = parseDateText(String(row[c] ?? ""));
+        if (isoDate) candidate.set(c, isoDate);
+      }
+      if (candidate.size > dateByCol.size) dateByCol = candidate;
+    }
+    if (dateByCol.size === 0) {
+      warnings.push(`No schedule dates found in "${sheetName}".`);
+      continue;
+    }
+
+    let qtyCells = 0;
+    for (const row of rows.slice(headerIndex + 1)) {
+      const department =
+        (deptCol >= 0 ? cellText(row, deptCol) : "") || deptFromSheet;
+      const wipCode = codeCol >= 0 ? cellText(row, codeCol) : "";
+      const recipeName = recipeCol >= 0 ? cellText(row, recipeCol) : "";
+      if (!wipCode && !recipeName) continue;
+
+      for (const [col, date] of dateByCol) {
+        const quantity = parseNumeric(cellText(row, col));
+        if (quantity === null || quantity <= 0) continue;
+        qtyCells += 1;
+        if (wipCode) {
+          overlay.set(
+            `${department.toUpperCase()}||${wipCode.toUpperCase()}||${date}`,
+            quantity
+          );
+        }
+        if (recipeName) {
+          overlay.set(
+            `${department.toUpperCase()}||${normalizeIngredientName(recipeName)}||${date}`,
+            quantity
+          );
+        }
+      }
+    }
+
+    if (qtyCells === 0) {
+      warnings.push(`No quantities found in "${sheetName}".`);
+    }
+  }
+
+  return overlay;
+}
+
 function parseSchedule(
   workbook: XLSX.WorkBook,
   warnings: string[]
@@ -328,32 +435,65 @@ function parseSchedule(
   // Dates live on the row above the header, aligned per column.
   const dateRow = rows[headerIndex - 1] ?? [];
   const dateByCol = new Map<number, string>();
-  for (let c = uomCol + 1; c < dateRow.length; c++) {
+  for (let c = Math.max(0, uomCol + 1); c < dateRow.length; c++) {
     const isoDate = parseDateText(String(dateRow[c] ?? ""));
     if (isoDate) dateByCol.set(c, isoDate);
+  }
+  if (dateByCol.size === 0) {
+    // Some files put dates a few rows above the ITEM # header.
+    for (let r = Math.max(0, headerIndex - 5); r < headerIndex; r++) {
+      const row = rows[r] ?? [];
+      for (let c = 0; c < row.length; c++) {
+        const isoDate = parseDateText(String(row[c] ?? ""));
+        if (isoDate) dateByCol.set(c, isoDate);
+      }
+      if (dateByCol.size > 0) break;
+    }
   }
   if (dateByCol.size === 0) {
     warnings.push(`No schedule dates found in "${SCHEDULE_SHEET}".`);
     return [];
   }
 
+  const overlay = parseDepartmentScheduleOverlay(workbook, warnings);
+  let filledFromOverlay = 0;
+
   const entries: ParsedScheduleEntry[] = [];
   for (const row of rows.slice(headerIndex + 1)) {
     const wipCode = cellText(row, codeCol);
     if (!wipCode) continue;
+    const recipeName = cellText(row, recipeCol);
+    const department = cellText(row, deptCol);
+    const deptKey = department.toUpperCase();
 
     for (const [col, date] of dateByCol) {
-      const quantity = parseNumeric(cellText(row, col));
+      let quantity = parseNumeric(cellText(row, col));
+      if (quantity === null || quantity <= 0) {
+        const byCode = overlay.get(`${deptKey}||${wipCode.toUpperCase()}||${date}`);
+        const byName = recipeName
+          ? overlay.get(
+              `${deptKey}||${normalizeIngredientName(recipeName)}||${date}`
+            )
+          : undefined;
+        quantity = byCode ?? byName ?? null;
+        if (quantity != null && quantity > 0) filledFromOverlay += 1;
+      }
       if (quantity === null || quantity <= 0) continue;
       entries.push({
         wipCode,
-        recipeName: cellText(row, recipeCol),
-        department: cellText(row, deptCol),
+        recipeName,
+        department,
         date,
         quantity,
         uom: cellText(row, uomCol) || null,
       });
     }
+  }
+
+  if (filledFromOverlay > 0) {
+    warnings.push(
+      `Filled ${filledFromOverlay} schedule quantities from department schedule sheets (Excel formulas are not readable from the file).`
+    );
   }
 
   return entries;

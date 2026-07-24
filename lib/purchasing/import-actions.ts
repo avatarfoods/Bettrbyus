@@ -243,10 +243,25 @@ export async function importMasterFile(formData: FormData): Promise<ImportResult
     schedule_date: entry.date,
     quantity: entry.quantity,
     uom: entry.uom,
+    department: entry.department || null,
+    recipe_name: entry.recipeName || null,
   }));
   for (let i = 0; i < scheduleRows.length; i += CHUNK_SIZE) {
     const chunk = scheduleRows.slice(i, i + CHUNK_SIZE);
-    const { error } = await supabase.from("purchasing_schedule_entries").insert(chunk);
+    let { error } = await supabase.from("purchasing_schedule_entries").insert(chunk);
+    if (
+      error &&
+      typeof error.message === "string" &&
+      (error.message.includes("department") || error.message.includes("recipe_name"))
+    ) {
+      const withoutLabels = chunk.map(
+        ({ department: _d, recipe_name: _n, ...rest }) => rest
+      );
+      const fallback = await supabase
+        .from("purchasing_schedule_entries")
+        .insert(withoutLabels);
+      error = fallback.error;
+    }
     if (error) {
       return { ok: false, message: `Saving schedule failed: ${error.message}` };
     }

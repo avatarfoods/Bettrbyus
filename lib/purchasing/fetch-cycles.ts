@@ -251,7 +251,7 @@ export async function fetchImportSchedulePlan(
     supabase
       .from("purchasing_schedule_entries")
       .select(
-        "wip_code, schedule_date, quantity, uom, recipe:purchasing_recipes ( name, department )"
+        "wip_code, schedule_date, quantity, uom, department, recipe_name, recipe:purchasing_recipes ( name, department )"
       )
       .eq("import_id", importId)
       .order("schedule_date", { ascending: true }),
@@ -262,15 +262,44 @@ export async function fetchImportSchedulePlan(
     return { data: null, error: importRes.error.message };
   }
   if (entriesRes.error) {
+    // Older DBs may not have department/recipe_name yet — fall back.
+    if (
+      typeof entriesRes.error.message === "string" &&
+      (entriesRes.error.message.includes("department") ||
+        entriesRes.error.message.includes("recipe_name"))
+    ) {
+      const fallback = await supabase
+        .from("purchasing_schedule_entries")
+        .select(
+          "wip_code, schedule_date, quantity, uom, recipe:purchasing_recipes ( name, department )"
+        )
+        .eq("import_id", importId)
+        .order("schedule_date", { ascending: true });
+      if (fallback.error) {
+        console.error("Failed to fetch schedule entries:", fallback.error);
+        return { data: null, error: fallback.error.message };
+      }
+      return buildSchedulePlan(importRes.data, fallback.data ?? [], false);
+    }
     console.error("Failed to fetch schedule entries:", entriesRes.error);
     return { data: null, error: entriesRes.error.message };
   }
 
-  const entries = (entriesRes.data ?? []) as unknown as Array<{
+  return buildSchedulePlan(importRes.data, entriesRes.data ?? [], true);
+}
+
+function buildSchedulePlan(
+  importRow: { id: string; file_name: string; created_at: string },
+  rawEntries: unknown[],
+  hasScheduleLabels: boolean
+): { data: SchedulePlan; error: null } {
+  const entries = rawEntries as Array<{
     wip_code: string;
     schedule_date: string;
     quantity: number;
     uom: string | null;
+    department?: string | null;
+    recipe_name?: string | null;
     recipe:
       | { name: string; department: string | null }
       | { name: string; department: string | null }[]
@@ -278,7 +307,7 @@ export async function fetchImportSchedulePlan(
   }>;
 
   const dateSet = new Set<string>();
-  const byWip = new Map<
+  const byKey = new Map<
     string,
     {
       wipCode: string;
@@ -295,17 +324,31 @@ export async function fetchImportSchedulePlan(
     const recipe = Array.isArray(entry.recipe)
       ? entry.recipe[0] ?? null
       : entry.recipe;
-    let row = byWip.get(entry.wip_code);
+
+    const department = (
+      (hasScheduleLabels ? entry.department : null) ||
+      recipe?.department ||
+      ""
+    ).trim();
+    const recipeName = (
+      (hasScheduleLabels ? entry.recipe_name : null) ||
+      recipe?.name ||
+      entry.wip_code
+    ).trim();
+
+    // Prefer schedule department so Finished / Kitchen AM stay distinct.
+    const key = `${department.toUpperCase()}::${entry.wip_code}`;
+    let row = byKey.get(key);
     if (!row) {
       row = {
         wipCode: entry.wip_code,
-        recipeName: recipe?.name ?? entry.wip_code,
-        department: recipe?.department ?? "",
+        recipeName,
+        department,
         uom: entry.uom,
         quantities: {},
         total: 0,
       };
-      byWip.set(entry.wip_code, row);
+      byKey.set(key, row);
     }
     row.quantities[entry.schedule_date] =
       (row.quantities[entry.schedule_date] ?? 0) + Number(entry.quantity);
@@ -313,7 +356,7 @@ export async function fetchImportSchedulePlan(
   }
 
   const dates = [...dateSet].sort();
-  const rows = [...byWip.values()].sort((a, b) => {
+  const rows = [...byKey.values()].sort((a, b) => {
     const dept = a.department.localeCompare(b.department);
     if (dept !== 0) return dept;
     return a.wipCode.localeCompare(b.wipCode);
@@ -321,9 +364,9 @@ export async function fetchImportSchedulePlan(
 
   return {
     data: {
-      importId: importRes.data.id,
-      fileName: importRes.data.file_name,
-      createdAt: importRes.data.created_at,
+      importId: importRow.id,
+      fileName: importRow.file_name,
+      createdAt: importRow.created_at,
       dates,
       rows,
       entryCount: entries.length,
