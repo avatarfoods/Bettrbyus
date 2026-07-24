@@ -14,7 +14,11 @@ import {
 import { AvailableItemsSummary } from "@/components/available-items-summary";
 import { ThawWarningBadge } from "@/components/thaw-warning-badge";
 import { formatMovingStatus } from "@/lib/movings/status";
+import { formatStorageType } from "@/lib/movings/format-storage-type";
+import { canTransferToContainer } from "@/lib/movings/transfer-to-container";
 import { cn } from "@/lib/utils";
+import { MovingTransferDialog } from "@/components/moving-transfer-dialog";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -37,12 +41,6 @@ function formatIsoDateTime(value: string | null) {
   }
 }
 
-function formatStorageType(value: string | null) {
-  if (value === "original_case") return "Original case";
-  if (value === "black_container") return "Black container";
-  return "—";
-}
-
 type MovingOutTableProps = {
   selectedId: string | null;
   onSelect: (moving: MovingRecord) => void;
@@ -61,6 +59,9 @@ export function MovingOutTable({
   const [search, setSearch] = useState("");
   const [itemFilter, setItemFilter] = useState("all");
   const [storageFilter, setStorageFilter] = useState<StorageFilter>("all");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [transferMoving, setTransferMoving] = useState<MovingRecord | null>(null);
+  const [transferOpen, setTransferOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -77,7 +78,7 @@ export function MovingOutTable({
     return () => {
       active = false;
     };
-  }, [onErrorChange]);
+  }, [onErrorChange, refreshKey]);
 
   const itemOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -191,12 +192,13 @@ export function MovingOutTable({
               <TableHead>Storage</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Warning</TableHead>
+              <TableHead className="w-[130px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredMovings.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
                   No movings match your search or filters.
                 </TableCell>
               </TableRow>
@@ -249,6 +251,22 @@ export function MovingOutTable({
                     >
                       <ThawWarningBadge message={warning} />
                     </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      {canTransferToContainer(moving) ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setTransferMoving(moving);
+                            setTransferOpen(true);
+                          }}
+                        >
+                          To container
+                        </Button>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
                   </TableRow>
                 );
               })
@@ -261,6 +279,13 @@ export function MovingOutTable({
         Showing {filteredMovings.length} of {movings.length} available moving
         {movings.length === 1 ? "" : "s"} in thaw.
       </p>
+
+      <MovingTransferDialog
+        moving={transferMoving}
+        open={transferOpen}
+        onOpenChange={setTransferOpen}
+        onTransferred={() => setRefreshKey((key) => key + 1)}
+      />
     </div>
   );
 }

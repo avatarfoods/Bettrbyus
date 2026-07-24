@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   Clock,
   Hash,
+  ClipboardList,
   History,
   Loader2,
   Package,
@@ -38,6 +39,7 @@ import {
   submitMoving,
 } from "@/lib/movings/submit-moving";
 import { getMovingItem, type MovingRecord } from "@/lib/movings/types";
+import { itemRequiresStorageType } from "@/lib/movings/storage-type-items";
 import { MovingOutTable } from "@/components/moving-out-table";
 import { cn } from "@/lib/utils";
 import {
@@ -206,11 +208,7 @@ export function MovingForm() {
 
   const selectedItem = items.find((i) => i.id === itemId);
 
-  const STORAGE_TYPE_ITEM_IDS = [
-    "0780470a-78fa-4deb-b6e5-e057ebef5123",
-    "e7b15300-8319-4d82-8920-1166d195a59b",
-  ];
-  const requiresStorageType = STORAGE_TYPE_ITEM_IDS.includes(selectedItem?.id ?? "");
+  const requiresStorageType = itemRequiresStorageType(selectedItem?.id);
   const selectedThawRangeDays = selectedItem?.thaw_range_days ?? null;
 
   const calculatedBestBy = useMemo(() => {
@@ -537,6 +535,14 @@ export function MovingForm() {
                 {step === "saved" && "Saved"}
               </h1>
             </div>
+            <Link
+              href="/inventory-checks/new"
+              className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-input bg-background text-foreground transition-colors hover:bg-muted"
+              aria-label="Daily inventory check"
+              title="Daily inventory check"
+            >
+              <ClipboardList className="size-5" />
+            </Link>
             <Link
               href="/movings/history"
               className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-input bg-background text-foreground transition-colors hover:bg-muted"

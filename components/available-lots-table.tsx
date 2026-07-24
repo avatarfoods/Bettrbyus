@@ -13,6 +13,10 @@ import {
 } from "@/lib/movings/types";
 import { ThawWarningBadge } from "@/components/thaw-warning-badge";
 import { formatTimeInFreezer } from "@/lib/movings/format-freezer-duration";
+import { formatStorageType } from "@/lib/movings/format-storage-type";
+import { canTransferToContainer } from "@/lib/movings/transfer-to-container";
+import { MovingTransferDialog } from "@/components/moving-transfer-dialog";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -39,6 +43,9 @@ export function AvailableLotsTable() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [transferMoving, setTransferMoving] = useState<MovingRecord | null>(null);
+  const [transferOpen, setTransferOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -55,7 +62,7 @@ export function AvailableLotsTable() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [refreshKey]);
 
   const filteredMovings = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -110,14 +117,16 @@ export function AvailableLotsTable() {
               <TableHead>Prep</TableHead>
               <TableHead>Best by</TableHead>
               <TableHead>Lot</TableHead>
+              <TableHead>Storage</TableHead>
               <TableHead>In freezer</TableHead>
               <TableHead>Warning</TableHead>
+              <TableHead className="w-[130px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredMovings.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                   No lots in thaw match your search.
                 </TableCell>
               </TableRow>
@@ -143,11 +152,28 @@ export function AvailableLotsTable() {
                     <TableCell>{formatIsoDateTime(moving.prep_date)}</TableCell>
                     <TableCell>{formatIsoDateTime(moving.best_by)}</TableCell>
                     <TableCell>{moving.lot_number ?? "—"}</TableCell>
+                    <TableCell>{formatStorageType(moving.storage_type)}</TableCell>
                     <TableCell>
                       {formatTimeInFreezer(moving.prep_date)}
                     </TableCell>
                     <TableCell className="max-w-xs whitespace-normal">
                       <ThawWarningBadge message={warning} />
+                    </TableCell>
+                    <TableCell>
+                      {canTransferToContainer(moving) ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setTransferMoving(moving);
+                            setTransferOpen(true);
+                          }}
+                        >
+                          To container
+                        </Button>
+                      ) : (
+                        "—"
+                      )}
                     </TableCell>
                   </TableRow>
                 );
@@ -162,6 +188,13 @@ export function AvailableLotsTable() {
         {movings.length === 1 ? "" : "s"} in thaw. Warnings appear when a lot is
         within 3 days of its move out date (prep + thaw range).
       </p>
+
+      <MovingTransferDialog
+        moving={transferMoving}
+        open={transferOpen}
+        onOpenChange={setTransferOpen}
+        onTransferred={() => setRefreshKey((key) => key + 1)}
+      />
     </div>
   );
 }
