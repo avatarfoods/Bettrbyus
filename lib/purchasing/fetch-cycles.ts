@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Material } from "@/lib/purchasing/types";
+import {
+  ingredientMatchesMaterial,
+  normalizeIngredientName,
+} from "@/lib/purchasing/master-parser";
 
 export type PurchaseCycle = {
   id: string;
@@ -38,6 +42,7 @@ export type PurchaseLine = {
     | "odoo_product_id"
     | "odoo_category"
     | "storage_type"
+    | "department"
     | "lbs_per_case"
     | "is_protein"
     | "thaw_buffer_days"
@@ -46,28 +51,49 @@ export type PurchaseLine = {
   > | null;
 };
 
-const MATERIAL_SELECT =
+const MATERIAL_SELECT_WITH_DEPT =
+  "material:purchasing_materials ( id, item_code, name, odoo_product_id, odoo_category, storage_type, department, lbs_per_case, is_protein, thaw_buffer_days, lead_time_days, price )";
+
+const MATERIAL_SELECT_WITHOUT_DEPT =
   "material:purchasing_materials ( id, item_code, name, odoo_product_id, odoo_category, storage_type, lbs_per_case, is_protein, thaw_buffer_days, lead_time_days, price )";
 
 const LINE_SELECT_WITH_ARRIVED =
-  `id, cycle_id, material_id, cases_required, lbs_required, on_hand_cases, required_to_order, order_by_date, status, arrival_date, arrived_at, is_emergency, required_time, notes, ${MATERIAL_SELECT}`;
+  `id, cycle_id, material_id, cases_required, lbs_required, on_hand_cases, required_to_order, order_by_date, status, arrival_date, arrived_at, is_emergency, required_time, notes, ${MATERIAL_SELECT_WITH_DEPT}`;
 
 const LINE_SELECT_WITHOUT_ARRIVED =
-  `id, cycle_id, material_id, cases_required, lbs_required, on_hand_cases, required_to_order, order_by_date, status, arrival_date, is_emergency, required_time, notes, ${MATERIAL_SELECT}`;
+  `id, cycle_id, material_id, cases_required, lbs_required, on_hand_cases, required_to_order, order_by_date, status, arrival_date, is_emergency, required_time, notes, ${MATERIAL_SELECT_WITH_DEPT}`;
+
+const LINE_SELECT_WITH_ARRIVED_NO_DEPT =
+  `id, cycle_id, material_id, cases_required, lbs_required, on_hand_cases, required_to_order, order_by_date, status, arrival_date, arrived_at, is_emergency, required_time, notes, ${MATERIAL_SELECT_WITHOUT_DEPT}`;
+
+const LINE_SELECT_WITHOUT_ARRIVED_NO_DEPT =
+  `id, cycle_id, material_id, cases_required, lbs_required, on_hand_cases, required_to_order, order_by_date, status, arrival_date, is_emergency, required_time, notes, ${MATERIAL_SELECT_WITHOUT_DEPT}`;
 
 function isMissingArrivedAtColumn(error: { message?: string; code?: string } | null) {
   if (!error?.message) return false;
   return error.message.includes("arrived_at");
 }
 
+function isMissingDepartmentColumn(error: { message?: string; code?: string } | null) {
+  if (!error?.message) return false;
+  return error.message.includes("department");
+}
+
 function normalizeLine(row: Record<string, unknown>): PurchaseLine {
   const material = row.material;
+  const normalizedMaterial = Array.isArray(material)
+    ? ((material[0] ?? null) as PurchaseLine["material"])
+    : ((material ?? null) as PurchaseLine["material"]);
   return {
     ...(row as unknown as PurchaseLine),
     arrived_at: (row.arrived_at as string | null | undefined) ?? null,
-    material: Array.isArray(material)
-      ? ((material[0] ?? null) as PurchaseLine["material"])
-      : ((material ?? null) as PurchaseLine["material"]),
+    material: normalizedMaterial
+      ? {
+          ...normalizedMaterial,
+          department:
+            (normalizedMaterial as { department?: string | null }).department ?? null,
+        }
+      : null,
   };
 }
 
@@ -75,28 +101,32 @@ async function selectPurchaseLines(
   supabase: SupabaseClient,
   cycleId?: string
 ): Promise<{ data: Record<string, unknown>[]; error: string | null }> {
-  let query = supabase.from("purchasing_lines").select(LINE_SELECT_WITH_ARRIVED);
-  if (cycleId) query = query.eq("cycle_id", cycleId);
+  const attempts = [
+    LINE_SELECT_WITH_ARRIVED,
+    LINE_SELECT_WITH_ARRIVED_NO_DEPT,
+    LINE_SELECT_WITHOUT_ARRIVED,
+    LINE_SELECT_WITHOUT_ARRIVED_NO_DEPT,
+  ];
 
-  const first = await query;
-  if (!first.error) {
-    return { data: (first.data ?? []) as unknown as Record<string, unknown>[], error: null };
+  let lastError: string | null = null;
+  for (const select of attempts) {
+    let query = supabase.from("purchasing_lines").select(select);
+    if (cycleId) query = query.eq("cycle_id", cycleId);
+    const result = await query;
+    if (!result.error) {
+      return {
+        data: (result.data ?? []) as unknown as Record<string, unknown>[],
+        error: null,
+      };
+    }
+    lastError = result.error.message;
+    const canRetry =
+      isMissingArrivedAtColumn(result.error) ||
+      isMissingDepartmentColumn(result.error);
+    if (!canRetry) break;
   }
 
-  if (!isMissingArrivedAtColumn(first.error)) {
-    return { data: [], error: first.error.message };
-  }
-
-  let fallbackQuery = supabase
-    .from("purchasing_lines")
-    .select(LINE_SELECT_WITHOUT_ARRIVED);
-  if (cycleId) fallbackQuery = fallbackQuery.eq("cycle_id", cycleId);
-
-  const second = await fallbackQuery;
-  if (second.error) {
-    return { data: [], error: second.error.message };
-  }
-  return { data: (second.data ?? []) as unknown as Record<string, unknown>[], error: null };
+  return { data: [], error: lastError };
 }
 
 export async function fetchCycles(
@@ -114,6 +144,53 @@ export async function fetchCycles(
   return { data: (data ?? []) as PurchaseCycle[], error: null };
 }
 
+type MasterPoDeptLine = {
+  itemCode?: string;
+  name?: string;
+  department?: string;
+};
+
+/** Prefer MASTER PO# departments from the cycle import over material.department. */
+function applyMasterPoDepartments(
+  lines: PurchaseLine[],
+  masterPoLines: MasterPoDeptLine[]
+): PurchaseLine[] {
+  if (masterPoLines.length === 0) return lines;
+
+  const usable = masterPoLines.filter((row) => {
+    const dept = (row.department ?? "").trim();
+    return Boolean(dept) && dept.toUpperCase() !== "OTHER";
+  });
+  if (usable.length === 0) return lines;
+
+  const byCode = new Map<string, string>();
+  const byName = new Map<string, string>();
+  for (const row of usable) {
+    const dept = (row.department ?? "").trim();
+    if (row.itemCode) byCode.set(row.itemCode.toUpperCase(), dept);
+    if (row.name) byName.set(normalizeIngredientName(row.name), dept);
+  }
+
+  return lines.map((line) => {
+    const material = line.material;
+    if (!material) return line;
+    const fromSnap =
+      byCode.get(material.item_code.toUpperCase()) ??
+      byName.get(normalizeIngredientName(material.name)) ??
+      usable.find(
+        (row) =>
+          row.name && ingredientMatchesMaterial(row.name, material.name)
+      )?.department;
+    if (!fromSnap) return line;
+    const current = (material.department ?? "").trim().toUpperCase();
+    if (current === fromSnap.toUpperCase()) return line;
+    return {
+      ...line,
+      material: { ...material, department: fromSnap },
+    };
+  });
+}
+
 export async function fetchCycleWithLines(
   supabase: SupabaseClient,
   cycleId: string
@@ -129,23 +206,41 @@ export async function fetchCycleWithLines(
     return { cycle: null, lines: [], error: cycleRes.error.message };
   }
 
-  const linesRes = await selectPurchaseLines(supabase, cycleId);
+  const cycle = cycleRes.data as PurchaseCycle;
+
+  const [linesRes, importRes] = await Promise.all([
+    selectPurchaseLines(supabase, cycleId),
+    cycle.import_id
+      ? supabase
+          .from("purchasing_master_imports")
+          .select("stats")
+          .eq("id", cycle.import_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+
   if (linesRes.error) {
     console.error("Failed to fetch cycle lines:", linesRes.error);
     return {
-      cycle: cycleRes.data as PurchaseCycle,
+      cycle,
       lines: [],
       error: linesRes.error,
     };
   }
 
-  const lines = linesRes.data
-    .map(normalizeLine)
-    .sort((a, b) =>
-      (a.material?.item_code ?? "").localeCompare(b.material?.item_code ?? "")
-    );
+  const masterPoLines = ((importRes.data?.stats as { master_po_lines?: MasterPoDeptLine[] } | null)
+    ?.master_po_lines ?? []) as MasterPoDeptLine[];
 
-  return { cycle: cycleRes.data as PurchaseCycle, lines, error: null };
+  const lines = applyMasterPoDepartments(
+    linesRes.data
+      .map(normalizeLine)
+      .sort((a, b) =>
+        (a.material?.item_code ?? "").localeCompare(b.material?.item_code ?? "")
+      ),
+    masterPoLines
+  );
+
+  return { cycle, lines, error: null };
 }
 
 export async function fetchOpenLines(

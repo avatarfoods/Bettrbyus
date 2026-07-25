@@ -246,7 +246,8 @@ export function PurchasingImportPage() {
               Import master plan
             </h1>
             <p className="text-sm text-muted-foreground">
-              Upload the MASTER FRESH planning file and generate the weekly buy list.
+              Upload the MASTER FRESH planning file and generate the Master PO
+              buy list.
             </p>
           </div>
         </div>
@@ -306,17 +307,17 @@ export function PurchasingImportPage() {
 
         <Card className="border shadow-sm">
           <CardHeader>
-            <CardTitle className="text-xl">2. Generate the buy list</CardTitle>
+            <CardTitle className="text-xl">2. Generate Master PO</CardTitle>
             <CardDescription>
-              Pick the PO required date and the production window it must cover.
-              Requirements are computed from the schedule and netted against
-              on-hand inventory.
+              Same as Excel: set production dates (Production Need window), then
+              generate the Master PO buy list. Requirements come from the
+              schedule and are netted against on-hand inventory.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="flex flex-col gap-2">
-                <Label htmlFor="cycle-required-date">Required date</Label>
+                <Label htmlFor="cycle-required-date">PO / required date</Label>
                 <Input
                   id="cycle-required-date"
                   type="date"
@@ -326,7 +327,7 @@ export function PurchasingImportPage() {
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="cycle-from-date">Production from</Label>
+                <Label htmlFor="cycle-from-date">Production dates from</Label>
                 <Input
                   id="cycle-from-date"
                   type="date"
@@ -336,7 +337,7 @@ export function PurchasingImportPage() {
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="cycle-to-date">Production to</Label>
+                <Label htmlFor="cycle-to-date">Production dates to</Label>
                 <Input
                   id="cycle-to-date"
                   type="date"
@@ -355,7 +356,7 @@ export function PurchasingImportPage() {
                 }
               >
                 {isGenerating ? <Loader2 className="animate-spin" /> : <Wand2 />}
-                {isGenerating ? "Computing…" : "Generate buy list"}
+                {isGenerating ? "Computing…" : "Generate Master PO"}
               </Button>
             </div>
 
@@ -378,7 +379,7 @@ export function PurchasingImportPage() {
                       className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
                     >
                       <CalendarRange className="size-4" />
-                      Open the buy list for {formatDate(requiredDate)}
+                      Open the Master PO for {formatDate(requiredDate)}
                     </Link>
                   </div>
                 )}

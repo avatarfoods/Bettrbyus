@@ -13,6 +13,7 @@ export async function updatePurchaseLine(
     notes?: string | null;
     required_to_order?: number;
     required_time?: string | null;
+    cases_required?: number;
   }
 ): Promise<{ success: boolean; data?: { arrived_at: string | null } }> {
   const {

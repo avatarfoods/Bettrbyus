@@ -7,6 +7,8 @@ export type Material = {
   odoo_product_id: number | null;
   odoo_category: string | null;
   storage_type: StorageType | null;
+  /** Ingredient matrix department (Finished Product, Fresh Mixing, …). */
+  department: string | null;
   lbs_per_case: number | null;
   is_protein: boolean;
   thaw_buffer_days: number;

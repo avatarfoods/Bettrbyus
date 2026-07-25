@@ -4,11 +4,10 @@ import { revalidatePath } from "next/cache";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
 import {
+  ingredientMatchesMaterial,
   normalizeIngredientName,
   parseMasterWorkbook,
-  type ParsedRecipe,
 } from "@/lib/purchasing/master-parser";
-import { buildResolver, computeRequirements } from "@/lib/purchasing/mrp";
 
 const CHUNK_SIZE = 500;
 
@@ -20,6 +19,7 @@ export type ImportResult = {
     recipes: number;
     recipeLines: number;
     scheduleEntries: number;
+    masterPoLines: number;
     scheduleFrom: string | null;
     scheduleTo: string | null;
   };
@@ -114,19 +114,42 @@ export async function importMasterFile(formData: FormData): Promise<ImportResult
   if (materialRowsError) {
     return { ok: false, message: `Reading materials failed: ${materialRowsError.message}` };
   }
+  const materialByIdForImport = new Map(
+    (materialRows ?? []).map((row) => [row.id, row])
+  );
   const materialIdByCode = new Map(
     (materialRows ?? []).map((row) => [row.item_code, row.id])
   );
+  const materialIdByCodeUpper = new Map(
+    (materialRows ?? []).map((row) => [row.item_code.toUpperCase(), row.id])
+  );
+
+  function resolveMaterialIdByCode(itemCode: string) {
+    return (
+      materialIdByCode.get(itemCode) ??
+      materialIdByCodeUpper.get(itemCode.toUpperCase()) ??
+      null
+    );
+  }
 
   const aliasRows: { alias: string; material_id: string }[] = [];
   const seenAliases = new Set<string>();
+  const departmentByMaterialId = new Map<string, string>();
   for (const item of parsed.matrixItems) {
     if (item.kind === "subrecipe") continue;
-    const materialId = materialIdByCode.get(item.itemCode);
+    const materialId = resolveMaterialIdByCode(item.itemCode);
     const alias = normalizeIngredientName(item.name);
     if (!materialId || !alias || seenAliases.has(alias)) continue;
+    const material = materialByIdForImport.get(materialId);
+    // Skip when Excel matrix code points at a different Odoo product.
+    if (!material || !ingredientMatchesMaterial(item.name, material.name)) {
+      continue;
+    }
     seenAliases.add(alias);
     aliasRows.push({ alias, material_id: materialId });
+    if (item.department) {
+      departmentByMaterialId.set(materialId, item.department);
+    }
   }
   for (let i = 0; i < aliasRows.length; i += CHUNK_SIZE) {
     const chunk = aliasRows.slice(i, i + CHUNK_SIZE);
@@ -135,6 +158,57 @@ export async function importMasterFile(formData: FormData): Promise<ImportResult
       .upsert(chunk, { onConflict: "alias" });
     if (error) {
       return { ok: false, message: `Saving name mappings failed: ${error.message}` };
+    }
+  }
+
+  // Prefer MASTER PO# department labels when present (matches Excel sections).
+  for (const line of parsed.masterPoLines) {
+    const materialId = resolveMaterialIdByCode(line.itemCode);
+    if (materialId && line.department) {
+      departmentByMaterialId.set(materialId, line.department);
+    }
+  }
+
+  // Stamp departments onto materials for Master PO section grouping.
+  for (const [materialId, department] of departmentByMaterialId) {
+    const { error } = await supabase
+      .from("purchasing_materials")
+      .update({ department, updated_at: now })
+      .eq("id", materialId);
+    if (
+      error &&
+      typeof error.message === "string" &&
+      !error.message.includes("department")
+    ) {
+      return { ok: false, message: `Saving material departments failed: ${error.message}` };
+    }
+  }
+
+  // Mark matrix produce items so they never land on the Master PO buy list.
+  for (const item of parsed.matrixItems) {
+    if (
+      item.kind !== "produce" &&
+      !((item.department ?? "").toUpperCase().startsWith("PRODUCE"))
+    ) {
+      continue;
+    }
+    const materialId = resolveMaterialIdByCode(item.itemCode);
+    if (!materialId) continue;
+    const { error } = await supabase
+      .from("purchasing_materials")
+      .update({
+        storage_type: "produce",
+        department: item.department || "PRODUCE",
+        updated_at: now,
+      })
+      .eq("id", materialId);
+    if (
+      error &&
+      typeof error.message === "string" &&
+      !error.message.includes("storage_type") &&
+      !error.message.includes("department")
+    ) {
+      return { ok: false, message: `Saving produce flags failed: ${error.message}` };
     }
   }
 
@@ -163,6 +237,13 @@ export async function importMasterFile(formData: FormData): Promise<ImportResult
     .from("purchasing_material_aliases")
     .select("alias, material_id");
   for (const row of existingAliases ?? []) {
+    const material = materialByIdForImport.get(row.material_id);
+    if (
+      !material ||
+      !ingredientMatchesMaterial(row.alias, material.name)
+    ) {
+      continue;
+    }
     materialIdByName.set(normalizeIngredientName(row.alias), row.material_id);
   }
 
@@ -227,6 +308,23 @@ export async function importMasterFile(formData: FormData): Promise<ImportResult
         matrix_items: parsed.matrixItems.length,
         schedule_from: scheduleFrom,
         schedule_to: scheduleTo,
+        master_po_lines: parsed.masterPoLines.map((row) => ({
+          itemCode: row.itemCode,
+          name: row.name,
+          department: row.department,
+          type: row.type,
+          lbsNeeded: row.lbsNeeded,
+          casesNeeded: row.casesNeeded,
+          productWeight: row.productWeight,
+        })),
+        produce_item_codes: parsed.matrixItems
+          .filter(
+            (item) =>
+              item.kind === "produce" ||
+              (item.department ?? "").toUpperCase().startsWith("PRODUCE") ||
+              item.storageType === "produce"
+          )
+          .map((item) => item.itemCode.toUpperCase()),
         warnings: parsed.warnings,
       },
     })
@@ -277,6 +375,7 @@ export async function importMasterFile(formData: FormData): Promise<ImportResult
       recipes: parsed.recipes.length,
       recipeLines: lineRows.length,
       scheduleEntries: parsed.scheduleEntries.length,
+      masterPoLines: parsed.masterPoLines.length,
       scheduleFrom,
       scheduleTo,
     },
@@ -284,35 +383,18 @@ export async function importMasterFile(formData: FormData): Promise<ImportResult
   };
 }
 
-type DbRecipe = {
-  id: string;
-  wip_code: string;
-  name: string;
-  department: string | null;
-  batch_size: number | null;
-};
-
-type DbRecipeLine = {
-  recipe_id: string;
-  material_id: string | null;
-  sub_recipe_id: string | null;
-  ingredient_name: string;
-  quantity: number;
-  uom: string | null;
-  loss_pct: number | null;
-  sort_order: number;
-};
-
 /**
- * Generate (or regenerate) the buy list for a purchase cycle from an import.
- * Nets requirements against on-hand inventory cumulatively across open
- * cycles ordered by required date — same math as the legacy spreadsheet.
+ * Generate Master PO buy list from the Excel MASTER PO# snapshot stored on import.
+ * Excel already applied Component Usage + EXTRA %; TMS only nets on-hand and
+ * tracks status / ETA / notes.
  */
 export async function generateCycle(input: {
   importId: string;
   requiredDate: string;
   fromDate: string;
   toDate: string;
+  /** Extra buffer percent, e.g. 15 for 15%. Default 0 — not auto-applied. */
+  extraPercent?: number;
 }): Promise<GenerateResult> {
   const supabase = await createClient();
   const {
@@ -322,118 +404,135 @@ export async function generateCycle(input: {
     return { ok: false, message: "You must be signed in to generate a cycle." };
   }
 
-  const [recipesRes, linesRes, scheduleRes, materialsRes, aliasesRes, inventoryRes] =
-    await Promise.all([
-      supabase
-        .from("purchasing_recipes")
-        .select("id, wip_code, name, department, batch_size"),
-      supabase
-        .from("purchasing_recipe_lines")
-        .select(
-          "recipe_id, material_id, sub_recipe_id, ingredient_name, quantity, uom, loss_pct, sort_order"
-        ),
-      supabase
-        .from("purchasing_schedule_entries")
-        .select("wip_code, schedule_date, quantity, uom")
-        .eq("import_id", input.importId)
-        .gte("schedule_date", input.fromDate)
-        .lte("schedule_date", input.toDate),
-      supabase
-        .from("purchasing_materials")
-        .select("id, item_code, name, lbs_per_case, lead_time_days, thaw_buffer_days, is_protein"),
-      supabase.from("purchasing_material_aliases").select("alias, material_id"),
-      supabase
-        .from("purchasing_current_inventory")
-        .select("material_id, qty_on_hand"),
-    ]);
+  type StoredMasterPoLine = {
+    itemCode: string;
+    name: string;
+    department: string;
+    type: string;
+    lbsNeeded: number;
+    casesNeeded: number;
+    productWeight: number | null;
+  };
 
-  const firstError =
-    recipesRes.error ?? linesRes.error ?? scheduleRes.error ?? materialsRes.error ??
-    aliasesRes.error ?? inventoryRes.error;
+  type MaterialRow = {
+    id: string;
+    item_code: string;
+    name: string;
+    lbs_per_case: number | null;
+    lead_time_days: number;
+    thaw_buffer_days: number;
+    is_protein: boolean;
+    department?: string | null;
+    storage_type?: string | null;
+  };
+
+  const [importRes, materialsRes, inventoryRes] = await Promise.all([
+    supabase
+      .from("purchasing_master_imports")
+      .select("id, stats")
+      .eq("id", input.importId)
+      .maybeSingle(),
+    supabase
+      .from("purchasing_materials")
+      .select(
+        "id, item_code, name, lbs_per_case, lead_time_days, thaw_buffer_days, is_protein, department, storage_type"
+      ),
+    supabase
+      .from("purchasing_current_inventory")
+      .select("material_id, qty_on_hand"),
+  ]);
+
+  let materials = (materialsRes.data ?? []) as MaterialRow[];
+  let materialsError = materialsRes.error;
+  if (
+    materialsError &&
+    typeof materialsError.message === "string" &&
+    (materialsError.message.includes("department") ||
+      materialsError.message.includes("storage_type"))
+  ) {
+    const fallback = await supabase
+      .from("purchasing_materials")
+      .select(
+        "id, item_code, name, lbs_per_case, lead_time_days, thaw_buffer_days, is_protein"
+      );
+    materials = (fallback.data ?? []) as MaterialRow[];
+    materialsError = fallback.error;
+  }
+
+  const firstError = importRes.error ?? materialsError ?? inventoryRes.error;
   if (firstError) {
     return { ok: false, message: `Loading data failed: ${firstError.message}` };
   }
+  if (!importRes.data) {
+    return { ok: false, message: "Import not found." };
+  }
 
-  const dbRecipes = (recipesRes.data ?? []) as DbRecipe[];
-  const dbLines = (linesRes.data ?? []) as DbRecipeLine[];
-  const materials = materialsRes.data ?? [];
-  const scheduleEntries = scheduleRes.data ?? [];
-
-  if (scheduleEntries.length === 0) {
+  const importStats = (importRes.data.stats ?? {}) as {
+    master_po_lines?: StoredMasterPoLine[];
+    produce_item_codes?: string[];
+  };
+  const produceCodes = new Set(
+    (importStats.produce_item_codes ?? []).map((code) => code.toUpperCase())
+  );
+  const masterPoLines = (importStats.master_po_lines ?? []).filter((line) => {
+    const dept = (line.department ?? "").trim().toUpperCase();
+    const type = (line.type ?? "").trim().toUpperCase();
+    if (type === "PRODUCE") return false;
+    if (dept === "PRODUCE" || dept.startsWith("PRODUCE ")) return false;
+    if (produceCodes.has(line.itemCode.toUpperCase())) return false;
+    return true;
+  });
+  if (masterPoLines.length === 0) {
     return {
       ok: false,
-      message: "No scheduled production found in that date range for this import.",
+      message:
+        "This import has no MASTER PO# snapshot. Re-import the master .xlsm after Excel has calculated Master PO.",
     };
   }
 
-  // Rebuild in-memory recipes for the MRP engine.
-  const linesByRecipe = new Map<string, DbRecipeLine[]>();
-  for (const line of dbLines) {
-    const list = linesByRecipe.get(line.recipe_id) ?? [];
-    list.push(line);
-    linesByRecipe.set(line.recipe_id, list);
+  function isProduceMaterial(material: MaterialRow) {
+    if (material.storage_type === "produce") return true;
+    const dept = (material.department ?? "").trim().toUpperCase();
+    if (dept === "PRODUCE" || dept.startsWith("PRODUCE ")) return true;
+    if (produceCodes.has(material.item_code.toUpperCase())) return true;
+    return false;
   }
-  const recipes: ParsedRecipe[] = dbRecipes.map((recipe) => ({
-    wipCode: recipe.wip_code,
-    name: recipe.name,
-    department: recipe.department ?? "",
-    sheetName: recipe.department ?? "",
-    batchSize: recipe.batch_size,
-    lines: (linesByRecipe.get(recipe.id) ?? [])
-      .sort((a, b) => a.sort_order - b.sort_order)
-      .map((line) => ({
-        ingredientName: line.ingredient_name,
-        quantity: line.quantity,
-        uom: line.uom,
-        lossPct: line.loss_pct,
-      })),
-  }));
 
-  const recipeNames = new Map<string, string>();
-  for (const recipe of recipes) {
-    recipeNames.set(normalizeIngredientName(recipe.name), recipe.wipCode);
-  }
   const materialByCode = new Map(materials.map((m) => [m.item_code, m]));
-  const materialNames = new Map<string, string>();
-  for (const material of materials) {
-    materialNames.set(normalizeIngredientName(material.name), material.item_code);
-  }
-  const materialById = new Map(materials.map((m) => [m.id, m]));
-  const aliases = new Map<string, string>();
-  for (const alias of aliasesRes.data ?? []) {
-    const material = materialById.get(alias.material_id);
-    if (material) aliases.set(normalizeIngredientName(alias.alias), material.item_code);
-  }
-
-  // Resolutions stored on BOM lines at import time take precedence: they carry
-  // the INGREDIENT MATRIX name->code knowledge from the master file itself.
-  const wipByRecipeId = new Map(dbRecipes.map((recipe) => [recipe.id, recipe.wip_code]));
-  for (const line of dbLines) {
-    const key = normalizeIngredientName(line.ingredient_name);
-    if (line.sub_recipe_id) {
-      const wip = wipByRecipeId.get(line.sub_recipe_id);
-      if (wip) recipeNames.set(key, wip);
-    } else if (line.material_id) {
-      const material = materialById.get(line.material_id);
-      if (material) aliases.set(key, material.item_code);
-    }
-  }
-
-  const resolve = buildResolver({ recipes, recipeNames, materialNames, aliases });
-  const mrp = computeRequirements(
-    recipes,
-    scheduleEntries.map((entry) => ({
-      wipCode: entry.wip_code,
-      recipeName: "",
-      department: "",
-      date: entry.schedule_date,
-      quantity: entry.quantity,
-      uom: entry.uom,
-    })),
-    resolve
+  const materialByCodeUpper = new Map(
+    materials.map((m) => [m.item_code.toUpperCase(), m])
   );
 
-  // Upsert the cycle for this required date.
+  function findMaterial(line: StoredMasterPoLine) {
+    // Never trust item_code alone — Excel and Odoo reuse codes for different products
+    // (e.g. 510064 Gouda vs chocolate wafers).
+    const byCode =
+      materialByCode.get(line.itemCode) ??
+      materialByCodeUpper.get(line.itemCode.toUpperCase());
+    if (
+      byCode &&
+      !isProduceMaterial(byCode) &&
+      ingredientMatchesMaterial(line.name, byCode.name)
+    ) {
+      return byCode;
+    }
+
+    const key = normalizeIngredientName(line.name);
+    for (const material of materials) {
+      if (isProduceMaterial(material)) continue;
+      if (normalizeIngredientName(material.name) === key) return material;
+    }
+    for (const material of materials) {
+      if (isProduceMaterial(material)) continue;
+      if (ingredientMatchesMaterial(line.name, material.name)) return material;
+    }
+    return null;
+  }
+
+  const extraPct = Number(input.extraPercent);
+  const extraFactor =
+    Number.isFinite(extraPct) && extraPct > 0 ? 1 + extraPct / 100 : 1;
+
   const { data: existingCycles, error: cyclesError } = await supabase
     .from("purchasing_cycles")
     .select("id, required_date, po_number, status");
@@ -474,7 +573,6 @@ export async function generateCycle(input: {
       .eq("id", cycle.id);
   }
 
-  // On-hand netting: cumulative across earlier open cycles.
   const onHand = new Map<string, number>(
     (inventoryRes.data ?? []).map((row) => [row.material_id, row.qty_on_hand])
   );
@@ -495,7 +593,10 @@ export async function generateCycle(input: {
       .select("material_id, cases_required")
       .in("cycle_id", earlierOpenCycleIds);
     if (earlierError) {
-      return { ok: false, message: `Loading earlier cycles failed: ${earlierError.message}` };
+      return {
+        ok: false,
+        message: `Loading earlier cycles failed: ${earlierError.message}`,
+      };
     }
     for (const line of earlierLines ?? []) {
       earlierNeed.set(
@@ -505,7 +606,6 @@ export async function generateCycle(input: {
     }
   }
 
-  // Preserve purchasing progress on regeneration.
   type ExistingLine = {
     id: string;
     material_id: string;
@@ -568,62 +668,111 @@ export async function generateCycle(input: {
   }
 
   const linesWithoutSpec: string[] = [];
+  const droppedWithoutMaterial: string[] = [];
   const now = new Date().toISOString();
   const requiredDate = new Date(`${input.requiredDate}T00:00:00`);
 
-  const newLines = [...mrp.requirements.values()]
-    .map((requirement) => {
-      const material = materialByCode.get(requirement.itemCode);
-      if (!material) return null;
+  type BuyLine = {
+    cycle_id: string;
+    material_id: string;
+    cases_required: number;
+    lbs_required: number | null;
+    on_hand_cases: number | null;
+    required_to_order: number;
+    order_by_date: string;
+    is_emergency: boolean;
+    updated_by: string;
+    created_at: string;
+    updated_at: string;
+    status?: string;
+    arrival_date?: string | null;
+    arrived_at?: string | null;
+    notes?: string | null;
+  };
 
-      const rawQty = requirement.totalLbs > 0 ? requirement.totalLbs : requirement.totalUnits;
-      let casesRequired: number;
-      if (material.lbs_per_case && material.lbs_per_case > 0) {
-        casesRequired = Math.ceil(rawQty / material.lbs_per_case);
+  // Multiple Excel item codes can resolve to one Odoo material — merge so
+  // upsert does not hit the same (cycle_id, material_id) twice.
+  const mergedByMaterial = new Map<string, BuyLine>();
+  const departmentUpdates = new Map<string, string>();
+
+  for (const poLine of masterPoLines) {
+    const material = findMaterial(poLine);
+    if (!material) {
+      droppedWithoutMaterial.push(`${poLine.itemCode} ${poLine.name}`);
+      continue;
+    }
+
+    const dept = (poLine.department ?? "").trim();
+    if (dept && dept.toUpperCase() !== "OTHER") {
+      departmentUpdates.set(material.id, dept);
+    }
+
+    let casesRequired = Math.ceil(poLine.casesNeeded * extraFactor);
+    const lbs = poLine.lbsNeeded > 0 ? poLine.lbsNeeded * extraFactor : 0;
+    if (casesRequired <= 0 && lbs > 0) {
+      const weight =
+        (poLine.productWeight && poLine.productWeight > 0
+          ? poLine.productWeight
+          : null) ?? material.lbs_per_case;
+      if (weight && weight > 0) {
+        casesRequired = Math.ceil(lbs / weight);
       } else {
-        casesRequired = Math.ceil(rawQty);
+        casesRequired = Math.ceil(lbs);
         linesWithoutSpec.push(`${material.item_code} ${material.name}`);
       }
-      if (casesRequired <= 0) return null;
+    }
+    if (casesRequired <= 0) continue;
 
-      const bufferDays =
-        material.lead_time_days + (material.is_protein ? material.thaw_buffer_days : 0);
-      const orderBy = new Date(requiredDate);
-      orderBy.setDate(orderBy.getDate() - bufferDays);
-      const orderByDate = orderBy.toISOString().slice(0, 10);
+    const existing = mergedByMaterial.get(material.id);
+    if (existing) {
+      existing.cases_required += casesRequired;
+      const totalLbs = (existing.lbs_required ?? 0) + lbs;
+      existing.lbs_required = totalLbs > 0 ? totalLbs : null;
+      continue;
+    }
 
-      const need = casesRequired;
-      const before = earlierNeed.get(material.id) ?? 0;
-      const available = onHand.get(material.id) ?? 0;
-      const requiredToOrder = Math.min(need, Math.max(0, before + need - available));
+    const bufferDays =
+      material.lead_time_days + (material.is_protein ? material.thaw_buffer_days : 0);
+    const orderBy = new Date(requiredDate);
+    orderBy.setDate(orderBy.getDate() - bufferDays);
+    const orderByDate = orderBy.toISOString().slice(0, 10);
 
-      const previous = existingByMaterial.get(material.id);
-      const carryOver =
-        previous && !previous.is_emergency
-          ? {
-              status: previous.status,
-              arrival_date: previous.arrival_date,
-              arrived_at: previous.arrived_at,
-              notes: previous.notes,
-            }
-          : {};
+    const previous = existingByMaterial.get(material.id);
+    const carryOver =
+      previous && !previous.is_emergency
+        ? {
+            status: previous.status,
+            arrival_date: previous.arrival_date,
+            arrived_at: previous.arrived_at,
+            notes: previous.notes,
+          }
+        : {};
 
-      return {
-        cycle_id: cycle.id,
-        material_id: material.id,
-        cases_required: casesRequired,
-        lbs_required: requirement.totalLbs > 0 ? requirement.totalLbs : null,
-        on_hand_cases: onHand.get(material.id) ?? null,
-        required_to_order: requiredToOrder,
-        order_by_date: orderByDate,
-        is_emergency: false,
-        updated_by: user.id,
-        created_at: now,
-        updated_at: now,
-        ...carryOver,
-      };
-    })
-    .filter((line): line is NonNullable<typeof line> => line !== null);
+    mergedByMaterial.set(material.id, {
+      cycle_id: cycle.id,
+      material_id: material.id,
+      cases_required: casesRequired,
+      lbs_required: lbs > 0 ? lbs : null,
+      on_hand_cases: onHand.get(material.id) ?? null,
+      required_to_order: 0,
+      order_by_date: orderByDate,
+      is_emergency: false,
+      updated_by: user.id,
+      created_at: now,
+      updated_at: now,
+      ...carryOver,
+    });
+  }
+
+  const newLines = [...mergedByMaterial.values()].map((line) => {
+    const need = line.cases_required;
+    const before = earlierNeed.get(line.material_id) ?? 0;
+    const available = onHand.get(line.material_id) ?? 0;
+    return {
+      ...line,
+      required_to_order: Math.min(need, Math.max(0, before + need - available)),
+    };
+  });
 
   for (let i = 0; i < newLines.length; i += CHUNK_SIZE) {
     const chunk = newLines.slice(i, i + CHUNK_SIZE);
@@ -642,25 +791,46 @@ export async function generateCycle(input: {
     }
   }
 
-  revalidatePath("/purchasing");
+  // Stamp Master PO departments onto materials so filters/grouping stay correct.
+  for (const [materialId, department] of departmentUpdates) {
+    const { error } = await supabase
+      .from("purchasing_materials")
+      .update({ department, updated_at: now })
+      .eq("id", materialId);
+    if (
+      error &&
+      typeof error.message === "string" &&
+      !error.message.includes("department")
+    ) {
+      return {
+        ok: false,
+        message: `Saving material departments failed: ${error.message}`,
+      };
+    }
+  }
 
-  const unresolved: UnresolvedName[] = [...mrp.unresolved.values()].map((entry) => ({
-    ingredientName: entry.ingredientName,
-    totalLbs: entry.totalLbs,
-    totalUnits: entry.totalUnits,
-    recipes: [...entry.recipes],
-  }));
+  revalidatePath("/purchasing");
 
   return {
     ok: true,
-    message: `Cycle for ${input.requiredDate}: ${newLines.length} materials computed${
-      unresolved.length > 0 ? `, ${unresolved.length} ingredient names need mapping` : ""
+    message: `Master PO for ${input.requiredDate} (production ${input.fromDate} to ${input.toDate}): ${newLines.length} lines from Excel MASTER PO#${
+      droppedWithoutMaterial.length > 0
+        ? `, ${droppedWithoutMaterial.length} codes missing from Odoo materials`
+        : ""
     }.`,
     cycleId: cycle.id,
     linesCreated: newLines.length,
     linesWithoutSpec,
-    unresolved,
-    warnings: mrp.warnings,
+    unresolved: [],
+    warnings: [
+      ...(droppedWithoutMaterial.length > 0
+        ? [
+            `No Odoo material for: ${droppedWithoutMaterial.slice(0, 8).join("; ")}${
+              droppedWithoutMaterial.length > 8 ? "…" : ""
+            }`,
+          ]
+        : []),
+    ],
   };
 }
 

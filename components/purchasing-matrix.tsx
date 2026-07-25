@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, Fragment } from "react";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import {
   AlertTriangle,
   CalendarRange,
+  Columns3,
   FileUp,
   Loader2,
   Package,
@@ -70,6 +71,56 @@ const STATUS_LABELS: Record<LineStatus, string> = {
   skipped: "Skipped",
 };
 
+const MATRIX_COLUMN_DEFS = [
+  { key: "itemCode", label: "Item #", always: true },
+  { key: "department", label: "Department", always: false },
+  { key: "description", label: "Description", always: true },
+  { key: "casesRequired", label: "Total case req.", always: false },
+  { key: "onHand", label: "On hand", always: false },
+  { key: "requiredToOrder", label: "Req. to order", always: false },
+  { key: "totalLbs", label: "Total lbs", always: false },
+  { key: "orderBy", label: "Order by", always: false },
+  { key: "status", label: "Status", always: false },
+  { key: "eta", label: "ETA / Arrived", always: false },
+  { key: "notes", label: "Notes", always: false },
+] as const;
+
+type MatrixColumnKey = (typeof MATRIX_COLUMN_DEFS)[number]["key"];
+
+type VisibleColumns = Record<MatrixColumnKey, boolean>;
+
+const DEFAULT_VISIBLE_COLUMNS: VisibleColumns = {
+  itemCode: true,
+  department: true,
+  description: true,
+  casesRequired: true,
+  onHand: true,
+  requiredToOrder: true,
+  totalLbs: true,
+  orderBy: true,
+  status: true,
+  eta: true,
+  notes: true,
+};
+
+const VISIBLE_COLUMNS_STORAGE_KEY = "purchasing-matrix-visible-columns";
+
+function loadVisibleColumns(): VisibleColumns {
+  if (typeof window === "undefined") return DEFAULT_VISIBLE_COLUMNS;
+  try {
+    const raw = window.localStorage.getItem(VISIBLE_COLUMNS_STORAGE_KEY);
+    if (!raw) return DEFAULT_VISIBLE_COLUMNS;
+    const parsed = JSON.parse(raw) as Partial<VisibleColumns>;
+    return { ...DEFAULT_VISIBLE_COLUMNS, ...parsed, itemCode: true, description: true };
+  } catch {
+    return DEFAULT_VISIBLE_COLUMNS;
+  }
+}
+
+function countVisibleColumns(visible: VisibleColumns) {
+  return MATRIX_COLUMN_DEFS.filter((col) => visible[col.key]).length;
+}
+
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -80,6 +131,93 @@ function formatTabDate(value: string) {
   } catch {
     return value;
   }
+}
+
+/** Excel Master PO department sections (Produce is calculated but not shown). */
+const MASTER_PO_DEPT_ORDER = [
+  "FINISHED PRODUCT",
+  "FRESH MIXING",
+  "GARDE MANGER",
+  "ASSEMBLY",
+  "MAIN KITCHEN",
+] as const;
+
+const MASTER_PO_DEPT_STYLES: Record<string, string> = {
+  "FINISHED PRODUCT":
+    "bg-orange-100/90 text-orange-950 dark:bg-orange-950/50 dark:text-orange-100",
+  "FRESH MIXING":
+    "bg-sky-100/90 text-sky-950 dark:bg-sky-950/50 dark:text-sky-100",
+  "GARDE MANGER":
+    "bg-green-100/90 text-green-950 dark:bg-green-950/50 dark:text-green-100",
+  ASSEMBLY:
+    "bg-purple-100/90 text-purple-950 dark:bg-purple-950/50 dark:text-purple-100",
+  "MAIN KITCHEN":
+    "bg-red-100/90 text-red-950 dark:bg-red-950/50 dark:text-red-100",
+  OTHER: "bg-muted/60 text-muted-foreground",
+};
+
+const MASTER_PO_DEPT_LABELS: Record<string, string> = {
+  "FINISHED PRODUCT": "Finished Product",
+  "FRESH MIXING": "Fresh Mixing",
+  "GARDE MANGER": "Garde Manger",
+  ASSEMBLY: "Assembly",
+  "MAIN KITCHEN": "Main Kitchen",
+  OTHER: "Other",
+};
+
+function normalizeMasterPoDepartment(value: string | null | undefined): string {
+  const raw = (value ?? "").trim().toUpperCase();
+  if (!raw) return "OTHER";
+  if (raw.startsWith("MAIN KITCHEN")) return "MAIN KITCHEN";
+  if (raw === "PREP/MIXING" || raw === "PREP MIXING") return "FRESH MIXING";
+  if (raw.startsWith("PRODUCE")) return "PRODUCE";
+  return raw;
+}
+
+function departmentLabel(value: string | null | undefined): string {
+  const key = normalizeMasterPoDepartment(value);
+  return MASTER_PO_DEPT_LABELS[key] ?? key;
+}
+
+function isProduceBuyLine(line: PurchaseLine): boolean {
+  if (line.material?.storage_type === "produce") return true;
+  const dept = normalizeMasterPoDepartment(line.material?.department);
+  return dept === "PRODUCE";
+}
+
+function groupLinesByDepartment(lines: PurchaseLine[]) {
+  const buckets = new Map<string, PurchaseLine[]>();
+  for (const line of lines) {
+    if (isProduceBuyLine(line)) continue;
+    const dept = normalizeMasterPoDepartment(line.material?.department);
+    if (dept === "PRODUCE") continue;
+    const list = buckets.get(dept) ?? [];
+    list.push(line);
+    buckets.set(dept, list);
+  }
+  const sections: { key: string; label: string; lines: PurchaseLine[] }[] = [];
+  for (const key of MASTER_PO_DEPT_ORDER) {
+    const deptLines = buckets.get(key);
+    if (deptLines && deptLines.length > 0) {
+      sections.push({
+        key,
+        label: MASTER_PO_DEPT_LABELS[key] ?? key,
+        lines: deptLines,
+      });
+      buckets.delete(key);
+    }
+  }
+  for (const [key, deptLines] of [...buckets.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0])
+  )) {
+    if (deptLines.length === 0) continue;
+    sections.push({
+      key,
+      label: MASTER_PO_DEPT_LABELS[key] ?? key,
+      lines: deptLines,
+    });
+  }
+  return sections;
 }
 
 function formatShortDate(value: string | null) {
@@ -291,13 +429,33 @@ function EmergencyDialog({ cycleId, open, onOpenChange, onAdded }: EmergencyDial
 
 type LineRowProps = {
   line: PurchaseLine;
+  visibleColumns: VisibleColumns;
   onChanged: (line: PurchaseLine) => void;
   onOpenDetail: (materialId: string) => void;
 };
 
-function MatrixLineRow({ line, onChanged, onOpenDetail }: LineRowProps) {
+function MatrixLineRow({
+  line,
+  visibleColumns,
+  onChanged,
+  onOpenDetail,
+}: LineRowProps) {
   const [notes, setNotes] = useState(line.notes ?? "");
+  const [casesRequired, setCasesRequired] = useState(String(line.cases_required));
+  const [editingCases, setEditingCases] = useState(false);
+  const casesInputRef = useRef<HTMLInputElement | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setCasesRequired(String(line.cases_required));
+  }, [line.cases_required]);
+
+  useEffect(() => {
+    if (editingCases) {
+      casesInputRef.current?.focus();
+      casesInputRef.current?.select();
+    }
+  }, [editingCases]);
 
   async function save(values: Parameters<typeof updatePurchaseLine>[2]) {
     setIsSaving(true);
@@ -318,8 +476,25 @@ function MatrixLineRow({ line, onChanged, onOpenDetail }: LineRowProps) {
     }
   }
 
+  async function saveCases() {
+    const next = Math.max(0, Math.ceil(Number(casesRequired)));
+    setEditingCases(false);
+    if (!Number.isFinite(next) || next === line.cases_required) {
+      setCasesRequired(String(line.cases_required));
+      return;
+    }
+    const onHand = line.on_hand_cases ?? 0;
+    const requiredToOrder = Math.max(0, next - onHand);
+    await save({
+      cases_required: next,
+      required_to_order: requiredToOrder,
+    });
+  }
+
   const material = line.material;
   const isArrived = line.status === "arrived";
+  const deptKey = normalizeMasterPoDepartment(material?.department);
+  const deptName = departmentLabel(material?.department);
 
   return (
     <TableRow
@@ -329,100 +504,163 @@ function MatrixLineRow({ line, onChanged, onOpenDetail }: LineRowProps) {
         line.required_to_order > 0 && line.status === "to_order" && "bg-amber-50/60 dark:bg-amber-950/20"
       )}
     >
-      <TableCell className="px-2 py-1 font-mono text-xs">
-        {material ? (
-          <button
-            type="button"
-            onClick={() => onOpenDetail(material.id)}
-            className="text-left text-primary underline-offset-2 hover:underline"
-          >
-            {material.item_code}
-          </button>
-        ) : (
-          "—"
-        )}
-      </TableCell>
-      <TableCell className="px-2 py-1 text-xs">
-        <span className="flex items-center gap-1">
-          {line.is_emergency && (
-            <AlertTriangle className="size-3 shrink-0 text-destructive" />
-          )}
+      {visibleColumns.itemCode && (
+        <TableCell className="px-2 py-1 font-mono text-xs">
           {material ? (
             <button
               type="button"
               onClick={() => onOpenDetail(material.id)}
-              className="truncate text-left hover:underline"
-              title="View product details from Odoo"
+              className="text-left text-primary underline-offset-2 hover:underline"
             >
-              {material.name}
+              {material.item_code}
             </button>
           ) : (
-            <span className="truncate">Unknown</span>
+            "—"
           )}
-          {material?.is_protein && <Snowflake className="size-3 shrink-0 text-sky-500" />}
-        </span>
-      </TableCell>
-      <TableCell className="px-2 py-1 text-right text-xs tabular-nums">
-        {line.cases_required.toLocaleString()}
-      </TableCell>
-      <TableCell className="px-2 py-1 text-right text-xs tabular-nums text-muted-foreground">
-        {line.on_hand_cases != null ? line.on_hand_cases.toLocaleString() : "—"}
-      </TableCell>
-      <TableCell className="px-2 py-1 text-right text-xs font-semibold tabular-nums">
-        {line.required_to_order.toLocaleString()}
-      </TableCell>
-      <TableCell className="px-2 py-1 text-right text-xs tabular-nums text-muted-foreground">
-        {line.lbs_required != null ? Math.round(line.lbs_required).toLocaleString() : "—"}
-      </TableCell>
-      <TableCell className={cn("px-2 py-1 text-xs tabular-nums", orderByTone(line))}>
-        {formatShortDate(line.order_by_date)}
-      </TableCell>
-      <TableCell className="px-1 py-1">
-        <select
-          value={line.status}
-          onChange={(event) => void save({ status: event.target.value as LineStatus })}
-          disabled={isSaving}
-          className="h-7 w-full min-w-24 rounded border border-input bg-background px-1 text-xs"
-        >
-          {(Object.keys(STATUS_LABELS) as LineStatus[]).map((status) => (
-            <option key={status} value={status}>
-              {STATUS_LABELS[status]}
-            </option>
-          ))}
-        </select>
-      </TableCell>
-      <TableCell className="px-1 py-1">
-        {isArrived ? (
+        </TableCell>
+      )}
+      {visibleColumns.department && (
+        <TableCell className="px-2 py-1 text-xs">
           <span
-            className="block min-w-36 px-1 text-xs font-medium text-green-700 dark:text-green-400"
-            title="Actual arrival"
+            className={cn(
+              "inline-block max-w-36 truncate rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+              MASTER_PO_DEPT_STYLES[deptKey] ?? MASTER_PO_DEPT_STYLES.OTHER
+            )}
+            title={deptName}
           >
-            {formatArrivedAt(line.arrived_at)}
+            {deptName}
           </span>
-        ) : (
-          <Input
-            type="date"
-            value={line.arrival_date ?? ""}
-            onChange={(event) => void save({ arrival_date: event.target.value || null })}
+        </TableCell>
+      )}
+      {visibleColumns.description && (
+        <TableCell className="px-2 py-1 text-xs">
+          <span className="flex items-center gap-1">
+            {line.is_emergency && (
+              <AlertTriangle className="size-3 shrink-0 text-destructive" />
+            )}
+            {material ? (
+              <button
+                type="button"
+                onClick={() => onOpenDetail(material.id)}
+                className="truncate text-left hover:underline"
+                title="View product details from Odoo"
+              >
+                {material.name}
+              </button>
+            ) : (
+              <span className="truncate">Unknown</span>
+            )}
+            {material?.is_protein && <Snowflake className="size-3 shrink-0 text-sky-500" />}
+          </span>
+        </TableCell>
+      )}
+      {visibleColumns.casesRequired && (
+        <TableCell className="px-2 py-1 text-right text-xs tabular-nums">
+          {editingCases ? (
+            <Input
+              ref={casesInputRef}
+              type="number"
+              min={0}
+              step={1}
+              value={casesRequired}
+              onChange={(event) => setCasesRequired(event.target.value)}
+              onBlur={() => void saveCases()}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.currentTarget.blur();
+                }
+                if (event.key === "Escape") {
+                  setCasesRequired(String(line.cases_required));
+                  setEditingCases(false);
+                }
+              }}
+              disabled={isSaving}
+              className="h-7 w-20 ml-auto text-right tabular-nums"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditingCases(true)}
+              className="ml-auto block min-w-12 rounded px-1.5 py-0.5 text-right hover:bg-muted"
+              title="Click to edit total case req."
+            >
+              {line.cases_required.toLocaleString()}
+            </button>
+          )}
+        </TableCell>
+      )}
+      {visibleColumns.onHand && (
+        <TableCell className="px-2 py-1 text-right text-xs tabular-nums text-muted-foreground">
+          {line.on_hand_cases != null ? line.on_hand_cases.toLocaleString() : "—"}
+        </TableCell>
+      )}
+      {visibleColumns.requiredToOrder && (
+        <TableCell className="px-2 py-1 text-right text-xs font-semibold tabular-nums">
+          {line.required_to_order.toLocaleString()}
+        </TableCell>
+      )}
+      {visibleColumns.totalLbs && (
+        <TableCell className="px-2 py-1 text-right text-xs tabular-nums text-muted-foreground">
+          {line.lbs_required != null ? Math.round(line.lbs_required).toLocaleString() : "—"}
+        </TableCell>
+      )}
+      {visibleColumns.orderBy && (
+        <TableCell className={cn("px-2 py-1 text-xs tabular-nums", orderByTone(line))}>
+          {formatShortDate(line.order_by_date)}
+        </TableCell>
+      )}
+      {visibleColumns.status && (
+        <TableCell className="px-1 py-1">
+          <select
+            value={line.status}
+            onChange={(event) => void save({ status: event.target.value as LineStatus })}
             disabled={isSaving}
-            className="h-7 w-32 px-1 text-xs"
-            title="Expected arrival (ETA)"
+            className="h-7 w-full min-w-24 rounded border border-input bg-background px-1 text-xs"
+          >
+            {(Object.keys(STATUS_LABELS) as LineStatus[]).map((status) => (
+              <option key={status} value={status}>
+                {STATUS_LABELS[status]}
+              </option>
+            ))}
+          </select>
+        </TableCell>
+      )}
+      {visibleColumns.eta && (
+        <TableCell className="px-1 py-1">
+          {isArrived ? (
+            <span
+              className="block min-w-36 px-1 text-xs font-medium text-green-700 dark:text-green-400"
+              title="Actual arrival"
+            >
+              {formatArrivedAt(line.arrived_at)}
+            </span>
+          ) : (
+            <Input
+              type="date"
+              value={line.arrival_date ?? ""}
+              onChange={(event) => void save({ arrival_date: event.target.value || null })}
+              disabled={isSaving}
+              className="h-7 w-32 px-1 text-xs"
+              title="Expected arrival (ETA)"
+            />
+          )}
+        </TableCell>
+      )}
+      {visibleColumns.notes && (
+        <TableCell className="px-1 py-1">
+          <Input
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            onBlur={() => {
+              const value = notes.trim() || null;
+              if (value !== (line.notes ?? null)) void save({ notes: value });
+            }}
+            placeholder=""
+            disabled={isSaving}
+            className="h-7 min-w-36 px-1 text-xs"
           />
-        )}
-      </TableCell>
-      <TableCell className="px-1 py-1">
-        <Input
-          value={notes}
-          onChange={(event) => setNotes(event.target.value)}
-          onBlur={() => {
-            const value = notes.trim() || null;
-            if (value !== (line.notes ?? null)) void save({ notes: value });
-          }}
-          placeholder=""
-          disabled={isSaving}
-          className="h-7 min-w-36 px-1 text-xs"
-        />
-      </TableCell>
+        </TableCell>
+      )}
     </TableRow>
   );
 }
@@ -443,10 +681,16 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [onlyToOrder, setOnlyToOrder] = useState(true);
+  const [visibleColumns, setVisibleColumns] = useState<VisibleColumns>(
+    DEFAULT_VISIBLE_COLUMNS
+  );
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const columnsMenuRef = useRef<HTMLDivElement | null>(null);
   const [showGenerate, setShowGenerate] = useState(false);
   const [requiredDate, setRequiredDate] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [extraPercent, setExtraPercent] = useState("0");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [generateResult, setGenerateResult] = useState<GenerateResult | null>(null);
@@ -519,6 +763,24 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
   }, [initialCycleId, reloadKey]);
 
   useEffect(() => {
+    setVisibleColumns(loadVisibleColumns());
+  }, []);
+
+  useEffect(() => {
+    if (!columnsOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      if (
+        columnsMenuRef.current &&
+        !columnsMenuRef.current.contains(event.target as Node)
+      ) {
+        setColumnsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [columnsOpen]);
+
+  useEffect(() => {
     if (!selectedCycleId) return;
 
     let active = true;
@@ -548,29 +810,48 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
     [selectedCycleId, lines]
   );
 
+  const visibleColumnCount = useMemo(
+    () => countVisibleColumns(visibleColumns),
+    [visibleColumns]
+  );
+
+  function toggleColumn(key: MatrixColumnKey) {
+    const def = MATRIX_COLUMN_DEFS.find((col) => col.key === key);
+    if (def?.always) return;
+    setVisibleColumns((current) => {
+      const next = { ...current, [key]: !current[key] };
+      try {
+        window.localStorage.setItem(
+          VISIBLE_COLUMNS_STORAGE_KEY,
+          JSON.stringify(next)
+        );
+      } catch {
+        // ignore storage failures
+      }
+      return next;
+    });
+  }
+
   const filteredLines = useMemo(() => {
     const query = search.trim().toLowerCase();
     return activeLines.filter((line) => {
+      if (isProduceBuyLine(line)) return false;
       if (onlyToOrder && !line.is_emergency && line.required_to_order <= 0) {
         return false;
       }
       if (!query) return true;
       return (
         (line.material?.item_code ?? "").toLowerCase().includes(query) ||
-        (line.material?.name ?? "").toLowerCase().includes(query)
+        (line.material?.name ?? "").toLowerCase().includes(query) ||
+        departmentLabel(line.material?.department).toLowerCase().includes(query)
       );
     });
   }, [activeLines, search, onlyToOrder]);
 
-  const { proteinLines, otherLines } = useMemo(() => {
-    const proteins: PurchaseLine[] = [];
-    const others: PurchaseLine[] = [];
-    for (const line of filteredLines) {
-      if (line.material?.is_protein) proteins.push(line);
-      else others.push(line);
-    }
-    return { proteinLines: proteins, otherLines: others };
-  }, [filteredLines]);
+  const departmentSections = useMemo(
+    () => groupLinesByDepartment(filteredLines),
+    [filteredLines]
+  );
 
   const summary = useMemo(() => {
     const actionable = activeLines.filter(
@@ -642,6 +923,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
         requiredDate,
         fromDate,
         toDate,
+        extraPercent: Number(extraPercent) || 0,
       });
       setGenerateResult(result);
       if (!result.ok) {
@@ -652,6 +934,45 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
       setShowGenerate(false);
       setReloadKey((key) => key + 1);
       if (result.cycleId) setSelectedCycleId(result.cycleId);
+    });
+  }
+
+  function handleApplyExtra() {
+    const importId = activeCycle?.import_id ?? latestImport?.id;
+    if (!activeCycle || !importId) {
+      setActionError("Select a Master PO that was generated from an import.");
+      return;
+    }
+    const label = activeCycle.week_label ?? "";
+    const match = label.match(
+      /(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})/i
+    );
+    const applyFrom = match?.[1] ?? fromDate;
+    const applyTo = match?.[2] ?? toDate;
+    if (!applyFrom || !applyTo) {
+      setActionError("Set production dates, then apply EXTRA %.");
+      return;
+    }
+    setActionMessage(null);
+    setActionError(null);
+    setGenerateResult(null);
+    startGenerate(async () => {
+      const result = await generateCycle({
+        importId,
+        requiredDate: activeCycle.required_date,
+        fromDate: applyFrom,
+        toDate: applyTo,
+        extraPercent: Number(extraPercent) || 0,
+      });
+      setGenerateResult(result);
+      if (!result.ok) {
+        setActionError(result.message);
+        return;
+      }
+      setActionMessage(
+        `Applied EXTRA ${Number(extraPercent) || 0}% — ${result.message}`
+      );
+      setReloadKey((key) => key + 1);
     });
   }
 
@@ -702,7 +1023,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
     setSelectedCycleId(remaining[remaining.length - 1]?.id ?? null);
     setDeleteOpen(false);
     setActionMessage(
-      `Deleted week ${formatTabDate(activeCycle.required_date)}${
+      `Deleted Master PO ${formatTabDate(activeCycle.required_date)}${
         activeCycle.po_number != null ? ` (PO #${activeCycle.po_number})` : ""
       }.`
     );
@@ -849,7 +1170,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
               >
                 <Wand2 />
                 <span className="hidden sm:inline">
-                  {activeCycle ? "Regenerate" : "New week"}
+                  {activeCycle ? "Regenerate Master PO" : "New Master PO"}
                 </span>
               </Button>
               {activeCycle && (
@@ -940,16 +1261,28 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
             can be saved, or map them on Materials.
           </p>
         )}
+        {generateResult?.warnings && generateResult.warnings.length > 0 && (
+          <p className="rounded-md border border-amber-600/30 bg-amber-600/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+            {generateResult.warnings.join(" ")}
+          </p>
+        )}
 
         {showGenerate && (
           <div className="rounded-md border bg-muted/30 p-3">
-            <div className="mb-2 text-sm font-medium">
-              {activeCycle ? "Regenerate this week" : "Generate a new week"}
+            <div className="mb-1 text-sm font-medium">
+              {activeCycle
+                ? "Regenerate Master PO for this week"
+                : "Generate Master PO"}
             </div>
-            <div className="grid gap-3 sm:grid-cols-4 sm:items-end">
+            <p className="mb-2 text-xs text-muted-foreground">
+              Quantities come from Excel MASTER PO# (without Excel EXTRA). Set
+              EXTRA % here if you want a buffer. You can also edit Total case
+              req. on any row after generating.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-5 sm:items-end">
               <div className="flex flex-col gap-1">
                 <Label htmlFor="matrix-required" className="text-xs">
-                  Required date (PO)
+                  PO / required date
                 </Label>
                 <Input
                   id="matrix-required"
@@ -961,7 +1294,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
               </div>
               <div className="flex flex-col gap-1">
                 <Label htmlFor="matrix-from" className="text-xs">
-                  Production from
+                  Production dates from
                 </Label>
                 <Input
                   id="matrix-from"
@@ -973,7 +1306,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
               </div>
               <div className="flex flex-col gap-1">
                 <Label htmlFor="matrix-to" className="text-xs">
-                  Production to
+                  Production dates to
                 </Label>
                 <Input
                   id="matrix-to"
@@ -981,6 +1314,21 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                   value={toDate}
                   onChange={(event) => setToDate(event.target.value)}
                   className="h-9"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="matrix-extra" className="text-xs">
+                  EXTRA %
+                </Label>
+                <Input
+                  id="matrix-extra"
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={extraPercent}
+                  onChange={(event) => setExtraPercent(event.target.value)}
+                  className="h-9"
+                  placeholder="0"
                 />
               </div>
               <Button
@@ -995,13 +1343,16 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                 }
               >
                 {isGenerating ? <Loader2 className="animate-spin" /> : <Wand2 />}
-                Generate buy list
+                Generate Master PO
               </Button>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Required date = when materials must be on site. Production window =
-              which schedule days to cover (use dates inside the imported master
-              file range).
+              Production dates = schedule days to cover (Excel Production Need).
+              PO / required date = when materials must be on site. Master PO
+              explodes Kitchen AM/PM, Fresh Mixing, and Garde Manger only —
+              Assembly / Finished / Produce schedule rows are skipped so
+              ingredients are not double-counted. Packaging and min/max from
+              Excel Master PO# are not included yet.
             </p>
           </div>
         )}
@@ -1010,9 +1361,9 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
           <div className="text-xs text-muted-foreground">
             {activeCycle ? (
               <>
-                PO #{activeCycle.po_number ?? "—"} · required{" "}
+                Master PO #{activeCycle.po_number ?? "—"} · required{" "}
                 {formatTabDate(activeCycle.required_date)}
-                {activeCycle.week_label ? ` · covers ${activeCycle.week_label}` : ""} ·{" "}
+                {activeCycle.week_label ? ` · production ${activeCycle.week_label}` : ""} ·{" "}
                 {summary.total} to buy
                 {summary.proteins > 0 ? ` · ${summary.proteins} protein` : ""} ·{" "}
                 {summary.toOrder} open
@@ -1024,16 +1375,103 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                 )}
               </>
             ) : (
-              "Pick a week tab or generate a new one."
+              "Pick a Master PO tab, or generate one from production dates."
             )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            {activeCycle && (
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="matrix-extra-live" className="text-xs whitespace-nowrap">
+                  EXTRA %
+                </Label>
+                <Input
+                  id="matrix-extra-live"
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={extraPercent}
+                  onChange={(event) => setExtraPercent(event.target.value)}
+                  className="h-8 w-16 text-xs"
+                  placeholder="0"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleApplyExtra}
+                  disabled={isGenerating}
+                  title="Recalculate cases/lbs from Excel snapshot with this EXTRA %"
+                >
+                  {isGenerating ? <Loader2 className="animate-spin" /> : "Apply"}
+                </Button>
+              </div>
+            )}
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Filter item…"
               className="h-8 w-44 text-xs"
             />
+            <div className="relative" ref={columnsMenuRef}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setColumnsOpen((open) => !open)}
+                aria-expanded={columnsOpen}
+                aria-haspopup="menu"
+              >
+                <Columns3 />
+                Columns
+              </Button>
+              {columnsOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 z-20 mt-1 w-56 rounded-md border bg-popover p-2 text-popover-foreground shadow-md"
+                >
+                  <p className="mb-1.5 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Show columns
+                  </p>
+                  <div className="flex max-h-72 flex-col gap-0.5 overflow-y-auto">
+                    {MATRIX_COLUMN_DEFS.map((col) => (
+                      <label
+                        key={col.key}
+                        className={cn(
+                          "flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-muted",
+                          col.always && "cursor-default opacity-70"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={visibleColumns[col.key]}
+                          disabled={col.always}
+                          onChange={() => toggleColumn(col.key)}
+                          className="size-3.5 accent-primary"
+                        />
+                        <span>{col.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="mt-1.5 w-full rounded px-1.5 py-1 text-left text-[11px] text-primary hover:bg-muted"
+                    onClick={() => {
+                      setVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
+                      try {
+                        window.localStorage.setItem(
+                          VISIBLE_COLUMNS_STORAGE_KEY,
+                          JSON.stringify(DEFAULT_VISIBLE_COLUMNS)
+                        );
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                  >
+                    Show all
+                  </button>
+                </div>
+              )}
+            </div>
             <label className="flex items-center gap-1.5 text-xs">
               <input
                 type="checkbox"
@@ -1071,7 +1509,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                 onClick={() => setDeleteOpen(true)}
               >
                 <Trash2 />
-                <span className="hidden sm:inline">Delete week</span>
+                <span className="hidden sm:inline">Delete Master PO</span>
               </Button>
             )}
           </div>
@@ -1085,50 +1523,76 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
           <p className="text-sm text-destructive">{loadError}</p>
         ) : !activeCycle ? (
           <div className="flex min-h-40 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
-            No week selected. Import the master plan, then generate a buy list.
+            No Master PO selected. Import the master plan (with MASTER PO#
+            calculated), set production dates, then generate.
           </div>
         ) : (
           <div className="overflow-x-auto rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50 hover:bg-muted/50">
-                  <TableHead className="h-8 px-2 text-[11px] font-semibold uppercase tracking-wide">
-                    Item #
-                  </TableHead>
-                  <TableHead className="h-8 min-w-48 px-2 text-[11px] font-semibold uppercase tracking-wide">
-                    Description
-                  </TableHead>
-                  <TableHead className="h-8 px-2 text-right text-[11px] font-semibold uppercase tracking-wide">
-                    Total case req.
-                  </TableHead>
-                  <TableHead className="h-8 px-2 text-right text-[11px] font-semibold uppercase tracking-wide">
-                    On hand
-                  </TableHead>
-                  <TableHead className="h-8 px-2 text-right text-[11px] font-semibold uppercase tracking-wide">
-                    Req. to order
-                  </TableHead>
-                  <TableHead className="h-8 px-2 text-right text-[11px] font-semibold uppercase tracking-wide">
-                    Total lbs
-                  </TableHead>
-                  <TableHead className="h-8 px-2 text-[11px] font-semibold uppercase tracking-wide">
-                    Order by
-                  </TableHead>
-                  <TableHead className="h-8 w-28 px-2 text-[11px] font-semibold uppercase tracking-wide">
-                    Status
-                  </TableHead>
-                  <TableHead className="h-8 w-36 px-2 text-[11px] font-semibold uppercase tracking-wide">
-                    ETA / Arrived
-                  </TableHead>
-                  <TableHead className="h-8 min-w-40 px-2 text-[11px] font-semibold uppercase tracking-wide">
-                    Notes
-                  </TableHead>
+                  {visibleColumns.itemCode && (
+                    <TableHead className="h-8 px-2 text-[11px] font-semibold uppercase tracking-wide">
+                      Item #
+                    </TableHead>
+                  )}
+                  {visibleColumns.department && (
+                    <TableHead className="h-8 px-2 text-[11px] font-semibold uppercase tracking-wide">
+                      Department
+                    </TableHead>
+                  )}
+                  {visibleColumns.description && (
+                    <TableHead className="h-8 min-w-48 px-2 text-[11px] font-semibold uppercase tracking-wide">
+                      Description
+                    </TableHead>
+                  )}
+                  {visibleColumns.casesRequired && (
+                    <TableHead className="h-8 px-2 text-right text-[11px] font-semibold uppercase tracking-wide">
+                      Total case req.
+                    </TableHead>
+                  )}
+                  {visibleColumns.onHand && (
+                    <TableHead className="h-8 px-2 text-right text-[11px] font-semibold uppercase tracking-wide">
+                      On hand
+                    </TableHead>
+                  )}
+                  {visibleColumns.requiredToOrder && (
+                    <TableHead className="h-8 px-2 text-right text-[11px] font-semibold uppercase tracking-wide">
+                      Req. to order
+                    </TableHead>
+                  )}
+                  {visibleColumns.totalLbs && (
+                    <TableHead className="h-8 px-2 text-right text-[11px] font-semibold uppercase tracking-wide">
+                      Total lbs
+                    </TableHead>
+                  )}
+                  {visibleColumns.orderBy && (
+                    <TableHead className="h-8 px-2 text-[11px] font-semibold uppercase tracking-wide">
+                      Order by
+                    </TableHead>
+                  )}
+                  {visibleColumns.status && (
+                    <TableHead className="h-8 w-28 px-2 text-[11px] font-semibold uppercase tracking-wide">
+                      Status
+                    </TableHead>
+                  )}
+                  {visibleColumns.eta && (
+                    <TableHead className="h-8 w-36 px-2 text-[11px] font-semibold uppercase tracking-wide">
+                      ETA / Arrived
+                    </TableHead>
+                  )}
+                  {visibleColumns.notes && (
+                    <TableHead className="h-8 min-w-40 px-2 text-[11px] font-semibold uppercase tracking-wide">
+                      Notes
+                    </TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredLines.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={10}
+                      colSpan={visibleColumnCount}
                       className="h-20 text-center text-sm text-muted-foreground"
                     >
                       {activeLines.length === 0
@@ -1138,49 +1602,33 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                   </TableRow>
                 ) : (
                   <>
-                    {proteinLines.length > 0 && (
-                      <>
-                        <TableRow className="bg-sky-50 hover:bg-sky-50 dark:bg-sky-950/40 dark:hover:bg-sky-950/40">
+                    {departmentSections.map((section) => (
+                      <Fragment key={section.key}>
+                        <TableRow
+                          className={cn(
+                            "hover:bg-inherit",
+                            MASTER_PO_DEPT_STYLES[section.key] ??
+                              MASTER_PO_DEPT_STYLES.OTHER
+                          )}
+                        >
                           <TableCell
-                            colSpan={10}
-                            className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-sky-800 dark:text-sky-300"
+                            colSpan={visibleColumnCount}
+                            className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide"
                           >
-                            <span className="inline-flex items-center gap-1.5">
-                              <Snowflake className="size-3.5" />
-                              Protein ({proteinLines.length}) — thaw buffer applies
-                            </span>
+                            {section.label} ({section.lines.length})
                           </TableCell>
                         </TableRow>
-                        {proteinLines.map((line) => (
+                        {section.lines.map((line) => (
                           <MatrixLineRow
                             key={line.id}
                             line={line}
+                            visibleColumns={visibleColumns}
                             onChanged={handleLineChanged}
                             onOpenDetail={setDetailMaterialId}
                           />
                         ))}
-                      </>
-                    )}
-                    {otherLines.length > 0 && (
-                      <>
-                        <TableRow className="bg-muted/60 hover:bg-muted/60">
-                          <TableCell
-                            colSpan={10}
-                            className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
-                          >
-                            Materials ({otherLines.length})
-                          </TableCell>
-                        </TableRow>
-                        {otherLines.map((line) => (
-                          <MatrixLineRow
-                            key={line.id}
-                            line={line}
-                            onChanged={handleLineChanged}
-                            onOpenDetail={setDetailMaterialId}
-                          />
-                        ))}
-                      </>
-                    )}
+                      </Fragment>
+                    ))}
                   </>
                 )}
               </TableBody>
@@ -1201,15 +1649,15 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Delete this week?</DialogTitle>
+            <DialogTitle>Delete this Master PO?</DialogTitle>
             <DialogDescription>
               {activeCycle
-                ? `This removes the ${formatTabDate(activeCycle.required_date)} tab${
+                ? `This removes the ${formatTabDate(activeCycle.required_date)} Master PO${
                     activeCycle.po_number != null
                       ? ` (PO #${activeCycle.po_number})`
                       : ""
                   } and all of its buy lines, statuses, ETAs, and notes. The master plan import is kept.`
-                : "This removes the selected week tab and all of its buy lines."}
+                : "This removes the selected Master PO tab and all of its buy lines."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -1228,7 +1676,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
               disabled={isDeleting}
             >
               {isDeleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
-              Delete week
+              Delete Master PO
             </Button>
           </DialogFooter>
         </DialogContent>

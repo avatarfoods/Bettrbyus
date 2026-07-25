@@ -226,18 +226,28 @@ export function buildResolver(input: {
   /** normalized alias -> item_code (user-maintained) */
   aliases: Map<string, string>;
 }): ResolveIngredient {
+  const recipeWips = new Set(input.recipes.map((recipe) => recipe.wipCode));
+
   return (ingredientName: string) => {
     const key = normalizeIngredientName(ingredientName);
     if (!key) return { type: "ignore" };
 
-    const aliasCode = input.aliases.get(key);
-    if (aliasCode) return { type: "material", itemCode: aliasCode };
-
     const wipCode = input.recipeNames.get(key);
     if (wipCode) return { type: "recipe", wipCode };
 
+    const aliasCode = input.aliases.get(key);
+    if (aliasCode) {
+      // Same code can appear as a WIP and a matrix item (e.g. produce preps).
+      // Prefer exploding the recipe so Master PO buys the raw inputs.
+      if (recipeWips.has(aliasCode)) return { type: "recipe", wipCode: aliasCode };
+      return { type: "material", itemCode: aliasCode };
+    }
+
     const itemCode = input.materialNames.get(key);
-    if (itemCode) return { type: "material", itemCode };
+    if (itemCode) {
+      if (recipeWips.has(itemCode)) return { type: "recipe", wipCode: itemCode };
+      return { type: "material", itemCode };
+    }
 
     return { type: "unresolved" };
   };

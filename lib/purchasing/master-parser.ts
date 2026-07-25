@@ -7,8 +7,9 @@
 //
 // Two recipe layouts exist:
 //  - Batch recipes (MAIN KITCHEN, FRESH MIXING, GARDE MANGER, PRODUCE):
-//    ingredient quantities are parts of a batch; the INSTRUCTIONS row holds
-//    the batch total. Requirement per output lb = qty / batchTotal.
+//    Excel Component Usage (col AA) = scaledQty / BATCH_YIELD * demandLbs.
+//    scaledQty is the "FINAL"/column-M amount = originalQty * desiredBatch / ingredientTotal.
+//    We store quantity + batchSize so MRP uses the same ratio (qty / batchSize).
 //  - Per-unit recipes (ASSEMBLY per bowl, FINISHED PRODUCT per case):
 //    ingredient quantities are per single output unit, with a loss/yield %.
 
@@ -52,10 +53,41 @@ export type ParsedScheduleEntry = {
   uom: string | null;
 };
 
+export type ParsedComponentUsage = {
+  ingredientName: string;
+  /** Matrix item code when known. */
+  itemCode: string | null;
+  /** Matrix department for Master PO grouping. */
+  department: string | null;
+  /** Sum of AA across recipe sheets (before EXTRA %). */
+  lbs: number;
+  /** Per-sheet contribution (for debugging). */
+  bySheet: Record<string, number>;
+};
+
+/** One row from Excel MASTER PO# (Component Usage lbs/cases already computed). */
+export type ParsedMasterPoLine = {
+  itemCode: string;
+  name: string;
+  department: string;
+  type: string;
+  /** LBS before EXTRA % (Excel R stripped of workbook EXTRA). */
+  lbsNeeded: number;
+  /** Cases before EXTRA % (Excel T stripped of workbook EXTRA). */
+  casesNeeded: number;
+  productWeight: number | null;
+};
+
 export type ParsedMasterFile = {
   matrixItems: ParsedMatrixItem[];
   recipes: ParsedRecipe[];
   scheduleEntries: ParsedScheduleEntry[];
+  /** Snapshot of Excel MASTER PO# buy lines (source of truth for generate). */
+  masterPoLines: ParsedMasterPoLine[];
+  /** @deprecated Kept for older imports / offline checks. */
+  componentUsage: ParsedComponentUsage[];
+  componentUsageFrom: string | null;
+  componentUsageTo: string | null;
   warnings: string[];
 };
 
@@ -70,9 +102,22 @@ const RECIPE_SHEETS = [
 
 const SCHEDULE_SHEET = "PRODUCTION SCHEDULE";
 const MATRIX_SHEET = "INGREDIENT MATRIX";
+const MASTER_PO_SHEET = "MASTER PO#";
 
 /** Ingredient names that are never purchased and safe to skip. */
 const IGNORED_INGREDIENTS = new Set(["WATER", "ICE", "HOT WATER", "COLD WATER"]);
+
+/** Skip non-buy / notes rows. MIN/MAX is a real Master PO type in Excel — keep it. */
+const MASTER_PO_SKIP_TYPES = new Set(["NOTES", "-", ""]);
+
+function isProduceDepartment(department: string): boolean {
+  const dept = department.trim().toUpperCase();
+  return dept === "PRODUCE" || dept.startsWith("PRODUCE ");
+}
+
+function isProduceType(type: string): boolean {
+  return type.trim().toUpperCase() === "PRODUCE";
+}
 
 export function normalizeIngredientName(value: string): string {
   return value.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim().toUpperCase();
@@ -80,6 +125,34 @@ export function normalizeIngredientName(value: string): string {
 
 export function isIgnoredIngredient(name: string): boolean {
   return IGNORED_INGREDIENTS.has(normalizeIngredientName(name));
+}
+
+/**
+ * True when an Excel ingredient name and an Odoo material name refer to the
+ * same thing. Used to reject matrix item-code collisions (e.g. master file
+ * 510064 = Gouda, but Odoo 510064 = chocolate wafers).
+ */
+export function ingredientMatchesMaterial(
+  ingredientName: string,
+  materialName: string
+): boolean {
+  const a = normalizeIngredientName(ingredientName);
+  const b = normalizeIngredientName(materialName);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+
+  const stop = new Set(["THE", "AND", "FOR", "WITH", "FROM", "CT", "CS", "LB", "LBS"]);
+  const tokens = (value: string) =>
+    value
+      .split(/[^A-Z0-9]+/)
+      .filter((token) => token.length > 2 && !stop.has(token));
+
+  const tokensA = new Set(tokens(a));
+  const tokensB = tokens(b);
+  if (tokensA.size === 0 || tokensB.length === 0) return false;
+  const overlap = tokensB.filter((token) => tokensA.has(token)).length;
+  return overlap >= 1;
 }
 
 function toRows(workbook: XLSX.WorkBook, sheetName: string): string[][] {
@@ -223,6 +296,25 @@ function parseRecipeSheet(
     }
     if (!wipCode || /enter information/i.test(wipCode)) continue;
 
+    // Batch yield / desired batch sit on the RECIPE NAME row; labels are above.
+    let desiredBatch: number | null = null;
+    let batchYield: number | null = null;
+    for (let up = 1; up <= 3 && r - up >= 0; up++) {
+      const labelRow = rows[r - up];
+      for (let c = 0; c < labelRow.length; c++) {
+        const label = String(labelRow[c] ?? "")
+          .trim()
+          .toUpperCase()
+          .replace(/\s+/g, " ");
+        if (label.startsWith("DESIRED BATCH")) {
+          desiredBatch = parseNumeric(cellText(row, c)) ?? desiredBatch;
+        }
+        if (label.startsWith("BATCH YEILD") || label.startsWith("BATCH YIELD")) {
+          batchYield = parseNumeric(cellText(row, c)) ?? batchYield;
+        }
+      }
+    }
+
     // Locate the ingredient table header row.
     let headerRowIndex = -1;
     for (let k = 1; k <= 7 && r + k < rows.length; k++) {
@@ -249,16 +341,24 @@ function parseRecipeSheet(
 
     let qtyCol: number;
     let uomCol: number;
+    let scaledQtyCol = -1;
     if (isPerUnit) {
       qtyCol = nameCol + 1;
       uomCol = header.findIndex((cell, index) => index > qtyCol && cell === "U/M");
     } else {
       // Batch layout: original recipe quantity is the first QTY column in the
       // right-hand "ORIGINAL RECIPE" section (followed by its U/M column).
+      // Excel Component Usage uses the next qty column (M) = original * desired/total.
       qtyCol = header.findIndex(
         (cell, index) => index > nameCol + 4 && cell.startsWith("QTY")
       );
       uomCol = qtyCol + 1;
+      if (qtyCol >= 0) {
+        const nextQty = header.findIndex(
+          (cell, index) => index > uomCol && cell.startsWith("QTY")
+        );
+        scaledQtyCol = nextQty >= 0 ? nextQty : qtyCol + 2;
+      }
     }
     if (qtyCol <= 0) {
       warnings.push(`Recipe "${name}" (${sheetName}): quantity column not found.`);
@@ -266,7 +366,8 @@ function parseRecipeSheet(
     }
 
     const lines: ParsedRecipeLine[] = [];
-    let batchSize: number | null = null;
+    let ingredientTotal: number | null = null;
+    let usedScaledQty = false;
 
     for (let k = headerRowIndex + 1; k < rows.length; k++) {
       const lineRow = rows[k];
@@ -279,7 +380,7 @@ function parseRecipeSheet(
         upperName === "INSTRUCTIONS" ||
         cellText(lineRow, uomCol).toUpperCase() === "TOTAL";
       if (isTotalRow) {
-        if (!isPerUnit) batchSize = parseNumeric(cellText(lineRow, qtyCol));
+        if (!isPerUnit) ingredientTotal = parseNumeric(cellText(lineRow, qtyCol));
         break;
       }
       if (upperName.startsWith("INSTRUCTION")) continue;
@@ -287,9 +388,20 @@ function parseRecipeSheet(
       if (cellText(lineRow, labelCol).toUpperCase() === "RECIPE NAME") break;
       if (!ingredientName) continue;
 
-      const quantity = parseNumeric(cellText(lineRow, qtyCol));
-      if (quantity === null || quantity <= 0) continue;
+      const originalQty = parseNumeric(cellText(lineRow, qtyCol));
+      if (originalQty === null || originalQty <= 0) continue;
       if (isIgnoredIngredient(ingredientName)) continue;
+
+      // Prefer Excel's scaled qty (col M) when present — matches AA = M/P * demand.
+      const scaledQty =
+        !isPerUnit && scaledQtyCol >= 0
+          ? parseNumeric(cellText(lineRow, scaledQtyCol))
+          : null;
+      let quantity = originalQty;
+      if (scaledQty !== null && scaledQty > 0) {
+        quantity = scaledQty;
+        usedScaledQty = true;
+      }
 
       lines.push({
         ingredientName,
@@ -299,8 +411,29 @@ function parseRecipeSheet(
       });
     }
 
-    if (!isPerUnit && batchSize === null) {
-      batchSize = lines.reduce((sum, line) => sum + line.quantity, 0) || null;
+    let batchSize: number | null = null;
+    if (!isPerUnit) {
+      // Excel: AA = M * (demand / BATCH_YIELD). Prefer yield as batchSize when
+      // lines carry scaled M quantities. Otherwise rewrite ingredient total by
+      // yield/desired so original qtys still produce M/P ratios.
+      if (batchYield !== null && batchYield > 0 && usedScaledQty) {
+        batchSize = batchYield;
+      } else if (
+        batchYield !== null &&
+        batchYield > 0 &&
+        ingredientTotal !== null &&
+        ingredientTotal > 0 &&
+        desiredBatch !== null &&
+        desiredBatch > 0
+      ) {
+        batchSize = ingredientTotal * (batchYield / desiredBatch);
+      } else if (batchYield !== null && batchYield > 0) {
+        batchSize = batchYield;
+      } else if (ingredientTotal !== null && ingredientTotal > 0) {
+        batchSize = ingredientTotal;
+      } else {
+        batchSize = lines.reduce((sum, line) => sum + line.quantity, 0) || null;
+      }
     }
 
     if (lines.length > 0) {
@@ -499,6 +632,213 @@ function parseSchedule(
   return entries;
 }
 
+/**
+ * Excel MASTER PO# Component Usage column R =
+ *   SUMIF(each recipe sheet!C:C, itemName, AA:AA) * (1 + EXTRA%)
+ *
+ * Column AA on each department sheet is the pre-calculated ingredient lbs for
+ * the Produce Schedule date window. Reading cached AA values is the only way
+ * to match Excel exactly (Z/X formulas are circular across sheets).
+ */
+function parseComponentUsage(
+  workbook: XLSX.WorkBook,
+  matrixItems: ParsedMatrixItem[],
+  warnings: string[]
+): {
+  usage: ParsedComponentUsage[];
+  from: string | null;
+  to: string | null;
+} {
+  const produceSchedule = workbook.Sheets["PRODUCE SCHEDULE"];
+  const fromCell = produceSchedule?.["D3"];
+  const toCell = produceSchedule?.["E3"];
+  const cellToIso = (cell: XLSX.CellObject | undefined) => {
+    if (!cell) return null;
+    if (cell.v instanceof Date) return cell.v.toISOString().slice(0, 10);
+    return parseDateText(String(cell.w ?? cell.v ?? ""));
+  };
+  const from = cellToIso(fromCell);
+  const to = cellToIso(toCell) || from;
+
+  const codeByName = new Map<string, string>();
+  const deptByName = new Map<string, string>();
+  for (const item of matrixItems) {
+    if (item.kind === "subrecipe") continue;
+    const key = normalizeIngredientName(item.name);
+    codeByName.set(key, item.itemCode);
+    if (item.department) deptByName.set(key, item.department);
+  }
+
+  const totals = new Map<
+    string,
+    { ingredientName: string; lbs: number; bySheet: Record<string, number> }
+  >();
+
+  for (const sheetName of RECIPE_SHEETS) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) continue;
+    // Prefer raw numbers for AA; names as text.
+    const rows = XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      raw: true,
+      defval: null,
+    }) as unknown[][];
+
+    for (const row of rows) {
+      const name = String(row[2] ?? "").trim();
+      if (!name) continue;
+      const upper = name.toUpperCase();
+      if (
+        upper === "INGREDIENT - MATERIAL" ||
+        upper === "RECIPE NAME" ||
+        upper.startsWith("INSTRUCTION") ||
+        upper === "TOTAL" ||
+        upper === "NONE"
+      ) {
+        continue;
+      }
+      const aa = Number(row[26]);
+      if (!Number.isFinite(aa) || aa === 0) continue;
+
+      const key = normalizeIngredientName(name);
+      // Skip recipe-title rows that aren't purchasable ingredients when they
+      // have no matrix match and look like WIP headers — still sum if matrix hits.
+      let entry = totals.get(key);
+      if (!entry) {
+        entry = { ingredientName: name, lbs: 0, bySheet: {} };
+        totals.set(key, entry);
+      }
+      entry.lbs += aa;
+      entry.bySheet[sheetName] = (entry.bySheet[sheetName] ?? 0) + aa;
+    }
+  }
+
+  const usage: ParsedComponentUsage[] = [...totals.entries()]
+    .map(([key, entry]) => ({
+      ingredientName: entry.ingredientName,
+      itemCode: codeByName.get(key) ?? null,
+      department: deptByName.get(key) ?? null,
+      lbs: entry.lbs,
+      bySheet: entry.bySheet,
+    }))
+    .filter((row) => row.lbs > 0)
+    .sort((a, b) => a.ingredientName.localeCompare(b.ingredientName));
+
+  if (usage.length === 0) {
+    // AA is optional debug data; MASTER PO# is the generate source of truth.
+  } else if (from) {
+    // Intentionally quiet — generate uses MASTER PO# snapshot, not AA.
+  }
+
+  return { usage, from, to };
+}
+
+/**
+ * Read Excel MASTER PO# as purchasing already sees it.
+ * Sheet range starts at column B, so sheet_to_json index 0 = Excel col B:
+ *   B=TYPE, D=DEPT, E=CODE, F=ITEM, R=LBS NEEDED, S=weight, T=CASES NEEDED
+ *
+ * Excel R/T already include EXTRA (T2). We strip that so TMS can apply a
+ * user-chosen EXTRA % at generate time (default 0 — not auto 15%).
+ * Produce / Produce Raw rows are excluded (ordered separately).
+ */
+function parseMasterPoSheet(
+  workbook: XLSX.WorkBook,
+  matrixItems: ParsedMatrixItem[],
+  warnings: string[]
+): ParsedMasterPoLine[] {
+  const sheet = workbook.Sheets[MASTER_PO_SHEET];
+  if (!sheet) {
+    warnings.push(`Sheet "${MASTER_PO_SHEET}" not found.`);
+    return [];
+  }
+
+  const produceCodes = new Set<string>();
+  for (const item of matrixItems) {
+    if (
+      item.kind === "produce" ||
+      isProduceDepartment(item.department ?? "") ||
+      item.storageType === "produce"
+    ) {
+      produceCodes.add(item.itemCode.toUpperCase());
+    }
+  }
+
+  const excelExtraRaw = Number(sheet["T2"]?.v);
+  const excelExtra =
+    Number.isFinite(excelExtraRaw) && excelExtraRaw > 0 ? excelExtraRaw : 0;
+  const stripFactor = 1 + excelExtra;
+
+  const rows = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    raw: true,
+    defval: null,
+  }) as unknown[][];
+
+  const lines: ParsedMasterPoLine[] = [];
+  const seen = new Set<string>();
+  let skippedProduce = 0;
+
+  for (const row of rows.slice(3)) {
+    const type = String(row[0] ?? "")
+      .trim()
+      .toUpperCase();
+    const department = String(row[2] ?? "").trim();
+    const itemCode = String(row[3] ?? "").trim();
+    const name = String(row[4] ?? "")
+      .replace(/[\r\n]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!itemCode || !name) continue;
+    if (MASTER_PO_SKIP_TYPES.has(type)) continue;
+
+    if (
+      isProduceType(type) ||
+      isProduceDepartment(department) ||
+      produceCodes.has(itemCode.toUpperCase())
+    ) {
+      skippedProduce += 1;
+      continue;
+    }
+
+    const lbsWithExtra = parseNumeric(String(row[16] ?? "")) ?? 0;
+    const productWeight = parseNumeric(String(row[17] ?? ""));
+    const casesWithExtra = parseNumeric(String(row[18] ?? "")) ?? 0;
+    if (lbsWithExtra <= 0 && casesWithExtra <= 0) continue;
+
+    const lbsNeeded = lbsWithExtra / stripFactor;
+    const casesNeeded = casesWithExtra / stripFactor;
+
+    const key = itemCode.toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    lines.push({
+      itemCode,
+      name,
+      department: department || "OTHER",
+      type: type || "UNKNOWN",
+      lbsNeeded,
+      casesNeeded,
+      productWeight,
+    });
+  }
+
+  if (lines.length === 0) {
+    warnings.push(
+      `No buy lines found on "${MASTER_PO_SHEET}". Save the workbook after Excel calculates Master PO, then re-import.`
+    );
+  } else {
+    warnings.push(
+      `Imported ${lines.length} lines from ${MASTER_PO_SHEET} (skipped ${skippedProduce} produce; Excel EXTRA ${
+        excelExtra ? `${(excelExtra * 100).toFixed(0)}% stripped — set EXTRA in TMS when generating` : "none"
+      }).`
+    );
+  }
+
+  return lines;
+}
+
 export function parseMasterWorkbook(workbook: XLSX.WorkBook): ParsedMasterFile {
   const warnings: string[] = [];
   const matrixItems = parseMatrix(workbook, warnings);
@@ -518,7 +858,20 @@ export function parseMasterWorkbook(workbook: XLSX.WorkBook): ParsedMasterFile {
     }
   }
 
-  return { matrixItems, recipes, scheduleEntries, warnings };
+  const masterPoLines = parseMasterPoSheet(workbook, matrixItems, warnings);
+  // AA parse kept for offline validation only — generate uses masterPoLines.
+  const component = parseComponentUsage(workbook, matrixItems, warnings);
+
+  return {
+    matrixItems,
+    recipes,
+    scheduleEntries,
+    masterPoLines,
+    componentUsage: component.usage,
+    componentUsageFrom: component.from,
+    componentUsageTo: component.to,
+    warnings,
+  };
 }
 
 export function parseMasterFile(buffer: Uint8Array): ParsedMasterFile {
