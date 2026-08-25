@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowLeftRight,
   ClipboardList,
+  CookingPot,
   LogOut,
   ShoppingCart,
   UserPlus,
@@ -31,6 +32,12 @@ const NAV_ITEMS = [
     label: "Inventory",
     icon: ClipboardList,
     match: (pathname: string) => pathname.startsWith("/inventory-checks"),
+  },
+  {
+    href: "/recipes",
+    label: "Recipes",
+    icon: CookingPot,
+    match: (pathname: string) => pathname.startsWith("/recipes"),
   },
   {
     href: "/purchasing",

@@ -1,0 +1,7389 @@
+{
+  "matrixSummary": {
+    "count": 347,
+    "kindCounts": {
+      "ingredient": 146,
+      "subrecipe": 172,
+      "produce": 29
+    },
+    "deptCounts": {
+      "FINISHED PRODUCT": 79,
+      "FRESH MIXING": 40,
+      "GARDE MANGER": 74,
+      "ASSEMBLY": 37,
+      "MAIN KITCHEN": 23,
+      "PRODUCE RAW": 19,
+      "PRODUCE": 29,
+      "ALL": 1,
+      "MAIN KITCHEN PM": 6,
+      "MAIN KITCHEN AM": 39
+    }
+  },
+  "recipeSummary": {
+    "count": 199,
+    "bySheet": {
+      "FINISHED PRODUCT": 32,
+      "ASSEMBLY": 36,
+      "FRESH MIXING": 27,
+      "MAIN KITCHEN": 52,
+      "GARDE MANGER": 23,
+      "PRODUCE": 29
+    },
+    "connections": {
+      "material": 371,
+      "subrecipe": 314,
+      "unresolved": 0
+    }
+  },
+  "recipes": [
+    {
+      "wipCode": "600066",
+      "name": "CHIPOTLE CHICKEN BOWL BIRRIA RICE BOWL 20/2CT (9oz)",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 5,
+      "lines": [
+        {
+          "name": "CHIPOTLE CHICKEN POWER BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160325"
+        },
+        {
+          "name": "BIRRIA FIESTA BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160326"
+        },
+        {
+          "name": "CARTOON FOR CHICKEN CHIPOTLE BETTR BOWL",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260052"
+        },
+        {
+          "name": "CARTOON FOR BIRRIA BETTR BOWL",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260053"
+        },
+        {
+          "name": "BOX MASTER BETTR BOWL BREAKFAST/FIESTA BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220097-1"
+        }
+      ]
+    },
+    {
+      "wipCode": "680020",
+      "name": "MEDITERRANEAN/SOUTHWESTERN QUINOA BOWL 22/2CT (10.5 oz)",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 6,
+      "lines": [
+        {
+          "name": "SOUTHWEST QUINOA BOWL 10.5 oz",
+          "qty": 11,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160327"
+        },
+        {
+          "name": "MEDITERRANEAN QUINOA BOWL 10.5 oz",
+          "qty": 11,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160328"
+        },
+        {
+          "name": "CARTON SOUTHWESTERN QUINOA BOWL 600CT/CS",
+          "qty": 11,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260054"
+        },
+        {
+          "name": "CARTON MEDITERRANEAN QUINOA BOWL 600CT/CS",
+          "qty": 11,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260055"
+        },
+        {
+          "name": "BOX MASTER BETTR BOWL QUINOA - BOTTOM",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220096-2"
+        },
+        {
+          "name": "BOX MASTER BETTR BOWL QUINOA - TOP",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220096-1"
+        }
+      ]
+    },
+    {
+      "wipCode": "600103",
+      "name": "BIRRIA / FOUR CHEESE GREEN CHILI BREAKFAST BOWL 20/2 CT (9oz)",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 5,
+      "lines": [
+        {
+          "name": "BIRRIA BREAKFAST BOWL 9oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160329"
+        },
+        {
+          "name": "FOUR CHEESE GREEN CHILI BREAKFAST BOWL 9oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160330"
+        },
+        {
+          "name": "CARTOON FOR BIRRIA BREAKFAST BOWL",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260057"
+        },
+        {
+          "name": "CARTOON FOR FOUR CHEESE CHILLI BREAKFAST BOWL",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260056"
+        },
+        {
+          "name": "BOX MASTER BETTR BOWL BREAKFAST/FIESTA BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220097-1"
+        }
+      ]
+    },
+    {
+      "wipCode": "680095",
+      "name": "LEMON CILANTRO CHICKEN/ CHIPOTLE CHICKEN BURRITO BOWL 22/2CT (9 oz)",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 6,
+      "lines": [
+        {
+          "name": "LEMON CILANTRO CHICKEN BURRITO BOWL 9 oz",
+          "qty": 11,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160331"
+        },
+        {
+          "name": "CHIPOTLE CHICKEN BURRITO BOWL 9 oz",
+          "qty": 11,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160333"
+        },
+        {
+          "name": "CARTON ALDI PRIVATE LEMON CILANTRO BOWL (420 CT/CS)",
+          "qty": 11,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220130"
+        },
+        {
+          "name": "CARTON ALDI PRIVATE CHIPOTLE CHICKEN BOWL (420 CT/CS)",
+          "qty": 11,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220131"
+        },
+        {
+          "name": "BOX MASTER BETTR BOWL QUINOA - BOTTOM",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220096-2"
+        },
+        {
+          "name": "BOX MASTER BETTR BOWL QUINOA - TOP",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220096-1"
+        }
+      ]
+    },
+    {
+      "wipCode": "600097",
+      "name": "LEMON CILANTRO CHICKEN BURRITO BOWL WFM 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "LEMON CILANTRO CHICKEN BURRITO BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160331"
+        },
+        {
+          "name": "CARTON WFM LEMON CILANTRO CHICKEN BURRITO BOWL 600CT/CS",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260062"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "600112",
+      "name": "CHIPOTLE VEGGIE BURRITO BOWL WFM 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "CHIPOTLE VEGGIE BURRITO BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160332"
+        },
+        {
+          "name": "CARTON WFM CHIPOTLE VEGGIE BURRITO BOWL 600CT/CS",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260064"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "600098",
+      "name": "CHIPOTLE CHICKEN BURRITO BOWL WFM 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "CHIPOTLE CHICKEN BURRITO BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160333"
+        },
+        {
+          "name": "CARTON WFM CHIPOTLE CHICKEN BURRITO BOWL 600CT/CS",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260061"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "600099",
+      "name": "BEEF BIRRIA RICE BOWL WFM 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "BEEF BIRRIA RICE BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160334"
+        },
+        {
+          "name": "CARTON WFM BEEF BIRRIA RICE BOWL 420CT/CS",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260063"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "680083",
+      "name": "COCONUT CURRY CHICKEN BOWL WFM 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "COCONUT CURRY CHICKEN BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160335"
+        },
+        {
+          "name": "CARTON COCONUT CURRY BOWL 600CT/CS",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260071"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "600057",
+      "name": "CHIPOTLE CHICKEN RICE BOWL WFM 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "CHIPOTLE CHICKEN RICE BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160336"
+        },
+        {
+          "name": "CARTON CHICKEN CHIPOTLE RICE BOWL 600CT/CS",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260070"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "680090",
+      "name": "TERIYAKI CHICKEN BOWL 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "TERIYAKI CHICKEN BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160337"
+        },
+        {
+          "name": "CARTON WFM TERIYAKI CHICKEN BURRITO BOWL 600CT/CS",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260074"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "680087",
+      "name": "GREEK CHICKEN WITH MIXED GRAINS BOWL 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "GREEK CHICKEN WITH MIXED GRAINS BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160338"
+        },
+        {
+          "name": "CARTON GREEK CHICKEN WITH MIXED GRAINS BOWL  600CT/CS",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260072"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "680088",
+      "name": "SOUTHWESTERN CHICKEN WITH MIXED GRAINS BOWL 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "SOUTHWESTERN CHICKEN WITH MIXED GRAINS BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160339"
+        },
+        {
+          "name": "CARTON SOUTHWESTERN CHICKEN WITH MIXED GRAINS BOWL 600CT/CS",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260073"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "680094",
+      "name": "BREAKFAST HAM CHEESE BOWL 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "BREAKFAST HAM CHEESE BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160341"
+        },
+        {
+          "name": "BREAKFAST HAM CHEESE BOWL CARTON",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260081"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "680093",
+      "name": "BREAKFAST BACON CHEESE BOWL 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "BREAKFAST BACON CHEESE BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160342"
+        },
+        {
+          "name": "BREAKFAST BACON CHEESE BOWL CARTON",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260080"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "600101",
+      "name": "FOUR CHEESE GREEN CHILI BREAKFAST BOWL 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "FOUR CHEESE GREEN CHILI BREAKFAST BOWL EVERYDAY 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160343"
+        },
+        {
+          "name": "CARTOON FOR FOUR CHEESE CHILLI BREAKFAST BOWL",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260056"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "600102",
+      "name": "BIRRIA BREAKFAST BOWL 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "BIRRIA BREAKFAST BOWL EVERYDAY 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160344"
+        },
+        {
+          "name": "CARTOON FOR BIRRIA BREAKFAST BOWL",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260057"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "680086",
+      "name": "CHIPOTLE CHICKEN RICE BOWL (4ct /9Oz)",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "CHIPOTLE CHICKEN RICE BOWL 9 oz",
+          "qty": 48,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160336"
+        },
+        {
+          "name": "CARTON CHICKEN CHIPOLTE 4CT 200/CS - COSTCO",
+          "qty": 12,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260075"
+        },
+        {
+          "name": "BOX MASTER BETTR BOWL 25/CT - COSTCO",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220105-1"
+        }
+      ]
+    },
+    {
+      "wipCode": "680050",
+      "name": "BARBACOA BEEF BOWL 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "BARBACOA BEEF BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160612"
+        },
+        {
+          "name": "CARTON BARBACOA BEEF BOWL (420 CT/CS)",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220134"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "680055",
+      "name": "AL-PASTOR CHICKEN BOWL 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "AL-PASTOR CHICKEN BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160613"
+        },
+        {
+          "name": "CARTON AL-PASTOR CHICKEN (420 CT/CS)",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220133"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "680091",
+      "name": "CHICKEN TIKKA MASALA BOWL 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "CHICKEN TIKKA MASALA BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160627"
+        },
+        {
+          "name": "CARTON CHICKEN TIKKA MASALA (420 CT/CS)",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260084"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "680097",
+      "name": "HOT HONEY CHICKEN BOWL 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "HOT HONEY CHICKEN BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160628"
+        },
+        {
+          "name": "CARTON HOT HONEY CHICKEN BOWL (420CT/CS)",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260083"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "680059",
+      "name": "AL PASTOR-INSPIRED CHICKEN BURRITO 12/8 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "AL PASTOR-INSPIRED CHICKEN BURRITO 8 oz",
+          "qty": 12,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160641"
+        },
+        {
+          "name": "BOX MASTER BURRITO AL PASTOR CHICKEN",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220147"
+        }
+      ]
+    },
+    {
+      "wipCode": "680071",
+      "name": "BACON & CHEESE BREAKFAST BURRITO 12/8 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "BACON & CHEESE BREAKFAST BURRITO 8 oz",
+          "qty": 12,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160642"
+        },
+        {
+          "name": "BOX MASTER BURRITO BACON & CHEESE",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220148"
+        }
+      ]
+    },
+    {
+      "wipCode": "680056",
+      "name": "BEEF BIRRIA BURRITO 12/8 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "BEEF BIRRIA BURRITO 8 oz",
+          "qty": 12,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160643"
+        },
+        {
+          "name": "BOX MASTER BURRITO BEEF BIRRIA",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220149"
+        }
+      ]
+    },
+    {
+      "wipCode": "680062",
+      "name": "HOT HONEY CHICKEN BURRITO 12/8 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "HOT HONEY CHICKEN BURRITO 8 oz",
+          "qty": 12,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160644"
+        },
+        {
+          "name": "BOX MASTER BURRITO HOT HONEY CHICKEN",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220150"
+        }
+      ]
+    },
+    {
+      "wipCode": "680124",
+      "name": "CHIPOTLE CHICKEN RICE FAMILY-PACK 10/28 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 4,
+      "lines": [
+        {
+          "name": "MEXICAN RICE MIX 16 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160649"
+        },
+        {
+          "name": "CHIPOTLE CHICKEN STEW 12 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160650"
+        },
+        {
+          "name": "MASTER CASE FAMILY PACK",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "0006"
+        },
+        {
+          "name": "CHIPOTLE CHICKEN RICE FAMILY-PACK CARTON",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "0002"
+        }
+      ]
+    },
+    {
+      "wipCode": "680125",
+      "name": "LEMON TOMATILLO CHICKEN FAMILY-PACK 10/28 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 4,
+      "lines": [
+        {
+          "name": "TOMATILLO CHICKEN STEW 12 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160651"
+        },
+        {
+          "name": "GREEN LEMON RICE MIX 16 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160652"
+        },
+        {
+          "name": "MASTER CASE FAMILY PACK",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "0006"
+        },
+        {
+          "name": "LEMON TOMATILLO CHICKEN FAMILY-PACK CARTON",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "0003"
+        }
+      ]
+    },
+    {
+      "wipCode": "680120",
+      "name": "BEEF BIRRIA RICE BOWL (4ct /9oz)",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "BEEF BIRRIA RICE BOWL 9 oz",
+          "qty": 48,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160334"
+        },
+        {
+          "name": "CARTON BEEF BIRRIA 4CT 200/CS - COSTCO",
+          "qty": 12,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "0001"
+        },
+        {
+          "name": "BOX MASTER BETTR BOWL 25/CT - COSTCO",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220105-1"
+        }
+      ]
+    },
+    {
+      "wipCode": "680122",
+      "name": "BEEF BIRRIA RICE FAMILY-PACK 10/28 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 4,
+      "lines": [
+        {
+          "name": "BIRRIA RICE MIX 16 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160653"
+        },
+        {
+          "name": "BIRRIA STEW 12 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160661"
+        },
+        {
+          "name": "BEEF BIRRIA RICE FAMILY-PACK CARTON",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "0004"
+        },
+        {
+          "name": "MASTER CASE FAMILY PACK",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "0006"
+        }
+      ]
+    },
+    {
+      "wipCode": "680123",
+      "name": "BARBACOA BEEF FAMILY-PACK 10/28 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 4,
+      "lines": [
+        {
+          "name": "BARBACOA RICE 16 OZ",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160659"
+        },
+        {
+          "name": "BARBACOA STEW 12 OZ",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160660"
+        },
+        {
+          "name": "BARBACOA BEEF FAMILY-PACK CARTON",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "0005"
+        },
+        {
+          "name": "MASTER CASE FAMILY PACK",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "0006"
+        }
+      ]
+    },
+    {
+      "wipCode": "680089",
+      "name": "FEIJOADA BOWL 10/9 oz",
+      "department": "FINISHED PRODUCT",
+      "sheetName": "FINISHED PRODUCT",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "FEIJOADA BOWL 9 oz",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "subrecipe",
+          "target": "160663"
+        },
+        {
+          "name": "CARTON FEIJOADA BOWL (420 CT/CS)",
+          "qty": 10,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "260092"
+        },
+        {
+          "name": "BOX MASTER BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "220100-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "160325",
+      "name": "CHIPOTLE CHICKEN POWER BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 4,
+      "lines": [
+        {
+          "name": "MEXICAN RICE MIX",
+          "qty": 5.3,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160127"
+        },
+        {
+          "name": "CHIPOTLE CHICKEN STEW NAE",
+          "qty": 3,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160311"
+        },
+        {
+          "name": "AVOCADO CREMA DRESSING",
+          "qty": 0.7,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160089"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160326",
+      "name": "BIRRIA FIESTA BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "BIRRIA RICE MIX",
+          "qty": 6,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160128"
+        },
+        {
+          "name": "BIRRIA STEW",
+          "qty": 3,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160290"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160327",
+      "name": "SOUTHWEST QUINOA BOWL 10.5 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 4,
+      "lines": [
+        {
+          "name": "SOUTHWEST MIXED GRAINS",
+          "qty": 5.5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160134"
+        },
+        {
+          "name": "CHIPOTLE CHICKEN STEW NAE",
+          "qty": 4,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160311"
+        },
+        {
+          "name": "ROASTED YAMS",
+          "qty": 1,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160298"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160328",
+      "name": "MEDITERRANEAN QUINOA BOWL 10.5 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 4,
+      "lines": [
+        {
+          "name": "MEDITERRANEAN MIXED GRAINS",
+          "qty": 5.5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160135"
+        },
+        {
+          "name": "LEMON CHICKEN STEW NAE",
+          "qty": 4,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160300"
+        },
+        {
+          "name": "RED BELL PEPPER, 1/2\"",
+          "qty": 1,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160522"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160329",
+      "name": "BIRRIA BREAKFAST BOWL 9oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "(ALDI ONLY) BIRRIA POTATO MIX",
+          "qty": 8,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160316"
+        },
+        {
+          "name": "BIRRIA STEW",
+          "qty": 1,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160290"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160330",
+      "name": "FOUR CHEESE GREEN CHILI BREAKFAST BOWL 9oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "(ALDI ONLY) GREEN CHILLI POTATO MIX",
+          "qty": 8.2,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160317"
+        },
+        {
+          "name": "HATCHED CHILLI SAUCE",
+          "qty": 0.8,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160296"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160331",
+      "name": "LEMON CILANTRO CHICKEN BURRITO BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "LEMON CILANTRO BURRITO RICE MIX",
+          "qty": 5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160264"
+        },
+        {
+          "name": "LEMON CHICKEN CHEESE MIX",
+          "qty": 4,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160265"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160332",
+      "name": "CHIPOTLE VEGGIE BURRITO BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "CHIPOTLE BURRITO VEGGIE RICE MIX",
+          "qty": 5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160266"
+        },
+        {
+          "name": "CHIPOTLE VEGGIE CHEESE MIX",
+          "qty": 4,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160267"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160333",
+      "name": "CHIPOTLE CHICKEN BURRITO BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "CHIPOTLE BURRITO RICE MIX",
+          "qty": 5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160286"
+        },
+        {
+          "name": "CHIPOTLE CHICKEN CHEESE MIX",
+          "qty": 4,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160269"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160334",
+      "name": "BEEF BIRRIA RICE BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "BIRRIA RICE MIX (AVOCADO OIL)",
+          "qty": 6,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160270"
+        },
+        {
+          "name": "BIRRIA STEW",
+          "qty": 3,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160290"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160335",
+      "name": "COCONUT CURRY CHICKEN BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 4,
+      "lines": [
+        {
+          "name": "RICE BASMATI",
+          "qty": 4.3,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160308"
+        },
+        {
+          "name": "COCONUT CURRY SAUCE",
+          "qty": 2.5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160648"
+        },
+        {
+          "name": "COCONUT CURRY CHICKEN STEW",
+          "qty": 2.2,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160307"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160336",
+      "name": "CHIPOTLE CHICKEN RICE BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 4,
+      "lines": [
+        {
+          "name": "MEXICAN RICE MIX",
+          "qty": 5.3,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160127"
+        },
+        {
+          "name": "CHIPOTLE CHICKEN STEW NAE",
+          "qty": 3,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160311"
+        },
+        {
+          "name": "AVOCADO CREMA DRESSING",
+          "qty": 0.7,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160089"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160337",
+      "name": "TERIYAKI CHICKEN BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160338",
+      "name": "GREEK CHICKEN WITH MIXED GRAINS BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 4,
+      "lines": [
+        {
+          "name": "MEDITERRANEAN MIXED GRAINS",
+          "qty": 5.1,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160135"
+        },
+        {
+          "name": "LEMON CHICKEN STEW NAE",
+          "qty": 3,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160300"
+        },
+        {
+          "name": "RED BELL PEPPER, 1/2\"",
+          "qty": 0.9,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160522"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160339",
+      "name": "SOUTHWESTERN CHICKEN WITH MIXED GRAINS BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 4,
+      "lines": [
+        {
+          "name": "SOUTHWESTERN GRAIN MIX",
+          "qty": 5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160320"
+        },
+        {
+          "name": "CHIPOTLE CHICKEN STEW NAE",
+          "qty": 3,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160311"
+        },
+        {
+          "name": "ROASTED YAMS",
+          "qty": 1,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160298"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160341",
+      "name": "BREAKFAST HAM CHEESE BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "BREAKFAST HAM CHEESE MIX",
+          "qty": 9,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160321"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160342",
+      "name": "BREAKFAST BACON CHEESE BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "BACON CHEESE MIX",
+          "qty": 9,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160322"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160343",
+      "name": "FOUR CHEESE GREEN CHILI BREAKFAST BOWL EVERYDAY 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "GREEN CHILLI POTATO EVERYDAY MIX",
+          "qty": 8.2,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160319"
+        },
+        {
+          "name": "HATCHED CHILLI SAUCE",
+          "qty": 0.8,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160296"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160344",
+      "name": "BIRRIA BREAKFAST BOWL EVERYDAY 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "BIRRIA POTATO EVERYDAY MIX",
+          "qty": 8,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160318"
+        },
+        {
+          "name": "BIRRIA STEW",
+          "qty": 1,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160290"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160612",
+      "name": "BARBACOA BEEF BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "BARBACOA STEW",
+          "qty": 3.5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160620"
+        },
+        {
+          "name": "BARBACOA RICE",
+          "qty": 5.5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160610"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160613",
+      "name": "AL-PASTOR CHICKEN BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 4,
+      "lines": [
+        {
+          "name": "AL PASTOR RICE",
+          "qty": 5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160614"
+        },
+        {
+          "name": "AL PASTOR CREAM",
+          "qty": 1,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160623"
+        },
+        {
+          "name": "AL PASTOR CHICKEN STEW",
+          "qty": 3.5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160626"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160627",
+      "name": "CHICKEN TIKKA MASALA BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 4,
+      "lines": [
+        {
+          "name": "RICE BASMATI",
+          "qty": 4,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160308"
+        },
+        {
+          "name": "CHICKEN TIKKA MASALA STEW",
+          "qty": 2.5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160630"
+        },
+        {
+          "name": "TIKKA MASALA SAUCE",
+          "qty": 2.5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160634"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160628",
+      "name": "HOT HONEY CHICKEN BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 4,
+      "lines": [
+        {
+          "name": "RICE MIX HOT HONEY",
+          "qty": 5.3,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160629"
+        },
+        {
+          "name": "HOT HONEY CHICKEN STEW",
+          "qty": 3,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160632"
+        },
+        {
+          "name": "HOT HONEY CREAM",
+          "qty": 0.7,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160635"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160641",
+      "name": "AL PASTOR-INSPIRED CHICKEN BURRITO 8 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "AL PASTOR RICE BURRITO MIX",
+          "qty": 5.5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160645"
+        },
+        {
+          "name": "TORTILLA FLOUR WHITE 10\"",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "510007"
+        },
+        {
+          "name": "FILM AL PASTOR INSPIRED CHICKEN BURRITO 6320/RL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "240080"
+        }
+      ]
+    },
+    {
+      "wipCode": "160642",
+      "name": "BACON & CHEESE BREAKFAST BURRITO 8 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "BACON BURRITO CHEESE MIX",
+          "qty": 5.5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160646"
+        },
+        {
+          "name": "TORTILLA FLOUR WHITE 10\"",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "510007"
+        },
+        {
+          "name": "FILM BACON & CHEESE BREAKFSAT BURRITO 6320/RL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "240081"
+        }
+      ]
+    },
+    {
+      "wipCode": "160643",
+      "name": "BEEF BIRRIA BURRITO 8 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "BIRRIA BURRITO MIX",
+          "qty": 5.5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160647"
+        },
+        {
+          "name": "TORTILLA FLOUR WHITE 10\"",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "510007"
+        },
+        {
+          "name": "FILM BEEF BIRRIA BURRITO 6320/RL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "240082"
+        }
+      ]
+    },
+    {
+      "wipCode": "160644",
+      "name": "HOT HONEY CHICKEN BURRITO 8 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "HOT HONEY RICE BURRITO MIX",
+          "qty": 5.5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160658"
+        },
+        {
+          "name": "TORTILLA FLOUR WHITE 10\"",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "510007"
+        },
+        {
+          "name": "FILM HOT HONEY CHICKEN BURRITO 6320/RL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "240083"
+        }
+      ]
+    },
+    {
+      "wipCode": "160649",
+      "name": "MEXICAN RICE MIX 16 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "MEXICAN RICE MIX",
+          "qty": 16,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160127"
+        },
+        {
+          "name": "FILM VARIOVAK",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "0007"
+        }
+      ]
+    },
+    {
+      "wipCode": "160650",
+      "name": "CHIPOTLE CHICKEN STEW 12 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "CHIPOTLE CHICKEN STEW NAE",
+          "qty": 12,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160311"
+        },
+        {
+          "name": "FILM VARIOVAK",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "0007"
+        }
+      ]
+    },
+    {
+      "wipCode": "160651",
+      "name": "TOMATILLO CHICKEN STEW 12 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "TOMATILLO CHICKEN STEW",
+          "qty": 12,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160657"
+        },
+        {
+          "name": "FILM VARIOVAK",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "0007"
+        }
+      ]
+    },
+    {
+      "wipCode": "160652",
+      "name": "GREEN LEMON RICE MIX 16 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "GREEN LEMON RICE MIX",
+          "qty": 16,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160654"
+        },
+        {
+          "name": "FILM VARIOVAK",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "0007"
+        }
+      ]
+    },
+    {
+      "wipCode": "160653",
+      "name": "BIRRIA RICE MIX 16 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "BIRRIA RICE MIX",
+          "qty": 16,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160128"
+        },
+        {
+          "name": "FILM VARIOVAK",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "0007"
+        }
+      ]
+    },
+    {
+      "wipCode": "160661",
+      "name": "BIRRIA STEW 12 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "BIRRIA STEW",
+          "qty": 12,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160290"
+        },
+        {
+          "name": "FILM VARIOVAK",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "0007"
+        }
+      ]
+    },
+    {
+      "wipCode": "160659",
+      "name": "BARBACOA RICE 16 OZ",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "BARBACOA RICE",
+          "qty": 16,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160610"
+        },
+        {
+          "name": "FILM VARIOVAK",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "0007"
+        }
+      ]
+    },
+    {
+      "wipCode": "160660",
+      "name": "BARBACOA STEW 12 OZ",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "BARBACOA STEW",
+          "qty": 12,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160620"
+        },
+        {
+          "name": "FILM VARIOVAK",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "0007"
+        }
+      ]
+    },
+    {
+      "wipCode": "160663",
+      "name": "FEIJOADA BOWL 9 oz",
+      "department": "ASSEMBLY",
+      "sheetName": "ASSEMBLY",
+      "isPerUnit": true,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "COLLARD GREEN RICE MIX",
+          "qty": 4,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160664"
+        },
+        {
+          "name": "FEIJOADA, COOKED",
+          "qty": 5,
+          "uom": "OZ",
+          "kind": "subrecipe",
+          "target": "160665"
+        },
+        {
+          "name": "BLACK TRAY FOR BETTR BOWL",
+          "qty": 1,
+          "uom": "UNIT",
+          "kind": "material",
+          "target": "230032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160127",
+      "name": "MEXICAN RICE MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 6,
+      "lines": [
+        {
+          "name": "JASMINE RICE, COOKED",
+          "qty": 0.81,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160301"
+        },
+        {
+          "name": "BOILED BLACK BEANS",
+          "qty": 0.19,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160292"
+        },
+        {
+          "name": "ROASTED, CORN",
+          "qty": 0.19,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160608"
+        },
+        {
+          "name": "WHITE ONION, 1/8\" DICED",
+          "qty": 0.19,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160501"
+        },
+        {
+          "name": "GREEN KALE, 2mm",
+          "qty": 0.03,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160505"
+        },
+        {
+          "name": "CILANTRO, 2mm CHOPPED",
+          "qty": 0.03,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160504"
+        }
+      ]
+    },
+    {
+      "wipCode": "160128",
+      "name": "BIRRIA RICE MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 6,
+      "lines": [
+        {
+          "name": "JASMINE RICE, COOKED",
+          "qty": 105.4,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160301"
+        },
+        {
+          "name": "WHITE ONION, 1/8\" DICED",
+          "qty": 13,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160501"
+        },
+        {
+          "name": "CILANTRO, 2mm CHOPPED",
+          "qty": 5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160504"
+        },
+        {
+          "name": "ROASTED, CORN",
+          "qty": 24.7,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160608"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "LEMON, JUICE",
+          "qty": 2.7,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310020"
+        }
+      ]
+    },
+    {
+      "wipCode": "160134",
+      "name": "SOUTHWEST MIXED GRAINS",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 5,
+      "lines": [
+        {
+          "name": "MIX RED & WHITE QUINOA, MIX",
+          "qty": 74.7,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160606"
+        },
+        {
+          "name": "BOILED, BROWN RICE",
+          "qty": 37.3,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160293"
+        },
+        {
+          "name": "BOILED BLACK BEANS",
+          "qty": 12.5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160292"
+        },
+        {
+          "name": "ROASTED, CORN",
+          "qty": 12.5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160608"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.6,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        }
+      ]
+    },
+    {
+      "wipCode": "160135",
+      "name": "MEDITERRANEAN MIXED GRAINS",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 5,
+      "lines": [
+        {
+          "name": "MIX RED & WHITE QUINOA, MIX",
+          "qty": 32,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160606"
+        },
+        {
+          "name": "BOILED, BROWN RICE",
+          "qty": 16,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160293"
+        },
+        {
+          "name": "SUNDRIED TOMATO",
+          "qty": 3,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160517"
+        },
+        {
+          "name": "SPINACH, 10mm CHOPPED",
+          "qty": 8,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160516"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.29,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        }
+      ]
+    },
+    {
+      "wipCode": "160316",
+      "name": "(ALDI ONLY) BIRRIA POTATO MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "EGG WHOLE SCRAMBLED",
+          "qty": 34,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160297"
+        },
+        {
+          "name": "ROASTED POTATOES",
+          "qty": 54,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160294"
+        },
+        {
+          "name": "MEXICAN CHEESE BLEND",
+          "qty": 21,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310061"
+        }
+      ]
+    },
+    {
+      "wipCode": "160317",
+      "name": "(ALDI ONLY) GREEN CHILLI POTATO MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "EGG WHOLE SCRAMBLED",
+          "qty": 40,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160297"
+        },
+        {
+          "name": "ROASTED POTATOES",
+          "qty": 60,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160294"
+        },
+        {
+          "name": "MEXICAN CHEESE BLEND",
+          "qty": 22,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310061"
+        }
+      ]
+    },
+    {
+      "wipCode": "160318",
+      "name": "BIRRIA POTATO EVERYDAY MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "EGG WHOLE SCRAMBLED",
+          "qty": 2.79,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160297"
+        },
+        {
+          "name": "ROASTED POTATOES",
+          "qty": 2.79,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160294"
+        },
+        {
+          "name": "MEXICAN CHEESE BLEND",
+          "qty": 1.83,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310061"
+        }
+      ]
+    },
+    {
+      "wipCode": "160319",
+      "name": "GREEN CHILLI POTATO EVERYDAY MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "EGG WHOLE SCRAMBLED",
+          "qty": 55,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160297"
+        },
+        {
+          "name": "ROASTED POTATOES",
+          "qty": 40,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160294"
+        },
+        {
+          "name": "MEXICAN CHEESE BLEND",
+          "qty": 25,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310061"
+        }
+      ]
+    },
+    {
+      "wipCode": "160264",
+      "name": "LEMON CILANTRO BURRITO RICE MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 5,
+      "lines": [
+        {
+          "name": "JASMINE RICE, COOKED (AVOCADO OIL)",
+          "qty": 59.57,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160288"
+        },
+        {
+          "name": "CILANTRO, 2mm CHOPPED",
+          "qty": 2.83,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160504"
+        },
+        {
+          "name": "JALAPENO (CHOPPED)",
+          "qty": 5.68,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160507"
+        },
+        {
+          "name": "HATCHED CHILLI SAUCE",
+          "qty": 5.5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160296"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.28,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        }
+      ]
+    },
+    {
+      "wipCode": "160265",
+      "name": "LEMON CHICKEN CHEESE MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "CILANTRO CHICKEN STEW NAE",
+          "qty": 11,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160305"
+        },
+        {
+          "name": "SHREREED ASADERO CHEESE",
+          "qty": 1.3,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160323"
+        },
+        {
+          "name": "SHREREED CHEDDAR CHEESE",
+          "qty": 1.9,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160324"
+        }
+      ]
+    },
+    {
+      "wipCode": "160266",
+      "name": "CHIPOTLE BURRITO VEGGIE RICE MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 5,
+      "lines": [
+        {
+          "name": "JASMINE RICE, COOKED (AVOCADO OIL)",
+          "qty": 75,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160288"
+        },
+        {
+          "name": "CILANTRO, 2mm CHOPPED",
+          "qty": 3,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160504"
+        },
+        {
+          "name": "JALAPENO (CHOPPED)",
+          "qty": 5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160507"
+        },
+        {
+          "name": "CHIPOTLE DRESSING",
+          "qty": 6.5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160090"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.4,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        }
+      ]
+    },
+    {
+      "wipCode": "160267",
+      "name": "CHIPOTLE VEGGIE CHEESE MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 7,
+      "lines": [
+        {
+          "name": "FROZEN EDANAME",
+          "qty": 4,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510004"
+        },
+        {
+          "name": "ROASTED, CORN",
+          "qty": 2,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160608"
+        },
+        {
+          "name": "BOILED BLACK BEANS",
+          "qty": 2,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160292"
+        },
+        {
+          "name": "ROASTED YAMS",
+          "qty": 2,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160298"
+        },
+        {
+          "name": "SHREREED ASADERO CHEESE",
+          "qty": 1.5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160323"
+        },
+        {
+          "name": "SHREREED CHEDDAR CHEESE",
+          "qty": 2.5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160324"
+        },
+        {
+          "name": "CHIPOTLE DRESSING",
+          "qty": 1.8,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160090"
+        }
+      ]
+    },
+    {
+      "wipCode": "160286",
+      "name": "CHIPOTLE BURRITO RICE MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 6,
+      "lines": [
+        {
+          "name": "JASMINE RICE, COOKED (AVOCADO OIL)",
+          "qty": 49.69,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160288"
+        },
+        {
+          "name": "CILANTRO, 2mm CHOPPED",
+          "qty": 3.6,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160504"
+        },
+        {
+          "name": "JALAPENO (CHOPPED)",
+          "qty": 5.56,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160507"
+        },
+        {
+          "name": "BOILED BLACK BEANS",
+          "qty": 10.46,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160292"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.29,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "CHIPOTLE DRESSING",
+          "qty": 5.39,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160090"
+        }
+      ]
+    },
+    {
+      "wipCode": "160269",
+      "name": "CHIPOTLE CHICKEN CHEESE MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "CHIPOTLE BURRITO STEW NAE",
+          "qty": 9.3,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160313"
+        },
+        {
+          "name": "SHREREED ASADERO CHEESE",
+          "qty": 1.1,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160323"
+        },
+        {
+          "name": "SHREREED CHEDDAR CHEESE",
+          "qty": 1.7,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160324"
+        }
+      ]
+    },
+    {
+      "wipCode": "160270",
+      "name": "BIRRIA RICE MIX (AVOCADO OIL)",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 6,
+      "lines": [
+        {
+          "name": "JASMINE RICE, COOKED (AVOCADO OIL)",
+          "qty": 105.4,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160288"
+        },
+        {
+          "name": "WHITE ONION, 1/8\" DICED",
+          "qty": 13,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160501"
+        },
+        {
+          "name": "CILANTRO, 2mm CHOPPED",
+          "qty": 5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160504"
+        },
+        {
+          "name": "ROASTED, CORN",
+          "qty": 24.7,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160608"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "LEMON, JUICE",
+          "qty": 2.7,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310020"
+        }
+      ]
+    },
+    {
+      "wipCode": "160320",
+      "name": "SOUTHWESTERN GRAIN MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 5,
+      "lines": [
+        {
+          "name": "MIX RED & WHITE QUINOA, MIX",
+          "qty": 60,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160606"
+        },
+        {
+          "name": "BOILED, BROWN RICE",
+          "qty": 30,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160293"
+        },
+        {
+          "name": "BOILED BLACK BEANS",
+          "qty": 20,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160292"
+        },
+        {
+          "name": "ROASTED, CORN",
+          "qty": 20,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160608"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.6,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        }
+      ]
+    },
+    {
+      "wipCode": "160321",
+      "name": "BREAKFAST HAM CHEESE MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 7,
+      "lines": [
+        {
+          "name": "BREAKFAST ROASTED POTATOES",
+          "qty": 28,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160345"
+        },
+        {
+          "name": "EGG WHOLE SCRAMBLED",
+          "qty": 35,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160297"
+        },
+        {
+          "name": "SHREREED GOUDA CHEESE",
+          "qty": 11,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160604"
+        },
+        {
+          "name": "SHREREED ASADERO CHEESE",
+          "qty": 11,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160323"
+        },
+        {
+          "name": "SHREREED SMOKED HAM",
+          "qty": 14,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160605"
+        },
+        {
+          "name": "ROASTED PEPPER BLEND",
+          "qty": 17,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160346"
+        },
+        {
+          "name": "OREGANO FRESH, 2mm",
+          "qty": 0.4,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160523"
+        }
+      ]
+    },
+    {
+      "wipCode": "160322",
+      "name": "BACON CHEESE MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 6,
+      "lines": [
+        {
+          "name": "BREAKFAST ROASTED POTATOES",
+          "qty": 12,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160345"
+        },
+        {
+          "name": "EGG WHOLE SCRAMBLED",
+          "qty": 15,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160297"
+        },
+        {
+          "name": "SHREREED ASADERO CHEESE",
+          "qty": 2.7,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160323"
+        },
+        {
+          "name": "SHREREED CHEDDAR CHEESE",
+          "qty": 2.7,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160324"
+        },
+        {
+          "name": "BACON",
+          "qty": 2.7,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510066"
+        },
+        {
+          "name": "RICOTTA",
+          "qty": 2.7,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510063"
+        }
+      ]
+    },
+    {
+      "wipCode": "160614",
+      "name": "AL PASTOR RICE",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 9,
+      "lines": [
+        {
+          "name": "JASMINE RICE, COOKED",
+          "qty": 28.92,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160301"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.15,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "LEMON, JUICE",
+          "qty": 0.57,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310020"
+        },
+        {
+          "name": "ROASTED PINEAPPLE",
+          "qty": 4.32,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160619"
+        },
+        {
+          "name": "CILANTRO, 2mm CHOPPED",
+          "qty": 1.7,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160504"
+        },
+        {
+          "name": "JALAPENO, 1/4\" DICED",
+          "qty": 0.62,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160617"
+        },
+        {
+          "name": "WHITE ONION, 1/4\" DICED",
+          "qty": 3.85,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160502"
+        },
+        {
+          "name": "RED BELL PEPPER, 1/4\"",
+          "qty": 3.39,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160503"
+        },
+        {
+          "name": "BOILED BLACK BEANS",
+          "qty": 6.48,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160292"
+        }
+      ]
+    },
+    {
+      "wipCode": "160610",
+      "name": "BARBACOA RICE",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 5,
+      "lines": [
+        {
+          "name": "JASMINE RICE, COOKED (AVOCADO OIL)",
+          "qty": 9.52,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160288"
+        },
+        {
+          "name": "BOILED PINTO BEANS",
+          "qty": 3.81,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160618"
+        },
+        {
+          "name": "WHITE ONION, 1/4\" DICED",
+          "qty": 0.65,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160502"
+        },
+        {
+          "name": "CILANTRO, 2mm CHOPPED",
+          "qty": 0.3,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160504"
+        },
+        {
+          "name": "LIME JUICE 4/1GAL",
+          "qty": 0.24,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310032"
+        }
+      ]
+    },
+    {
+      "wipCode": "160629",
+      "name": "RICE MIX HOT HONEY",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 5,
+      "lines": [
+        {
+          "name": "JASMINE RICE, COOKED (AVOCADO OIL)",
+          "qty": 60,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160288"
+        },
+        {
+          "name": "CILANTRO, 2mm CHOPPED",
+          "qty": 1.5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160504"
+        },
+        {
+          "name": "RED BELL PEPPER, 1/4\"",
+          "qty": 8,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160503"
+        },
+        {
+          "name": "ROASTED, CORN",
+          "qty": 10,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160608"
+        },
+        {
+          "name": "GREEN PEAS",
+          "qty": 10,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510040"
+        }
+      ]
+    },
+    {
+      "wipCode": "160645",
+      "name": "AL PASTOR RICE BURRITO MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 10,
+      "lines": [
+        {
+          "name": "JASMINE RICE, COOKED",
+          "qty": 1.23,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160301"
+        },
+        {
+          "name": "ROASTED PINEAPPLE",
+          "qty": 0.44,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160619"
+        },
+        {
+          "name": "CILANTRO, 2mm CHOPPED",
+          "qty": 0.05,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160504"
+        },
+        {
+          "name": "JALAPENO, 1/4\" DICED",
+          "qty": 0.03,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160617"
+        },
+        {
+          "name": "WHITE ONION, 1/4\" DICED",
+          "qty": 0.11,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160502"
+        },
+        {
+          "name": "RED BELL PEPPER, 1/4\"",
+          "qty": 0.13,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160503"
+        },
+        {
+          "name": "BOILED BLACK BEANS",
+          "qty": 0.45,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160292"
+        },
+        {
+          "name": "MEXICAN CHEESE BLEND",
+          "qty": 0.95,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310061"
+        },
+        {
+          "name": "AL PASTOR CREAM",
+          "qty": 0.42,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160623"
+        },
+        {
+          "name": "AL PASTOR CHICKEN STEW",
+          "qty": 2.2,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160626"
+        }
+      ]
+    },
+    {
+      "wipCode": "160646",
+      "name": "BACON BURRITO CHEESE MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 6,
+      "lines": [
+        {
+          "name": "BREAKFAST ROASTED POTATOES",
+          "qty": 12,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160345"
+        },
+        {
+          "name": "EGG WHOLE SCRAMBLED",
+          "qty": 18,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160297"
+        },
+        {
+          "name": "SHREREED ASADERO CHEESE",
+          "qty": 3.5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160323"
+        },
+        {
+          "name": "SHREREED CHEDDAR CHEESE",
+          "qty": 3.5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160324"
+        },
+        {
+          "name": "BACON",
+          "qty": 3.5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510066"
+        },
+        {
+          "name": "RICOTTA",
+          "qty": 2.7,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510063"
+        }
+      ]
+    },
+    {
+      "wipCode": "160647",
+      "name": "BIRRIA BURRITO MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 9,
+      "lines": [
+        {
+          "name": "JASMINE RICE, COOKED",
+          "qty": 1.96,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160301"
+        },
+        {
+          "name": "WHITE ONION, 1/4\" DICED",
+          "qty": 0.21,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160502"
+        },
+        {
+          "name": "CILANTRO, 2mm CHOPPED",
+          "qty": 0.09,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160504"
+        },
+        {
+          "name": "ROASTED, CORN",
+          "qty": 0.46,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160608"
+        },
+        {
+          "name": "LEMON, JUICE",
+          "qty": 0.05,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310020"
+        },
+        {
+          "name": "MEXICAN CHEESE BLEND",
+          "qty": 0.74,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310061"
+        },
+        {
+          "name": "SOUR CREAM",
+          "qty": 0.5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310049"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.03,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "BIRRIA STEW",
+          "qty": 2,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160290"
+        }
+      ]
+    },
+    {
+      "wipCode": "160658",
+      "name": "HOT HONEY RICE BURRITO MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 5,
+      "lines": [
+        {
+          "name": "JASMINE RICE",
+          "qty": 1.96,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410135"
+        },
+        {
+          "name": "ROASTED, CORN",
+          "qty": 0.58,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160608"
+        },
+        {
+          "name": "MEXICAN CHEESE BLEND",
+          "qty": 0.84,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310061"
+        },
+        {
+          "name": "HOT HONEY CREAM",
+          "qty": 0.42,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160635"
+        },
+        {
+          "name": "HOT HONEY CHICKEN STEW",
+          "qty": 2.2,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160632"
+        }
+      ]
+    },
+    {
+      "wipCode": "160654",
+      "name": "GREEN LEMON RICE MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 7,
+      "lines": [
+        {
+          "name": "JASMINE RICE, COOKED (AVOCADO OIL)",
+          "qty": 3.8,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160288"
+        },
+        {
+          "name": "CORN ROASTED RTE VAN DRUNEN (F63) 50 LB IQF",
+          "qty": 0.26,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510014"
+        },
+        {
+          "name": "BOILED BLACK BEANS",
+          "qty": 0.26,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160292"
+        },
+        {
+          "name": "CILANTRO, 2mm CHOPPED",
+          "qty": 0.26,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160504"
+        },
+        {
+          "name": "RED BELL PEPPER, 1/4\"",
+          "qty": 0.26,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160503"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.05,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "LEMON, JUICE",
+          "qty": 0.13,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310020"
+        }
+      ]
+    },
+    {
+      "wipCode": "160664",
+      "name": "COLLARD GREEN RICE MIX",
+      "department": "FRESH MIXING",
+      "sheetName": "FRESH MIXING",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "JASMINE RICE, COOKED (AVOCADO OIL)",
+          "qty": 60,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160288"
+        },
+        {
+          "name": "GARLIC CONFIT",
+          "qty": 1.2,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160667"
+        },
+        {
+          "name": "COLLARD GREENS, 2MM",
+          "qty": 4,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160671"
+        }
+      ]
+    },
+    {
+      "wipCode": "160287",
+      "name": "MIX RED & WHITE QUINOA, BOILED",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "QUINOA RED",
+          "qty": 12,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410074"
+        },
+        {
+          "name": "QUINOA WHITE",
+          "qty": 100,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410077"
+        }
+      ]
+    },
+    {
+      "wipCode": "160301",
+      "name": "JASMINE RICE, COOKED",
+      "department": "MAIN KITCHEN PM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "JASMINE RICE",
+          "qty": 150,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410135"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "SUNFLOWER OIL",
+          "qty": 6,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410054"
+        }
+      ]
+    },
+    {
+      "wipCode": "160288",
+      "name": "JASMINE RICE, COOKED (AVOCADO OIL)",
+      "department": "MAIN KITCHEN PM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "JASMINE RICE",
+          "qty": 150,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410135"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "AVOCADO OIL",
+          "qty": 6,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410313"
+        }
+      ]
+    },
+    {
+      "wipCode": "160308",
+      "name": "RICE BASMATI",
+      "department": "MAIN KITCHEN PM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 4,
+      "lines": [
+        {
+          "name": "RICE BASMATI RAW",
+          "qty": 80,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410251"
+        },
+        {
+          "name": "AVOCADO OIL",
+          "qty": 2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410313"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.7,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "GREEN PEAS",
+          "qty": 20,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510040"
+        }
+      ]
+    },
+    {
+      "wipCode": "160292",
+      "name": "BOILED BLACK BEANS",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "DRY BLACK BEANS",
+          "qty": 6.25,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410191"
+        }
+      ]
+    },
+    {
+      "wipCode": "160293",
+      "name": "BOILED, BROWN RICE",
+      "department": "MAIN KITCHEN PM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "BROWN RICE",
+          "qty": 50.8,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410211"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.6,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "SUNFLOWER OIL",
+          "qty": 1.5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410054"
+        }
+      ]
+    },
+    {
+      "wipCode": "160294",
+      "name": "ROASTED POTATOES",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 6,
+      "lines": [
+        {
+          "name": "YUKON GOLD POTATOES 3/4\"",
+          "qty": 135.1,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160508"
+        },
+        {
+          "name": "WHITE ONION, 3/4\" DICED",
+          "qty": 9.6,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160514"
+        },
+        {
+          "name": "SUNFLOWER OIL",
+          "qty": 3,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410054"
+        },
+        {
+          "name": "IQF ROSEMARY",
+          "qty": 0.3,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510038"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "BLACK PEPPER",
+          "qty": 0.2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420052"
+        }
+      ]
+    },
+    {
+      "wipCode": "160345",
+      "name": "BREAKFAST ROASTED POTATOES",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 5,
+      "lines": [
+        {
+          "name": "YUKON GOLD POTATOES 3/4\"",
+          "qty": 135.1,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160508"
+        },
+        {
+          "name": "AVOCADO OIL",
+          "qty": 3,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410313"
+        },
+        {
+          "name": "IQF ROSEMARY",
+          "qty": 0.3,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510038"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "BLACK PEPPER",
+          "qty": 0.2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420052"
+        }
+      ]
+    },
+    {
+      "wipCode": "160295",
+      "name": "HATCHED CHILLI ROASTED",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 5,
+      "lines": [
+        {
+          "name": "CALIFORNIA HATCHED CHILLI",
+          "qty": 67.83,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160512"
+        },
+        {
+          "name": "GREEN TOMATILLO (CLEAN)",
+          "qty": 97.02,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160510"
+        },
+        {
+          "name": "JALAPENO (WHOLE)",
+          "qty": 8.69,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160513"
+        },
+        {
+          "name": "WHITE ONION (CHOPPED)",
+          "qty": 9.96,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160506"
+        },
+        {
+          "name": "AVOCADO OIL",
+          "qty": 2.93,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410313"
+        }
+      ]
+    },
+    {
+      "wipCode": "160296",
+      "name": "HATCHED CHILLI SAUCE",
+      "department": "GARDE MANGER",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 6,
+      "lines": [
+        {
+          "name": "FRESH GARLIC",
+          "qty": 2.75,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330015"
+        },
+        {
+          "name": "CILANTRO, CLEAN",
+          "qty": 1.49,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160511"
+        },
+        {
+          "name": "MINT, DSMTD (OZ)",
+          "qty": 0.21,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160515"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.74,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "WHITE VINEGAR",
+          "qty": 1.8,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410103"
+        },
+        {
+          "name": "HATCHED CHILLI ROASTED",
+          "qty": 93.02,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160295"
+        }
+      ]
+    },
+    {
+      "wipCode": "160297",
+      "name": "EGG WHOLE SCRAMBLED",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 5,
+      "lines": [
+        {
+          "name": "WHOLE EGG",
+          "qty": 146.4,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510029"
+        },
+        {
+          "name": "HEAVY CREAM",
+          "qty": 9.9,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310094"
+        },
+        {
+          "name": "AVOCADO OIL",
+          "qty": 3.2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410313"
+        },
+        {
+          "name": "CORN STARCH",
+          "qty": 0.5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410019"
+        },
+        {
+          "name": "CITRIC ACID",
+          "qty": 0.25,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420048"
+        }
+      ]
+    },
+    {
+      "wipCode": "160346",
+      "name": "ROASTED PEPPER BLEND",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "POBLANO PEPPER, 1/4\"",
+          "qty": 10,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160521"
+        },
+        {
+          "name": "RED BELL PEPPER, 1/4\"",
+          "qty": 7,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160503"
+        },
+        {
+          "name": "AVOCADO OIL",
+          "qty": 0.3,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410313"
+        }
+      ]
+    },
+    {
+      "wipCode": "160298",
+      "name": "ROASTED YAMS",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 4,
+      "lines": [
+        {
+          "name": "YAMS, 3/4'' CUBED",
+          "qty": 50,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160509"
+        },
+        {
+          "name": "SUNFLOWER OIL",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410054"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.4,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "BLACK PEPPER",
+          "qty": 0.2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420052"
+        }
+      ]
+    },
+    {
+      "wipCode": "160309",
+      "name": "RAW CHICKEN, DICED 1\"",
+      "department": "GARDE MANGER",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "RAW CHICKEN",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510027"
+        }
+      ]
+    },
+    {
+      "wipCode": "160310",
+      "name": "RAW CHICKEN, DICED 1/2\"",
+      "department": "GARDE MANGER",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "RAW CHICKEN",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510027"
+        }
+      ]
+    },
+    {
+      "wipCode": "160299",
+      "name": "CHIPOTLE CHICKEN MARINADE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "RAW CHICKEN, DICED 1\"",
+          "qty": 12,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160309"
+        },
+        {
+          "name": "CHIPOTLE DRESSING",
+          "qty": 5.81,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160090"
+        }
+      ]
+    },
+    {
+      "wipCode": "160311",
+      "name": "CHIPOTLE CHICKEN STEW NAE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "CHIPOTLE CHICKEN MARINADE",
+          "qty": 5.81,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160299"
+        }
+      ]
+    },
+    {
+      "wipCode": "160312",
+      "name": "CHIPOTLE BURRITO MARINADE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "RAW CHICKEN, DICED 1/2\"",
+          "qty": 12,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160310"
+        },
+        {
+          "name": "CHIPOTLE DRESSING",
+          "qty": 5.81,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160090"
+        }
+      ]
+    },
+    {
+      "wipCode": "160313",
+      "name": "CHIPOTLE BURRITO STEW NAE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "CHIPOTLE BURRITO MARINADE",
+          "qty": 5.81,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160312"
+        }
+      ]
+    },
+    {
+      "wipCode": "160303",
+      "name": "BIRRIA STEW (WHF NAE)",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "BIRRIA STEW, DICED 1\"",
+          "qty": 40,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160607"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.4,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "BIRRIA CHILLI DRESSING",
+          "qty": 10,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160097"
+        }
+      ]
+    },
+    {
+      "wipCode": "160290",
+      "name": "BIRRIA STEW",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "BIRRIA STEW, DICED 1\"",
+          "qty": 40,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160607"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.4,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "BIRRIA CHILLI DRESSING",
+          "qty": 10,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160097"
+        }
+      ]
+    },
+    {
+      "wipCode": "160291",
+      "name": "LEMON CHICKEN MARINADE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "RAW CHICKEN, DICED 1\"",
+          "qty": 5.3,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160309"
+        },
+        {
+          "name": "LEMON DRESSING",
+          "qty": 2.5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160271"
+        }
+      ]
+    },
+    {
+      "wipCode": "160300",
+      "name": "LEMON CHICKEN STEW NAE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "LEMON CHICKEN MARINADE",
+          "qty": 5.3,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160291"
+        }
+      ]
+    },
+    {
+      "wipCode": "160304",
+      "name": "CILANTRO CHICKEN MARINADE NAE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "RAW CHICKEN, DICED 1/2\"",
+          "qty": 5.3,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160310"
+        },
+        {
+          "name": "CILANTRO DRESSING",
+          "qty": 2.5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160272"
+        }
+      ]
+    },
+    {
+      "wipCode": "160305",
+      "name": "CILANTRO CHICKEN STEW NAE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "CILANTRO CHICKEN MARINADE NAE",
+          "qty": 5.3,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160304"
+        }
+      ]
+    },
+    {
+      "wipCode": "160306",
+      "name": "COCONUT CURRY CHICKEN MARINADE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "RAW CHICKEN, DICED 1\"",
+          "qty": 3.7,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160309"
+        },
+        {
+          "name": "COCONUT CURRY DRESSING",
+          "qty": 2.15,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160276"
+        }
+      ]
+    },
+    {
+      "wipCode": "160307",
+      "name": "COCONUT CURRY CHICKEN STEW",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "COCONUT CURRY CHICKEN MARINADE",
+          "qty": 7.4,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160306"
+        }
+      ]
+    },
+    {
+      "wipCode": "160314",
+      "name": "TERIYAKI CHICKEN MARINADE NAE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "TERIAKY DRESSING",
+          "qty": 3.5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160136"
+        },
+        {
+          "name": "RAW CHICKEN, DICED 1\"",
+          "qty": 4.4,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160309"
+        },
+        {
+          "name": "SOY SAUCE KIKOAMAN",
+          "qty": 0.088,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410283"
+        }
+      ]
+    },
+    {
+      "wipCode": "160315",
+      "name": "TERIYAKI CHICKEN STEW NAE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "TERIYAKI CHICKEN MARINADE NAE",
+          "qty": 7,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160314"
+        }
+      ]
+    },
+    {
+      "wipCode": "160262",
+      "name": "SESAME RICE, COOKED",
+      "department": "MAIN KITCHEN PM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "JASMINE RICE",
+          "qty": 60,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410135"
+        },
+        {
+          "name": "SESAME OIL 100% PURE 10/56OZ",
+          "qty": 1.23,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410314"
+        },
+        {
+          "name": "TOASTED SESAME SEED",
+          "qty": 0.48,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410282-1"
+        }
+      ]
+    },
+    {
+      "wipCode": "160606",
+      "name": "MIX RED & WHITE QUINOA, MIX",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "MIX RED & WHITE QUINOA, BOILED",
+          "qty": 155,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160287"
+        },
+        {
+          "name": "SUNFLOWER OIL",
+          "qty": 3,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410054"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.6,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        }
+      ]
+    },
+    {
+      "wipCode": "160607",
+      "name": "BIRRIA STEW, DICED 1\"",
+      "department": "GARDE MANGER",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "DICED BEEF CHUCK",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510028-2"
+        }
+      ]
+    },
+    {
+      "wipCode": "160608",
+      "name": "ROASTED, CORN",
+      "department": "MAIN KITCHEN PM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "CORN ROASTED RTE VAN DRUNEN (F63) 50 LB IQF",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510014"
+        }
+      ]
+    },
+    {
+      "wipCode": "160618",
+      "name": "BOILED PINTO BEANS",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "DRY PINTO BEANS",
+          "qty": 6.25,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410299"
+        }
+      ]
+    },
+    {
+      "wipCode": "160619",
+      "name": "ROASTED PINEAPPLE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "PINEAPPLE CHUNKS",
+          "qty": 75,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160640"
+        },
+        {
+          "name": "HONEY",
+          "qty": 1.6,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410030"
+        },
+        {
+          "name": "AVOCADO OIL",
+          "qty": 1.4,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410313"
+        }
+      ]
+    },
+    {
+      "wipCode": "160620",
+      "name": "BARBACOA STEW",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "BIRRIA STEW, DICED 1\"",
+          "qty": 4.6,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160607"
+        },
+        {
+          "name": "BARBACOA DRESSING",
+          "qty": 1.8,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160622"
+        }
+      ]
+    },
+    {
+      "wipCode": "160625",
+      "name": "AL PASTOR CHICKEN MARINADE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "RAW CHICKEN, DICED 1\"",
+          "qty": 9,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160309"
+        },
+        {
+          "name": "AL PASTOR DRESSING",
+          "qty": 4,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160624"
+        }
+      ]
+    },
+    {
+      "wipCode": "160626",
+      "name": "AL PASTOR CHICKEN STEW",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "AL PASTOR CHICKEN MARINADE",
+          "qty": 8,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160625"
+        }
+      ]
+    },
+    {
+      "wipCode": "160631",
+      "name": "CHICKEN TIKKA MASALA MARINADE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "RAW CHICKEN, DICED 1\"",
+          "qty": 9,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160309"
+        },
+        {
+          "name": "CHICKEN TIKKA MASALA DRESSING",
+          "qty": 2.8,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160636"
+        }
+      ]
+    },
+    {
+      "wipCode": "160630",
+      "name": "CHICKEN TIKKA MASALA STEW",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "CHICKEN TIKKA MASALA MARINADE",
+          "qty": 5.3,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160631"
+        }
+      ]
+    },
+    {
+      "wipCode": "160633",
+      "name": "HOT HONEY CHICKEN MARINADE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "RAW CHICKEN, DICED 1\"",
+          "qty": 9,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160309"
+        },
+        {
+          "name": "HOT HONEY DRESSING",
+          "qty": 3.4,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160638"
+        }
+      ]
+    },
+    {
+      "wipCode": "160632",
+      "name": "HOT HONEY CHICKEN STEW",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "HOT HONEY CHICKEN MARINADE",
+          "qty": 5.3,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160633"
+        }
+      ]
+    },
+    {
+      "wipCode": "160634",
+      "name": "TIKKA MASALA SAUCE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 3,
+      "lines": [
+        {
+          "name": "COCONUT CREAM",
+          "qty": 25,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410012-3"
+        },
+        {
+          "name": "MASALA DRESSING",
+          "qty": 25,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "N/A-001"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.24,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        }
+      ]
+    },
+    {
+      "wipCode": "160648",
+      "name": "COCONUT CURRY SAUCE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "COCONUT CURRY DRESSING, COOKED",
+          "qty": 110,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "N/A-002"
+        },
+        {
+          "name": "COCONUT CREAM",
+          "qty": 35,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410012-3"
+        }
+      ]
+    },
+    {
+      "wipCode": "160656",
+      "name": "TOMATILLO CHICKEN MARINADE",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "RAW CHICKEN, DICED 1/2\"",
+          "qty": 8,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160310"
+        },
+        {
+          "name": "GREEN TOMATILLO DRESSING",
+          "qty": 6,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160655"
+        }
+      ]
+    },
+    {
+      "wipCode": "160657",
+      "name": "TOMATILLO CHICKEN STEW",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "TOMATILLO CHICKEN MARINADE",
+          "qty": 8,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160656"
+        }
+      ]
+    },
+    {
+      "wipCode": "160665",
+      "name": "FEIJOADA, COOKED",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 4,
+      "lines": [
+        {
+          "name": "BOILED BLACK BEANS",
+          "qty": 165,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160292"
+        },
+        {
+          "name": "PORK STEW",
+          "qty": 145,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160666"
+        },
+        {
+          "name": "SAUSAGE, SHREDDED",
+          "qty": 20,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160668"
+        },
+        {
+          "name": "GARLIC CONFIT",
+          "qty": 2,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160667"
+        }
+      ]
+    },
+    {
+      "wipCode": "160666",
+      "name": "PORK STEW",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 9,
+      "lines": [
+        {
+          "name": "AVOCADO OIL",
+          "qty": 2.22,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410313"
+        },
+        {
+          "name": "WHITE ONION, 1/4\" DICED",
+          "qty": 13.33,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160502"
+        },
+        {
+          "name": "FRESH GARLIC",
+          "qty": 4.44,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330015"
+        },
+        {
+          "name": "PORK BUTT, 1\"",
+          "qty": 96.28,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160669"
+        },
+        {
+          "name": "PORK LOIN, 1\"",
+          "qty": 96.28,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160670"
+        },
+        {
+          "name": "PAPRIKA",
+          "qty": 0.93,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420028-1"
+        },
+        {
+          "name": "GARLIC POWDER",
+          "qty": 0.65,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420055"
+        },
+        {
+          "name": "BAY LEAVES, DRIED",
+          "qty": 0.09,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420004"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 14.81,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        }
+      ]
+    },
+    {
+      "wipCode": "160667",
+      "name": "GARLIC CONFIT",
+      "department": "MAIN KITCHEN AM",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 2,
+      "lines": [
+        {
+          "name": "AVOCADO OIL",
+          "qty": 0.81,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410313"
+        },
+        {
+          "name": "FRESH GARLIC",
+          "qty": 1.5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330015"
+        }
+      ]
+    },
+    {
+      "wipCode": "160668",
+      "name": "SAUSAGE, SHREDDED",
+      "department": "GARDE MANGER",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "SAUSAGE",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "0010"
+        }
+      ]
+    },
+    {
+      "wipCode": "160669",
+      "name": "PORK BUTT, 1\"",
+      "department": "GARDE MANGER",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "PORK BUTT",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "0012"
+        }
+      ]
+    },
+    {
+      "wipCode": "160670",
+      "name": "PORK LOIN, 1\"",
+      "department": "GARDE MANGER",
+      "sheetName": "MAIN KITCHEN",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "PORK LOIN",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "0011"
+        }
+      ]
+    },
+    {
+      "wipCode": "160089",
+      "name": "AVOCADO CREMA DRESSING",
+      "department": "FRESH MIXING",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 6,
+      "lines": [
+        {
+          "name": "AVOCADO PULP 8/2 (FROZEN)",
+          "qty": 11,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510025-1"
+        },
+        {
+          "name": "SOUR CREAM",
+          "qty": 5.5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310049"
+        },
+        {
+          "name": "CILANTRO, 2mm CHOPPED",
+          "qty": 1.8,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160504"
+        },
+        {
+          "name": "LEMON, JUICE",
+          "qty": 2.5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310020"
+        },
+        {
+          "name": "ONION POWDER",
+          "qty": 0.52,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420073"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.28,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        }
+      ]
+    },
+    {
+      "wipCode": "160090",
+      "name": "CHIPOTLE DRESSING",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 12,
+      "lines": [
+        {
+          "name": "CHIPOTLE PEPPER ADOBO IN SAUCE",
+          "qty": 1.5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410008"
+        },
+        {
+          "name": "TOMATO PASTE FANCY CA",
+          "qty": 3.3,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410067-3"
+        },
+        {
+          "name": "WHITE ONION, 1/8\" DICED",
+          "qty": 1.9,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160501"
+        },
+        {
+          "name": "FRESH GARLIC",
+          "qty": 0.45,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330015"
+        },
+        {
+          "name": "CILANTRO, 2mm CHOPPED",
+          "qty": 0.75,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160504"
+        },
+        {
+          "name": "CHIPOTLE CHILLI POWDER",
+          "qty": 0.25,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420072"
+        },
+        {
+          "name": "ONION POWDER",
+          "qty": 0.1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420073"
+        },
+        {
+          "name": "OREGANO DRY",
+          "qty": 0.04,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420059"
+        },
+        {
+          "name": "CUMIN",
+          "qty": 0.1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420051"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.3,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "BLACK PEPPER",
+          "qty": 0.13,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420052"
+        },
+        {
+          "name": "PAPRIKA",
+          "qty": 0.56,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420028-1"
+        }
+      ]
+    },
+    {
+      "wipCode": "160097",
+      "name": "BIRRIA CHILLI DRESSING",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 9,
+      "lines": [
+        {
+          "name": "CHILI GUAJILLO WHOLE POWDER",
+          "qty": 0.65,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420074"
+        },
+        {
+          "name": "CHILI ANCHO WHOLE POWDER",
+          "qty": 0.14,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420075"
+        },
+        {
+          "name": "CHILI PASILLIA POWDER",
+          "qty": 0.14,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420076-1"
+        },
+        {
+          "name": "BAY LEAVES, DRIED",
+          "qty": 0.01,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420004"
+        },
+        {
+          "name": "WHITE ONION, 1/4\" DICED",
+          "qty": 2,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160502"
+        },
+        {
+          "name": "FRESH GARLIC",
+          "qty": 0.44,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330015"
+        },
+        {
+          "name": "CUMIN",
+          "qty": 0.13,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420051"
+        },
+        {
+          "name": "OREGANO DRY",
+          "qty": 0.02,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420059"
+        },
+        {
+          "name": "RED BELL PEPPER, 1/4\"",
+          "qty": 2.51,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160503"
+        }
+      ]
+    },
+    {
+      "wipCode": "160271",
+      "name": "LEMON DRESSING",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 7,
+      "lines": [
+        {
+          "name": "RED BELL PEPPER, 1/4\"",
+          "qty": 20.2,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160503"
+        },
+        {
+          "name": "WHITE ONION, 1/4\" DICED",
+          "qty": 6.4,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160502"
+        },
+        {
+          "name": "RED WINE VINEGAR",
+          "qty": 12.7,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410099"
+        },
+        {
+          "name": "LEMON SEASONING MIX",
+          "qty": 7.5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160601"
+        },
+        {
+          "name": "CITRIC ACID",
+          "qty": 0.1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420048"
+        },
+        {
+          "name": "LEMON, JUICE",
+          "qty": 15.9,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310020"
+        },
+        {
+          "name": "CORN STARCH",
+          "qty": 5.5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410019"
+        }
+      ]
+    },
+    {
+      "wipCode": "160601",
+      "name": "LEMON SEASONING MIX",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 7,
+      "lines": [
+        {
+          "name": "SEA SALT",
+          "qty": 7.8,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "GARLIC POWDER",
+          "qty": 4.3,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420055"
+        },
+        {
+          "name": "BLACK PEPPER",
+          "qty": 2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420052"
+        },
+        {
+          "name": "THYME",
+          "qty": 2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420064"
+        },
+        {
+          "name": "MARJORAM DRY",
+          "qty": 1.8,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420049"
+        },
+        {
+          "name": "OREGANO DRY",
+          "qty": 1.8,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420059"
+        },
+        {
+          "name": "PARSLEY DRY",
+          "qty": 1.8,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420054"
+        }
+      ]
+    },
+    {
+      "wipCode": "160272",
+      "name": "CILANTRO DRESSING",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 9,
+      "lines": [
+        {
+          "name": "RED BELL PEPPER, 1/4\"",
+          "qty": 16,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160503"
+        },
+        {
+          "name": "WHITE ONION, 1/4\" DICED",
+          "qty": 6.4,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160502"
+        },
+        {
+          "name": "RED WINE VINEGAR",
+          "qty": 12.7,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410099"
+        },
+        {
+          "name": "CILANTRO SEASONING MIX",
+          "qty": 7.5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160602"
+        },
+        {
+          "name": "CITRIC ACID",
+          "qty": 0.1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420048"
+        },
+        {
+          "name": "LEMON, JUICE",
+          "qty": 15.9,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310020"
+        },
+        {
+          "name": "CILANTRO, CLEAN",
+          "qty": 10,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160511"
+        },
+        {
+          "name": "JALAPENO",
+          "qty": 1.5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330012"
+        },
+        {
+          "name": "CORN STARCH",
+          "qty": 6,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410019"
+        }
+      ]
+    },
+    {
+      "wipCode": "160602",
+      "name": "CILANTRO SEASONING MIX",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 7,
+      "lines": [
+        {
+          "name": "SEA SALT",
+          "qty": 7.8,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "GARLIC POWDER",
+          "qty": 4.3,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420055"
+        },
+        {
+          "name": "BLACK PEPPER",
+          "qty": 2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420052"
+        },
+        {
+          "name": "THYME",
+          "qty": 2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420064"
+        },
+        {
+          "name": "MARJORAM DRY",
+          "qty": 1.8,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420049"
+        },
+        {
+          "name": "OREGANO DRY",
+          "qty": 1.8,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420059"
+        },
+        {
+          "name": "PARSLEY DRY",
+          "qty": 1.8,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420054"
+        }
+      ]
+    },
+    {
+      "wipCode": "160276",
+      "name": "COCONUT CURRY DRESSING",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 10,
+      "lines": [
+        {
+          "name": "WHITE ONION, 1/4\" DICED",
+          "qty": 40,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160502"
+        },
+        {
+          "name": "FRESH GARLIC",
+          "qty": 4,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330015"
+        },
+        {
+          "name": "TOMATO PASTE FANCY CA",
+          "qty": 19,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410067-3"
+        },
+        {
+          "name": "BAKING SODA",
+          "qty": 0.1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410002"
+        },
+        {
+          "name": "JALAPENO (WHOLE)",
+          "qty": 8.5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160513"
+        },
+        {
+          "name": "COCONUT SEASONING MIX",
+          "qty": 2.6,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160603"
+        },
+        {
+          "name": "CORN STARCH",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410019"
+        },
+        {
+          "name": "COCONUT CREAM",
+          "qty": 95,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410012-3"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 6,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "LEMON, JUICE",
+          "qty": 12,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310020"
+        }
+      ]
+    },
+    {
+      "wipCode": "160603",
+      "name": "COCONUT SEASONING MIX",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 6,
+      "lines": [
+        {
+          "name": "GROUND GINGER",
+          "qty": 0.4,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420068-1"
+        },
+        {
+          "name": "TUMERIC",
+          "qty": 0.3,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420035"
+        },
+        {
+          "name": "GARAM MASALA",
+          "qty": 0.2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420082"
+        },
+        {
+          "name": "RED CHILI POWDER",
+          "qty": 0.2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420083"
+        },
+        {
+          "name": "CURRY MADRAS POWDER 50#",
+          "qty": 0.2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420043"
+        },
+        {
+          "name": "CUMIN",
+          "qty": 0.1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420051"
+        }
+      ]
+    },
+    {
+      "wipCode": "160136",
+      "name": "TERIAKY DRESSING",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 8,
+      "lines": [
+        {
+          "name": "SOY SAUCE KIKOAMAN",
+          "qty": 0.51,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410283"
+        },
+        {
+          "name": "SOY SAUCE LEE KUM",
+          "qty": 0.18,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410279"
+        },
+        {
+          "name": "RICE COOKING WINE",
+          "qty": 0.66,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410284"
+        },
+        {
+          "name": "FRESH GINGER",
+          "qty": 0.12,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160519"
+        },
+        {
+          "name": "FRESH GARLIC",
+          "qty": 0.15,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330015"
+        },
+        {
+          "name": "BROWN SUGAR",
+          "qty": 0.5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410087"
+        },
+        {
+          "name": "BAKING SODA",
+          "qty": 0.002,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410002"
+        },
+        {
+          "name": "EZ GEL",
+          "qty": 0.01,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410278"
+        }
+      ]
+    },
+    {
+      "wipCode": "160323",
+      "name": "SHREREED ASADERO CHEESE",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "ASADERO CHEESE",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310066-1"
+        }
+      ]
+    },
+    {
+      "wipCode": "160324",
+      "name": "SHREREED CHEDDAR CHEESE",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "CHEDDAR CHEESE",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310003"
+        }
+      ]
+    },
+    {
+      "wipCode": "160604",
+      "name": "SHREREED GOUDA CHEESE",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "GOUDA CHEESE",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510064"
+        }
+      ]
+    },
+    {
+      "wipCode": "160605",
+      "name": "SHREREED SMOKED HAM",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "HAM SMOKED",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "510065"
+        }
+      ]
+    },
+    {
+      "wipCode": "160622",
+      "name": "BARBACOA DRESSING",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 9,
+      "lines": [
+        {
+          "name": "CHIPOTLE PEPPER ADOBO IN SAUCE",
+          "qty": 0.5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410008"
+        },
+        {
+          "name": "FRESH GARLIC",
+          "qty": 1.06,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330015"
+        },
+        {
+          "name": "WHITE ONION, 1/8\" DICED",
+          "qty": 8.82,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160501"
+        },
+        {
+          "name": "VINEGAR APPLE CIDER",
+          "qty": 0.99,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410097"
+        },
+        {
+          "name": "LEMON, JUICE",
+          "qty": 1.41,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310020"
+        },
+        {
+          "name": "BARBACOA SEASONING",
+          "qty": 2.1,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160662"
+        },
+        {
+          "name": "AVOCADO OIL",
+          "qty": 1.06,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410313"
+        },
+        {
+          "name": "TOMATO PASTE FANCY CA",
+          "qty": 7.05,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410067-3"
+        },
+        {
+          "name": "JALAPENO, 1/4\" DICED",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160617"
+        }
+      ]
+    },
+    {
+      "wipCode": "160623",
+      "name": "AL PASTOR CREAM",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 7,
+      "lines": [
+        {
+          "name": "SOUR CREAM",
+          "qty": 32,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310049"
+        },
+        {
+          "name": "CHIPOTLE CHILLI POWDER",
+          "qty": 0.4,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420072"
+        },
+        {
+          "name": "CILANTRO",
+          "qty": 0.6,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330020"
+        },
+        {
+          "name": "LEMON, JUICE",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310020"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.6,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "ROASTED PINEAPPLE",
+          "qty": 10,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160619"
+        },
+        {
+          "name": "PINEAPPLE JUICE",
+          "qty": 4,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160672"
+        }
+      ]
+    },
+    {
+      "wipCode": "160624",
+      "name": "AL PASTOR DRESSING",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 16,
+      "lines": [
+        {
+          "name": "CHILI GUAJILLO WHOLE POWDER",
+          "qty": 0.9,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420074"
+        },
+        {
+          "name": "CHILI ANCHO WHOLE POWDER",
+          "qty": 0.6,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420075"
+        },
+        {
+          "name": "CHIPOTLE CHILLI POWDER",
+          "qty": 0.9,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420072"
+        },
+        {
+          "name": "FRESH GARLIC",
+          "qty": 2.5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330015"
+        },
+        {
+          "name": "WHITE ONION, 1/4\" DICED",
+          "qty": 12,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160502"
+        },
+        {
+          "name": "PINEAPPLE JUICE",
+          "qty": 29,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160672"
+        },
+        {
+          "name": "ORANGE JUICE",
+          "qty": 5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310022"
+        },
+        {
+          "name": "VINEGAR APPLE CIDER",
+          "qty": 5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410097"
+        },
+        {
+          "name": "OREGANO DRY",
+          "qty": 0.5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420059"
+        },
+        {
+          "name": "CUMIN",
+          "qty": 0.4,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420051"
+        },
+        {
+          "name": "PAPRIKA",
+          "qty": 0.6,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420028-1"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 3.2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "HONEY",
+          "qty": 6,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410030"
+        },
+        {
+          "name": "RED BELL PEPPER, 1/4\"",
+          "qty": 6,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160503"
+        },
+        {
+          "name": "CILANTRO, 2mm CHOPPED",
+          "qty": 2.5,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160504"
+        },
+        {
+          "name": "CORN STARCH",
+          "qty": 1.5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410019"
+        }
+      ]
+    },
+    {
+      "wipCode": "160635",
+      "name": "HOT HONEY CREAM",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 6,
+      "lines": [
+        {
+          "name": "SOUR CREAM",
+          "qty": 3.11,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310049"
+        },
+        {
+          "name": "PAPRIKA",
+          "qty": 0.11,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420028-1"
+        },
+        {
+          "name": "HONEY",
+          "qty": 1.56,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410030"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.07,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "CITRIC ACID",
+          "qty": 0.06,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420048"
+        },
+        {
+          "name": "HABANERO 1/4\"",
+          "qty": 0.09,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160639"
+        }
+      ]
+    },
+    {
+      "wipCode": "160636",
+      "name": "CHICKEN TIKKA MASALA DRESSING",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 8,
+      "lines": [
+        {
+          "name": "AVOCADO OIL",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410313"
+        },
+        {
+          "name": "WHITE ONION, 1/4\" DICED",
+          "qty": 5.74,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160502"
+        },
+        {
+          "name": "TOMATO PASTE FANCY CA",
+          "qty": 14.05,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410067-3"
+        },
+        {
+          "name": "FRESH GARLIC",
+          "qty": 1.2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330015"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 1.2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "TIKKA MASALA SEASONING",
+          "qty": 3,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160637"
+        },
+        {
+          "name": "CILANTRO, 2mm CHOPPED",
+          "qty": 1.2,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160504"
+        },
+        {
+          "name": "HONEY",
+          "qty": 0.67,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410030"
+        }
+      ]
+    },
+    {
+      "wipCode": "160637",
+      "name": "TIKKA MASALA SEASONING",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 11,
+      "lines": [
+        {
+          "name": "GARAM MASALA",
+          "qty": 2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420082"
+        },
+        {
+          "name": "CHILI GUAJILLO WHOLE POWDER",
+          "qty": 0.8,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420074"
+        },
+        {
+          "name": "CHILI ANCHO WHOLE POWDER",
+          "qty": 0.8,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420075"
+        },
+        {
+          "name": "TUMERIC",
+          "qty": 2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420035"
+        },
+        {
+          "name": "CORN STARCH",
+          "qty": 4,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410019"
+        },
+        {
+          "name": "CORIANDER WHOLE SEEDS",
+          "qty": 2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420044"
+        },
+        {
+          "name": "PAPRIKA",
+          "qty": 12,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420028-1"
+        },
+        {
+          "name": "CURRY MADRAS POWDER 50#",
+          "qty": 2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420043"
+        },
+        {
+          "name": "CUMIN",
+          "qty": 1.4,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420051"
+        },
+        {
+          "name": "CAYENNE PEPPER",
+          "qty": 1.5,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420045"
+        },
+        {
+          "name": "SUGAR",
+          "qty": 8,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410089"
+        }
+      ]
+    },
+    {
+      "wipCode": "160638",
+      "name": "HOT HONEY DRESSING",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 13,
+      "lines": [
+        {
+          "name": "GARLIC POWDER",
+          "qty": 0.37,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420055"
+        },
+        {
+          "name": "WHITE ONION, 1/8\" DICED",
+          "qty": 1.87,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160501"
+        },
+        {
+          "name": "ORANGE JUICE",
+          "qty": 1.69,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310022"
+        },
+        {
+          "name": "HONEY",
+          "qty": 3.37,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410030"
+        },
+        {
+          "name": "LIME JUICE 4/1GAL",
+          "qty": 1.69,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310032"
+        },
+        {
+          "name": "HABANERO",
+          "qty": 0.1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330017"
+        },
+        {
+          "name": "CHIPOTLE CHILLI POWDER",
+          "qty": 0.2,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420072"
+        },
+        {
+          "name": "PAPRIKA",
+          "qty": 0.07,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420028-1"
+        },
+        {
+          "name": "CUMIN",
+          "qty": 0.05,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420051"
+        },
+        {
+          "name": "OREGANO DRY",
+          "qty": 0.06,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420059"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 0.42,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "CORN STARCH",
+          "qty": 0.1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410019"
+        },
+        {
+          "name": "CAYENNE PEPPER",
+          "qty": 0.02,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420045"
+        }
+      ]
+    },
+    {
+      "wipCode": "160655",
+      "name": "GREEN TOMATILLO DRESSING",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 10,
+      "lines": [
+        {
+          "name": "GREEN TOMATILLO (CLEAN)",
+          "qty": 65.27,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160510"
+        },
+        {
+          "name": "CILANTRO, CLEAN",
+          "qty": 6.53,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160511"
+        },
+        {
+          "name": "MINT, DSMTD (OZ)",
+          "qty": 2.18,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160515"
+        },
+        {
+          "name": "FRESH GARLIC",
+          "qty": 4.35,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330015"
+        },
+        {
+          "name": "HATCHED CHILLI ROASTED",
+          "qty": 21.76,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160295"
+        },
+        {
+          "name": "JALAPENO (WHOLE)",
+          "qty": 5.44,
+          "uom": "LB",
+          "kind": "subrecipe",
+          "target": "160513"
+        },
+        {
+          "name": "VINEGAR APPLE CIDER",
+          "qty": 5.44,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410097"
+        },
+        {
+          "name": "LEMON, JUICE",
+          "qty": 6.53,
+          "uom": "LB",
+          "kind": "material",
+          "target": "310020"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 2.18,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        },
+        {
+          "name": "EZ GEL",
+          "qty": 0.34,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410278"
+        }
+      ]
+    },
+    {
+      "wipCode": "160662",
+      "name": "BARBACOA SEASONING",
+      "department": "GARDE MANGER",
+      "sheetName": "GARDE MANGER",
+      "isPerUnit": false,
+      "lineCount": 7,
+      "lines": [
+        {
+          "name": "CHILI GUAJILLO WHOLE POWDER",
+          "qty": 0.32,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420074"
+        },
+        {
+          "name": "ACHIOTE POWDER",
+          "qty": 0.32,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420096"
+        },
+        {
+          "name": "CUMIN",
+          "qty": 0.1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420051"
+        },
+        {
+          "name": "OREGANO DRY",
+          "qty": 0.11,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420059"
+        },
+        {
+          "name": "GROUND CLOVES",
+          "qty": 0.05,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420069"
+        },
+        {
+          "name": "CORIANDER POWDER (GROUND)",
+          "qty": 0.11,
+          "uom": "LB",
+          "kind": "material",
+          "target": "420013"
+        },
+        {
+          "name": "SEA SALT",
+          "qty": 1.1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410080"
+        }
+      ]
+    },
+    {
+      "wipCode": "160501",
+      "name": "WHITE ONION, 1/8\" DICED",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "WHITE ONION",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330034"
+        }
+      ]
+    },
+    {
+      "wipCode": "160502",
+      "name": "WHITE ONION, 1/4\" DICED",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "WHITE ONION",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330034"
+        }
+      ]
+    },
+    {
+      "wipCode": "160503",
+      "name": "RED BELL PEPPER, 1/4\"",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "RED BELL PEPPER",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330005"
+        }
+      ]
+    },
+    {
+      "wipCode": "160504",
+      "name": "CILANTRO, 2mm CHOPPED",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "CILANTRO",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330020"
+        }
+      ]
+    },
+    {
+      "wipCode": "160505",
+      "name": "GREEN KALE, 2mm",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "GREEN KALE",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330028"
+        }
+      ]
+    },
+    {
+      "wipCode": "160506",
+      "name": "WHITE ONION (CHOPPED)",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "WHITE ONION",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330034"
+        }
+      ]
+    },
+    {
+      "wipCode": "160507",
+      "name": "JALAPENO (CHOPPED)",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "JALAPENO",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330012"
+        }
+      ]
+    },
+    {
+      "wipCode": "160508",
+      "name": "YUKON GOLD POTATOES 3/4\"",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "YUKON POTATO",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330039"
+        }
+      ]
+    },
+    {
+      "wipCode": "160509",
+      "name": "YAMS, 3/4'' CUBED",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "YAMS",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330046"
+        }
+      ]
+    },
+    {
+      "wipCode": "160510",
+      "name": "GREEN TOMATILLO (CLEAN)",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "GREEN TOMATILLO",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330043"
+        }
+      ]
+    },
+    {
+      "wipCode": "160511",
+      "name": "CILANTRO, CLEAN",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "CILANTRO",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330020"
+        }
+      ]
+    },
+    {
+      "wipCode": "160512",
+      "name": "CALIFORNIA HATCHED CHILLI",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "CHILI HATCH/ANAHEIM 30#",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330079"
+        }
+      ]
+    },
+    {
+      "wipCode": "160513",
+      "name": "JALAPENO (WHOLE)",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "JALAPENO",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330012"
+        }
+      ]
+    },
+    {
+      "wipCode": "160514",
+      "name": "WHITE ONION, 3/4\" DICED",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "WHITE ONION",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330034"
+        }
+      ]
+    },
+    {
+      "wipCode": "160515",
+      "name": "MINT, DSMTD (OZ)",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "MINT",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330023"
+        }
+      ]
+    },
+    {
+      "wipCode": "160516",
+      "name": "SPINACH, 10mm CHOPPED",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "SPINACH",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330040"
+        }
+      ]
+    },
+    {
+      "wipCode": "160517",
+      "name": "SUNDRIED TOMATO",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "SUNDRIED TOMATOES",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410210"
+        }
+      ]
+    },
+    {
+      "wipCode": "160518",
+      "name": "RED BELL PEPPER, 3/4\"",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "RED BELL PEPPER",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330005"
+        }
+      ]
+    },
+    {
+      "wipCode": "160519",
+      "name": "FRESH GINGER",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "GINGER",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330016"
+        }
+      ]
+    },
+    {
+      "wipCode": "160520",
+      "name": "BROCCOLI, 1\"",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "BROCOLI",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330064"
+        }
+      ]
+    },
+    {
+      "wipCode": "160521",
+      "name": "POBLANO PEPPER, 1/4\"",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "POBLANO PEPPER",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330081"
+        }
+      ]
+    },
+    {
+      "wipCode": "160522",
+      "name": "RED BELL PEPPER, 1/2\"",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "RED BELL PEPPER",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330005"
+        }
+      ]
+    },
+    {
+      "wipCode": "160523",
+      "name": "OREGANO FRESH, 2mm",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "OREGANO FRESH 1#",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330054"
+        }
+      ]
+    },
+    {
+      "wipCode": "160617",
+      "name": "JALAPENO, 1/4\" DICED",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "JALAPENO",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330012"
+        }
+      ]
+    },
+    {
+      "wipCode": "160621",
+      "name": "YELLOW JALAPENO (WHOLE)",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "JALAPENO",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330012"
+        }
+      ]
+    },
+    {
+      "wipCode": "160639",
+      "name": "HABANERO 1/4\"",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "HABANERO",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "330017"
+        }
+      ]
+    },
+    {
+      "wipCode": "160640",
+      "name": "PINEAPPLE CHUNKS",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "PINEAPPLE TIDBITS IN JUICE (6 CT/6 LB)",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410300"
+        }
+      ]
+    },
+    {
+      "wipCode": "160671",
+      "name": "COLLARD GREENS, 2MM",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "COLLARD GREEN",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "0013"
+        }
+      ]
+    },
+    {
+      "wipCode": "160672",
+      "name": "PINEAPPLE JUICE",
+      "department": "PRODUCE",
+      "sheetName": "PRODUCE",
+      "isPerUnit": false,
+      "lineCount": 1,
+      "lines": [
+        {
+          "name": "PINEAPPLE TIDBITS IN JUICE (6 CT/6 LB)",
+          "qty": 1,
+          "uom": "LB",
+          "kind": "material",
+          "target": "410300"
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "itemCode": "220096-2",
+      "name": "BOX MASTER BETTR BOWL QUINOA - BOTTOM",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "220096-1",
+      "name": "BOX MASTER BETTR BOWL QUINOA - TOP",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "220105-1",
+      "name": "BOX MASTER BETTR BOWL 25/CT - COSTCO",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "230032",
+      "name": "BLACK TRAY FOR BETTR BOWL",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "240027",
+      "name": "FILM 8.28\"",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260052",
+      "name": "CARTOON FOR CHICKEN CHIPOTLE BETTR BOWL",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260053",
+      "name": "CARTOON FOR BIRRIA BETTR BOWL",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260054",
+      "name": "CARTON SOUTHWESTERN QUINOA BOWL 600CT/CS",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260055",
+      "name": "CARTON MEDITERRANEAN QUINOA BOWL 600CT/CS",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260056",
+      "name": "CARTOON FOR FOUR CHEESE CHILLI BREAKFAST BOWL",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260057",
+      "name": "CARTOON FOR BIRRIA BREAKFAST BOWL",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260061",
+      "name": "CARTON WFM CHIPOTLE CHICKEN BURRITO BOWL 600CT/CS",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260062",
+      "name": "CARTON WFM LEMON CILANTRO CHICKEN BURRITO BOWL 600CT/CS",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260063",
+      "name": "CARTON WFM BEEF BIRRIA RICE BOWL 420CT/CS",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260064",
+      "name": "CARTON WFM CHIPOTLE VEGGIE BURRITO BOWL 600CT/CS",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260070",
+      "name": "CARTON CHICKEN CHIPOTLE RICE BOWL 600CT/CS",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260071",
+      "name": "CARTON COCONUT CURRY BOWL 600CT/CS",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260072",
+      "name": "CARTON GREEK CHICKEN WITH MIXED GRAINS BOWL  600CT/CS",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260073",
+      "name": "CARTON SOUTHWESTERN CHICKEN WITH MIXED GRAINS BOWL 600CT/CS",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260074",
+      "name": "CARTON WFM TERIYAKI CHICKEN BURRITO BOWL 600CT/CS",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260075",
+      "name": "CARTON CHICKEN CHIPOLTE 4CT 200/CS - COSTCO",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "220133",
+      "name": "CARTON AL-PASTOR CHICKEN (420 CT/CS)",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "220134",
+      "name": "CARTON BARBACOA BEEF BOWL (420 CT/CS)",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260084",
+      "name": "CARTON CHICKEN TIKKA MASALA (420 CT/CS)",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260083",
+      "name": "CARTON HOT HONEY CHICKEN BOWL (420CT/CS)",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "220131",
+      "name": "CARTON ALDI PRIVATE CHIPOTLE CHICKEN BOWL (420 CT/CS)",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "220130",
+      "name": "CARTON ALDI PRIVATE LEMON CILANTRO BOWL (420 CT/CS)",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260092",
+      "name": "CARTON FEIJOADA BOWL (420 CT/CS)",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "0001",
+      "name": "CARTON BEEF BIRRIA 4CT 200/CS - COSTCO",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "0002",
+      "name": "CHIPOTLE CHICKEN RICE FAMILY-PACK CARTON",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "0003",
+      "name": "LEMON TOMATILLO CHICKEN FAMILY-PACK CARTON",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "0004",
+      "name": "BEEF BIRRIA RICE FAMILY-PACK CARTON",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "0005",
+      "name": "BARBACOA BEEF FAMILY-PACK CARTON",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260080",
+      "name": "BREAKFAST BACON CHEESE BOWL CARTON",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "260081",
+      "name": "BREAKFAST HAM CHEESE BOWL CARTON",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "220097-1",
+      "name": "BOX MASTER BETTR BOWL BREAKFAST/FIESTA BOWL",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "220100-2",
+      "name": "BOX MASTER BOWL",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "220147",
+      "name": "BOX MASTER BURRITO AL PASTOR CHICKEN",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "220148",
+      "name": "BOX MASTER BURRITO BACON & CHEESE",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    },
+    {
+      "itemCode": "220149",
+      "name": "BOX MASTER BURRITO BEEF BIRRIA",
+      "kind": "ingredient",
+      "department": "FINISHED PRODUCT",
+      "storage": "Dry"
+    }
+  ],
+  "subrecipes": [
+    {
+      "itemCode": "N/A-001",
+      "name": "MASALA DRESSING",
+      "kind": "subrecipe",
+      "department": "MAIN KITCHEN",
+      "storage": null
+    },
+    {
+      "itemCode": "N/A-002",
+      "name": "COCONUT CURRY DRESSING, COOKED",
+      "kind": "subrecipe",
+      "department": "MAIN KITCHEN",
+      "storage": null
+    },
+    {
+      "itemCode": "160325",
+      "name": "CHIPOTLE CHICKEN POWER BOWL 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160326",
+      "name": "BIRRIA FIESTA BOWL 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160327",
+      "name": "SOUTHWEST QUINOA BOWL 10.5 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160328",
+      "name": "MEDITERRANEAN QUINOA BOWL 10.5 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160329",
+      "name": "BIRRIA BREAKFAST BOWL 9oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160330",
+      "name": "FOUR CHEESE GREEN CHILI BREAKFAST BOWL 9oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160331",
+      "name": "LEMON CILANTRO CHICKEN BURRITO BOWL 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160332",
+      "name": "CHIPOTLE VEGGIE BURRITO BOWL 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160333",
+      "name": "CHIPOTLE CHICKEN BURRITO BOWL 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160334",
+      "name": "BEEF BIRRIA RICE BOWL 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160335",
+      "name": "COCONUT CURRY CHICKEN BOWL 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160336",
+      "name": "CHIPOTLE CHICKEN RICE BOWL 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160337",
+      "name": "TERIYAKI CHICKEN BOWL 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160338",
+      "name": "GREEK CHICKEN WITH MIXED GRAINS BOWL 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160339",
+      "name": "SOUTHWESTERN CHICKEN WITH MIXED GRAINS BOWL 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160341",
+      "name": "BREAKFAST HAM CHEESE BOWL 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160342",
+      "name": "BREAKFAST BACON CHEESE BOWL 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160343",
+      "name": "FOUR CHEESE GREEN CHILI BREAKFAST BOWL EVERYDAY 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160344",
+      "name": "BIRRIA BREAKFAST BOWL EVERYDAY 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160612",
+      "name": "BARBACOA BEEF BOWL 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160613",
+      "name": "AL-PASTOR CHICKEN BOWL 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160627",
+      "name": "CHICKEN TIKKA MASALA BOWL 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160628",
+      "name": "HOT HONEY CHICKEN BOWL 9 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160641",
+      "name": "AL PASTOR-INSPIRED CHICKEN BURRITO 8 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160642",
+      "name": "BACON & CHEESE BREAKFAST BURRITO 8 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160643",
+      "name": "BEEF BIRRIA BURRITO 8 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160644",
+      "name": "HOT HONEY CHICKEN BURRITO 8 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160649",
+      "name": "MEXICAN RICE MIX 16 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160650",
+      "name": "CHIPOTLE CHICKEN STEW 12 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160651",
+      "name": "TOMATILLO CHICKEN STEW 12 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160652",
+      "name": "GREEN LEMON RICE MIX 16 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160653",
+      "name": "BIRRIA RICE MIX 16 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160661",
+      "name": "BIRRIA STEW 12 oz",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160659",
+      "name": "BARBACOA RICE 16 OZ",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160660",
+      "name": "BARBACOA STEW 12 OZ",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "160663",
+      "name": "FEIJOADA BOWL 9 OZ",
+      "kind": "subrecipe",
+      "department": "ASSEMBLY",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "600057",
+      "name": "CHIPOTLE CHICKEN RICE BOWL WFM 10/9 oz",
+      "kind": "subrecipe",
+      "department": "FINISHED PRODUCT",
+      "storage": "Frozen"
+    },
+    {
+      "itemCode": "600066",
+      "name": "CHIPOTLE CHICKEN BOWL BIRRIA RICE BOWL 20/2CT (9oz)",
+      "kind": "subrecipe",
+      "department": "FINISHED PRODUCT",
+      "storage": "Frozen"
+    }
+  ]
+}
