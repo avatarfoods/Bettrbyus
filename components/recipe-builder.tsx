@@ -2,12 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowDown,
-  ArrowUp,
   CookingPot,
   FileText,
   GitBranch,
-  ListOrdered,
   Package,
   Pencil,
   Plus,
@@ -27,6 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { RecipeInstructions } from "@/components/recipe-instructions";
 import { RecipeSchemaMap } from "@/components/recipe-schema-map";
 import { cn } from "@/lib/utils";
 import {
@@ -54,12 +52,11 @@ import {
   type RecipeDepartment,
   type RecipeIngredient,
   type RecipeKind,
-  type RecipeStep,
   type RecipeType,
   type RecipeWorkspace,
 } from "@/lib/recipes/recipe-graph";
 
-const STORAGE_KEY = "tms-cooking-recipes-v4";
+const STORAGE_KEY = "tms-cooking-recipes-v5";
 
 type CreateDraft = {
   kind: RecipeKind;
@@ -190,40 +187,6 @@ export function RecipeBuilder() {
     updateSelected({
       ingredients: selected.ingredients.filter((item) => item.id !== ingredientId),
     });
-  }
-
-  function updateStep(stepId: string, text: string) {
-    if (!selected) return;
-    updateSelected({
-      steps: selected.steps.map((step) =>
-        step.id === stepId ? { ...step, text } : step
-      ),
-    });
-  }
-
-  function addStep() {
-    if (!selected) return;
-    const next: RecipeStep = { id: newId("step"), text: "" };
-    updateSelected({ steps: [...selected.steps, next] });
-    setEditing(true);
-  }
-
-  function removeStep(stepId: string) {
-    if (!selected) return;
-    updateSelected({
-      steps: selected.steps.filter((step) => step.id !== stepId),
-    });
-  }
-
-  function moveStep(stepId: string, direction: -1 | 1) {
-    if (!selected) return;
-    const index = selected.steps.findIndex((step) => step.id === stepId);
-    const nextIndex = index + direction;
-    if (index < 0 || nextIndex < 0 || nextIndex >= selected.steps.length) return;
-    const steps = [...selected.steps];
-    const [item] = steps.splice(index, 1);
-    steps.splice(nextIndex, 0, item);
-    updateSelected({ steps });
   }
 
   function openCreate(kind: RecipeKind) {
@@ -855,6 +818,88 @@ export function RecipeBuilder() {
                       }
                     />
                   </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="recipe-page">Page #</Label>
+                    <Input
+                      id="recipe-page"
+                      value={selected.page}
+                      onChange={(event) =>
+                        updateSelected({ page: event.target.value })
+                      }
+                      placeholder="E.36"
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="recipe-lot">Lot number</Label>
+                    <Input
+                      id="recipe-lot"
+                      value={selected.lotNumber}
+                      onChange={(event) =>
+                        updateSelected({ lotNumber: event.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="recipe-prod-date">Production date</Label>
+                    <Input
+                      id="recipe-prod-date"
+                      type="date"
+                      value={selected.productionDate}
+                      onChange={(event) =>
+                        updateSelected({ productionDate: event.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="recipe-shelf">Shelf life (days)</Label>
+                    <Input
+                      id="recipe-shelf"
+                      type="number"
+                      min="0"
+                      value={selected.shelfLifeDays}
+                      onChange={(event) =>
+                        updateSelected({
+                          shelfLifeDays: Number(event.target.value) || 0,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="recipe-order">Order total</Label>
+                    <Input
+                      id="recipe-order"
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={selected.orderTotal ?? ""}
+                      onChange={(event) =>
+                        updateSelected({
+                          orderTotal:
+                            event.target.value === ""
+                              ? null
+                              : Number(event.target.value),
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="recipe-target">Target units</Label>
+                    <Input
+                      id="recipe-target"
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={selected.targetUnits ?? ""}
+                      onChange={(event) =>
+                        updateSelected({
+                          targetUnits:
+                            event.target.value === ""
+                              ? null
+                              : Number(event.target.value),
+                        })
+                      }
+                    />
+                  </div>
                   <div className="grid gap-1.5 sm:col-span-2">
                     <Label htmlFor="recipe-notes">Notes</Label>
                     <textarea
@@ -1148,88 +1193,10 @@ export function RecipeBuilder() {
 
             <Separator className="mb-8" />
 
-            <section className="mb-10">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <ListOrdered className="size-4 text-muted-foreground" />
-                  <h2 className="text-sm font-semibold">Instructions</h2>
-                  <span className="text-xs text-muted-foreground">
-                    {selected.steps.length}
-                  </span>
-                </div>
-                <Button type="button" size="sm" onClick={addStep}>
-                  <Plus />
-                  Add instruction
-                </Button>
-              </div>
-
-              {selected.steps.length === 0 ? (
-                <p className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                  No instructions yet. Add cooking / prep steps for this recipe.
-                </p>
-              ) : (
-                <ol className="space-y-2">
-                  {selected.steps.map((step, index) => (
-                    <li
-                      key={step.id}
-                      className="flex gap-3 rounded-xl border bg-background p-3"
-                    >
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-xs font-semibold text-white">
-                        {index + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        {editing || !step.text ? (
-                          <textarea
-                            value={step.text}
-                            onChange={(event) =>
-                              updateStep(step.id, event.target.value)
-                            }
-                            placeholder={`Instruction ${index + 1}…`}
-                            rows={2}
-                            className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50"
-                          />
-                        ) : (
-                          <p className="text-sm leading-relaxed uppercase tracking-wide">
-                            {step.text}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 flex-col gap-0.5">
-                        <Button
-                          type="button"
-                          size="icon-xs"
-                          variant="ghost"
-                          disabled={index === 0}
-                          onClick={() => moveStep(step.id, -1)}
-                          aria-label="Move instruction up"
-                        >
-                          <ArrowUp />
-                        </Button>
-                        <Button
-                          type="button"
-                          size="icon-xs"
-                          variant="ghost"
-                          disabled={index === selected.steps.length - 1}
-                          onClick={() => moveStep(step.id, 1)}
-                          aria-label="Move instruction down"
-                        >
-                          <ArrowDown />
-                        </Button>
-                        <Button
-                          type="button"
-                          size="icon-xs"
-                          variant="ghost"
-                          onClick={() => removeStep(step.id)}
-                          aria-label="Delete instruction"
-                        >
-                          <Trash2 />
-                        </Button>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </section>
+            <RecipeInstructions
+              recipe={selected}
+              onChange={updateSelected}
+            />
           </div>
           </div>
         )}

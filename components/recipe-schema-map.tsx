@@ -37,6 +37,7 @@ import {
   batchYieldFromPct,
   buildRecipeMapGraph,
   createEmptyRecipe,
+  createBlankStep,
   formatQty,
   formatYieldPct,
   mapNodeHeight,
@@ -51,7 +52,6 @@ import {
   type RecipeIngredient,
   type RecipeKind,
   type RecipeMapGraph,
-  type RecipeStep,
   type RecipeType,
 } from "@/lib/recipes/recipe-graph";
 
@@ -251,7 +251,9 @@ export function RecipeSchemaMap({
 
   function addEditingStep() {
     if (!editingRecipe) return;
-    const next: RecipeStep = { id: newId("step"), text: "" };
+    const next = createBlankStep(
+      editingRecipe.recipeType === "per_unit" ? "line" : "batch"
+    );
     updateEditingRecipe({ steps: [...editingRecipe.steps, next] });
   }
 

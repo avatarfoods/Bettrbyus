@@ -1,3 +1,13 @@
+import {
+  CREW_ROLES,
+  STAGE_TYPES,
+  type CrewRole,
+  type DurationUnit,
+  type QtyUnit,
+  type StepMode,
+  type TempUnit,
+} from "@/lib/recipes/instruction-config";
+
 export const RECIPE_DEPARTMENTS = [
   "FINISHED PRODUCT",
   "ASSEMBLY",
@@ -25,9 +35,54 @@ export type RecipeKind = "recipe" | "subrecipe";
 export type RecipeType = "batch" | "per_unit";
 export type IngredientKind = "ingredient" | "subrecipe";
 
+export type RecipeCrewMember = {
+  role: CrewRole | string;
+  count: number;
+};
+
+export type RecipeStepMedia = {
+  kind: "photo" | "video";
+  url: string;
+  name?: string;
+};
+
 export type RecipeStep = {
   id: string;
+  /** Operator instruction text (Carlos prototype: txt). */
   text: string;
+  mode: StepMode;
+  type: string;
+  equipment: string;
+  setting: string;
+  /** Capacity / unit weight min–max */
+  capacityMin: string;
+  capacityMax: string;
+  capacityUm: QtyUnit | string;
+  temp: string;
+  tempUm: TempUnit | string;
+  durationMin: string;
+  durationMax: string;
+  durationUm: DurationUnit | string;
+  unitsPerHour: string;
+  lbPerHour: string;
+  mixFwdSec: string;
+  mixBackSec: string;
+  mixCycles: string;
+  mixSpeed: string;
+  crew: RecipeCrewMember[];
+  weigh: boolean;
+  recordTemp: boolean;
+  photo: boolean;
+  signOff: boolean;
+  metalDetect: boolean;
+  label: boolean;
+  ccp: boolean;
+  criticalLimit: string;
+  correctiveAction: string;
+  safety: string;
+  media: RecipeStepMedia[];
+  showSetting: boolean;
+  showSafety: boolean;
 };
 
 export type RecipeIngredient = {
@@ -73,6 +128,17 @@ export type CookingRecipe = {
   /** Ingredient quantities are ORIGINAL recipe amounts (Excel ORIGINAL RECIPE QTY). */
   ingredients: RecipeIngredient[];
   steps: RecipeStep[];
+  /** Default crew inherited by steps without their own crew. */
+  crew: RecipeCrewMember[];
+  /** Rules for the whole batch (printed on the batch sheet). */
+  generalRules: string;
+  /** Batch-sheet metadata */
+  page: string;
+  lotNumber: string;
+  productionDate: string;
+  shelfLifeDays: number;
+  orderTotal: number | null;
+  targetUnits: number | null;
 };
 
 export type RecipeWorkspace = {
@@ -104,13 +170,129 @@ export function createEmptyRecipe(kind: RecipeKind = "recipe"): CookingRecipe {
     notes: "",
     ingredients: [],
     steps: [],
+    crew: [
+      { role: "Supervisor", count: 1 },
+      { role: "Team member", count: 2 },
+    ],
+    generalRules: "",
+    page: "",
+    lotNumber: "",
+    productionDate: new Date().toISOString().slice(0, 10),
+    shelfLifeDays: 10,
+    orderTotal: null,
+    targetUnits: null,
+  };
+}
+
+export function createBlankStep(
+  mode: StepMode = "batch",
+  text = ""
+): RecipeStep {
+  return {
+    id: newId("step"),
+    text,
+    mode,
+    type: STAGE_TYPES[mode][0],
+    equipment: "",
+    setting: "",
+    capacityMin: "",
+    capacityMax: "",
+    capacityUm: mode === "line" ? "OZ" : "LB",
+    temp: "",
+    tempUm: "°F",
+    durationMin: "",
+    durationMax: "",
+    durationUm: "min",
+    unitsPerHour: "",
+    lbPerHour: "",
+    mixFwdSec: "",
+    mixBackSec: "",
+    mixCycles: "",
+    mixSpeed: "",
+    crew: [],
+    weigh: false,
+    recordTemp: false,
+    photo: false,
+    signOff: false,
+    metalDetect: false,
+    label: false,
+    ccp: false,
+    criticalLimit: "",
+    correctiveAction: "",
+    safety: "",
+    media: [],
+    showSetting: false,
+    showSafety: false,
+  };
+}
+
+function asCrew(raw: unknown): RecipeCrewMember[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const row = item as Record<string, unknown>;
+      const role =
+        typeof row.role === "string"
+          ? row.role
+          : typeof row.r === "string"
+            ? row.r
+            : CREW_ROLES[0];
+      const count = Number(row.count ?? row.n ?? 0) || 0;
+      return { role, count };
+    })
+    .filter((item): item is RecipeCrewMember => item != null);
+}
+
+/** Fill missing step fields from older local drafts / plain text steps. */
+export function normalizeStep(step: Partial<RecipeStep> & { id?: string; text?: string }): RecipeStep {
+  const mode = (step.mode && STAGE_TYPES[step.mode] ? step.mode : "batch") as StepMode;
+  const blank = createBlankStep(mode, step.text ?? "");
+  return {
+    ...blank,
+    ...step,
+    id: step.id ?? blank.id,
+    text: step.text ?? "",
+    mode,
+    type: step.type && String(step.type).length ? String(step.type) : blank.type,
+    equipment: step.equipment ?? "",
+    setting: step.setting ?? "",
+    capacityMin: step.capacityMin ?? "",
+    capacityMax: step.capacityMax ?? "",
+    capacityUm: step.capacityUm ?? blank.capacityUm,
+    temp: step.temp ?? "",
+    tempUm: step.tempUm ?? "°F",
+    durationMin: step.durationMin ?? "",
+    durationMax: step.durationMax ?? "",
+    durationUm: step.durationUm ?? "min",
+    unitsPerHour: step.unitsPerHour ?? "",
+    lbPerHour: step.lbPerHour ?? "",
+    mixFwdSec: step.mixFwdSec ?? "",
+    mixBackSec: step.mixBackSec ?? "",
+    mixCycles: step.mixCycles ?? "",
+    mixSpeed: step.mixSpeed ?? "",
+    crew: asCrew(step.crew),
+    weigh: Boolean(step.weigh),
+    recordTemp: Boolean(step.recordTemp),
+    photo: Boolean(step.photo),
+    signOff: Boolean(step.signOff),
+    metalDetect: Boolean(step.metalDetect),
+    label: Boolean(step.label),
+    ccp: Boolean(step.ccp),
+    criticalLimit: step.criticalLimit ?? "",
+    correctiveAction: step.correctiveAction ?? "",
+    safety: step.safety ?? "",
+    media: Array.isArray(step.media) ? step.media : [],
+    showSetting: Boolean(step.showSetting ?? (step.setting && String(step.setting).length)),
+    showSafety: Boolean(step.showSafety ?? (step.safety && String(step.safety).length)),
   };
 }
 
 /** Fill missing fields from older local drafts. */
 export function normalizeRecipe(recipe: CookingRecipe): CookingRecipe {
+  const base = createEmptyRecipe(recipe.kind);
   return {
-    ...createEmptyRecipe(recipe.kind),
+    ...base,
     ...recipe,
     allergen: recipe.allergen ?? "NONE",
     usda: recipe.usda ?? false,
@@ -118,7 +300,15 @@ export function normalizeRecipe(recipe: CookingRecipe): CookingRecipe {
     customBatchSize: recipe.customBatchSize ?? null,
     yieldPct: roundYieldPct(recipe.yieldPct ?? null),
     ingredients: recipe.ingredients ?? [],
-    steps: recipe.steps ?? [],
+    steps: (recipe.steps ?? []).map((step) => normalizeStep(step)),
+    crew: asCrew(recipe.crew).length ? asCrew(recipe.crew) : base.crew,
+    generalRules: recipe.generalRules ?? "",
+    page: recipe.page ?? "",
+    lotNumber: recipe.lotNumber ?? "",
+    productionDate: recipe.productionDate || base.productionDate,
+    shelfLifeDays: Number(recipe.shelfLifeDays ?? base.shelfLifeDays) || 10,
+    orderTotal: recipe.orderTotal ?? null,
+    targetUnits: recipe.targetUnits ?? null,
   };
 }
 
@@ -312,8 +502,8 @@ export function patchYieldPct(
   };
 }
 
-function step(text: string): RecipeStep {
-  return { id: newId("step"), text };
+function step(text: string, mode: StepMode = "batch"): RecipeStep {
+  return createBlankStep(mode, text);
 }
 
 function ingredient(
@@ -338,12 +528,36 @@ function ingredient(
 function withDefaults(
   recipe: Omit<
     CookingRecipe,
-    "allergen" | "usda" | "batchYield" | "yieldPct" | "customBatchSize"
+    | "allergen"
+    | "usda"
+    | "batchYield"
+    | "yieldPct"
+    | "customBatchSize"
+    | "crew"
+    | "generalRules"
+    | "page"
+    | "lotNumber"
+    | "productionDate"
+    | "shelfLifeDays"
+    | "orderTotal"
+    | "targetUnits"
   > &
     Partial<
       Pick<
         CookingRecipe,
-        "allergen" | "usda" | "batchYield" | "yieldPct" | "customBatchSize"
+        | "allergen"
+        | "usda"
+        | "batchYield"
+        | "yieldPct"
+        | "customBatchSize"
+        | "crew"
+        | "generalRules"
+        | "page"
+        | "lotNumber"
+        | "productionDate"
+        | "shelfLifeDays"
+        | "orderTotal"
+        | "targetUnits"
       >
     >
 ): CookingRecipe {
@@ -452,11 +666,67 @@ export function createDemoWorkspace(): RecipeWorkspace {
       ingredient("subrecipe", "CHIPOTLE CHICKEN MARINADE", 5.81, "LB", "s-marinade"),
     ],
     steps: [
-      step("ADD 7 POUNDS PER TRAY AND BAKE AT 400°F FOR 16-17 MINUTES."),
-      step("PLACE PRODUCT IN IQF TUNNEL AT -40°F FOR 10 MINUTES (ONLY ONCE)."),
-      step("DIVIDE INTO TWO CONTAINERS OF 25 POUNDS EACH (TOTAL 50 LB PER BATCH)."),
-      step("LABEL EACH CONTAINER WITH THE BATCH NUMBER."),
+      {
+        ...createBlankStep("batch", "ADD 7 POUNDS PER TRAY AND BAKE AT 400°F FOR 16-17 MINUTES."),
+        type: "COOK",
+        equipment: "Rational combi oven",
+        setting: "400 °F",
+        showSetting: true,
+        temp: "400",
+        durationMin: "16",
+        durationMax: "17",
+        capacityMin: "7",
+        capacityMax: "7",
+        capacityUm: "LB",
+        recordTemp: true,
+        crew: [{ role: "Machine operator", count: 1 }],
+      },
+      {
+        ...createBlankStep(
+          "batch",
+          "PLACE PRODUCT IN IQF TUNNEL AT -40°F FOR 10 MINUTES (ONLY ONCE)."
+        ),
+        type: "COOL",
+        equipment: "IQF tunnel",
+        setting: "−40 °F",
+        showSetting: true,
+        temp: "-40",
+        durationMin: "10",
+        durationMax: "10",
+        recordTemp: true,
+        signOff: true,
+        ccp: true,
+        criticalLimit: "Product leaves the tunnel at 40 °F or below.",
+        correctiveAction:
+          "Send product through a second pass and re-probe before packing.",
+        crew: [{ role: "Machine operator", count: 1 }],
+      },
+      {
+        ...createBlankStep(
+          "batch",
+          "DIVIDE INTO TWO CONTAINERS OF 25 POUNDS EACH (TOTAL 50 LB PER BATCH)."
+        ),
+        type: "PREP",
+        equipment: "Bench / by hand",
+        weigh: true,
+        photo: true,
+        durationMin: "8",
+        durationMax: "12",
+      },
+      {
+        ...createBlankStep("batch", "LABEL EACH CONTAINER WITH THE BATCH NUMBER."),
+        type: "HOLD",
+        equipment: "Bench / by hand",
+        label: true,
+        signOff: true,
+        durationMin: "2",
+        durationMax: "4",
+      },
     ],
+    generalRules:
+      "USDA product — keep the lot number with the batch from cook to pack. Sanitize trays and tunnel contact surfaces before and after the run.",
+    page: "E.12",
+    shelfLifeDays: 10,
   });
 
   const crema = {

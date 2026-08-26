@@ -5,6 +5,8 @@ import {
   normalizeIngredientName,
 } from "@/lib/purchasing/master-parser";
 
+export type LineStatus = "to_order" | "ordered" | "arrived" | "skipped";
+
 export type PurchaseCycle = {
   id: string;
   po_number: number | null;
@@ -14,8 +16,6 @@ export type PurchaseCycle = {
   import_id: string | null;
   created_at: string;
 };
-
-export type LineStatus = "to_order" | "ordered" | "arrived" | "skipped";
 
 export type PurchaseLine = {
   id: string;

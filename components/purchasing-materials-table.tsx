@@ -432,7 +432,7 @@ export function PurchasingMaterialsPage() {
           <Link
             href="/purchasing"
             className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-input bg-background text-foreground transition-colors hover:bg-muted"
-            aria-label="Back to Component Matrix"
+            aria-label="Back to Total Orders"
           >
             <ArrowLeft className="size-5" />
           </Link>

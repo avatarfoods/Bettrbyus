@@ -168,3 +168,48 @@
     height: auto;
   }
 }
+
+@media print {
+  @page {
+    size: letter portrait;
+    margin: 0.4in;
+  }
+
+  /* Hide app chrome; show only the Final Order PO body. */
+  body * {
+    visibility: hidden !important;
+  }
+
+  #purchasing-final-order-print,
+  #purchasing-final-order-print * {
+    visibility: visible !important;
+  }
+
+  #purchasing-final-order-print {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  .purchasing-final-order-dialog,
+  .purchasing-final-order-scroll {
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    position: static !important;
+    transform: none !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .print\:hidden {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}

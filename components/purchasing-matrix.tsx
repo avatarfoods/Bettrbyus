@@ -11,7 +11,9 @@ import {
   Loader2,
   Package,
   Plus,
+  Printer,
   RefreshCw,
+  Send,
   ShoppingCart,
   Snowflake,
   Trash2,
@@ -27,10 +29,20 @@ import {
   type GenerateResult,
 } from "@/lib/purchasing/import-actions";
 import {
+  buildFinalOrderSnapshot,
+  clearFinalOrderLocal,
+  groupLinesByItemCategory,
+  loadFinalOrder,
+  loadGroupTracking,
+  saveFinalOrder,
+  type FinalOrderSnapshot,
+  type GroupTrackingMap,
+} from "@/lib/purchasing/finalize-order";
+import { printFinalOrder } from "@/lib/purchasing/print-final-order";
+import {
   fetchCycles,
   fetchCycleWithLines,
   fetchLatestImport,
-  type LineStatus,
   type PurchaseCycle,
   type PurchaseLine,
 } from "@/lib/purchasing/fetch-cycles";
@@ -41,6 +53,7 @@ import {
   updatePurchaseLine,
 } from "@/lib/purchasing/update-line";
 import type { Material } from "@/lib/purchasing/types";
+import { PurchasingFinalOrderDialog } from "@/components/purchasing-final-order-dialog";
 import { PurchasingPlanDialog } from "@/components/purchasing-plan-dialog";
 import { PurchasingProductDetailDialog } from "@/components/purchasing-product-detail";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -64,25 +77,13 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
-const STATUS_LABELS: Record<LineStatus, string> = {
-  to_order: "To order",
-  ordered: "Ordered",
-  arrived: "Arrived",
-  skipped: "Skipped",
-};
-
 const MATRIX_COLUMN_DEFS = [
   { key: "itemCode", label: "Item #", always: true },
-  { key: "department", label: "Department", always: false },
   { key: "description", label: "Description", always: true },
   { key: "casesRequired", label: "Total case req.", always: false },
   { key: "onHand", label: "On hand", always: false },
   { key: "requiredToOrder", label: "Req. to order", always: false },
   { key: "totalLbs", label: "Total lbs", always: false },
-  { key: "orderBy", label: "Order by", always: false },
-  { key: "status", label: "Status", always: false },
-  { key: "eta", label: "ETA / Arrived", always: false },
-  { key: "notes", label: "Notes", always: false },
 ] as const;
 
 type MatrixColumnKey = (typeof MATRIX_COLUMN_DEFS)[number]["key"];
@@ -91,16 +92,11 @@ type VisibleColumns = Record<MatrixColumnKey, boolean>;
 
 const DEFAULT_VISIBLE_COLUMNS: VisibleColumns = {
   itemCode: true,
-  department: true,
   description: true,
   casesRequired: true,
   onHand: true,
   requiredToOrder: true,
   totalLbs: true,
-  orderBy: true,
-  status: true,
-  eta: true,
-  notes: true,
 };
 
 const VISIBLE_COLUMNS_STORAGE_KEY = "purchasing-matrix-visible-columns";
@@ -111,7 +107,12 @@ function loadVisibleColumns(): VisibleColumns {
     const raw = window.localStorage.getItem(VISIBLE_COLUMNS_STORAGE_KEY);
     if (!raw) return DEFAULT_VISIBLE_COLUMNS;
     const parsed = JSON.parse(raw) as Partial<VisibleColumns>;
-    return { ...DEFAULT_VISIBLE_COLUMNS, ...parsed, itemCode: true, description: true };
+    return {
+      ...DEFAULT_VISIBLE_COLUMNS,
+      ...parsed,
+      itemCode: true,
+      description: true,
+    };
   } catch {
     return DEFAULT_VISIBLE_COLUMNS;
   }
@@ -133,38 +134,7 @@ function formatTabDate(value: string) {
   }
 }
 
-/** Excel Master PO department sections (Produce is calculated but not shown). */
-const MASTER_PO_DEPT_ORDER = [
-  "FINISHED PRODUCT",
-  "FRESH MIXING",
-  "GARDE MANGER",
-  "ASSEMBLY",
-  "MAIN KITCHEN",
-] as const;
-
-const MASTER_PO_DEPT_STYLES: Record<string, string> = {
-  "FINISHED PRODUCT":
-    "bg-orange-100/90 text-orange-950 dark:bg-orange-950/50 dark:text-orange-100",
-  "FRESH MIXING":
-    "bg-sky-100/90 text-sky-950 dark:bg-sky-950/50 dark:text-sky-100",
-  "GARDE MANGER":
-    "bg-green-100/90 text-green-950 dark:bg-green-950/50 dark:text-green-100",
-  ASSEMBLY:
-    "bg-purple-100/90 text-purple-950 dark:bg-purple-950/50 dark:text-purple-100",
-  "MAIN KITCHEN":
-    "bg-red-100/90 text-red-950 dark:bg-red-950/50 dark:text-red-100",
-  OTHER: "bg-muted/60 text-muted-foreground",
-};
-
-const MASTER_PO_DEPT_LABELS: Record<string, string> = {
-  "FINISHED PRODUCT": "Finished Product",
-  "FRESH MIXING": "Fresh Mixing",
-  "GARDE MANGER": "Garde Manger",
-  ASSEMBLY: "Assembly",
-  "MAIN KITCHEN": "Main Kitchen",
-  OTHER: "Other",
-};
-
+/** Excel Master PO department labels — only used to hide Produce rows. */
 function normalizeMasterPoDepartment(value: string | null | undefined): string {
   const raw = (value ?? "").trim().toUpperCase();
   if (!raw) return "OTHER";
@@ -174,65 +144,16 @@ function normalizeMasterPoDepartment(value: string | null | undefined): string {
   return raw;
 }
 
-function departmentLabel(value: string | null | undefined): string {
-  const key = normalizeMasterPoDepartment(value);
-  return MASTER_PO_DEPT_LABELS[key] ?? key;
-}
-
 function isProduceBuyLine(line: PurchaseLine): boolean {
   if (line.material?.storage_type === "produce") return true;
   const dept = normalizeMasterPoDepartment(line.material?.department);
   return dept === "PRODUCE";
 }
 
-function groupLinesByDepartment(lines: PurchaseLine[]) {
-  const buckets = new Map<string, PurchaseLine[]>();
-  for (const line of lines) {
-    if (isProduceBuyLine(line)) continue;
-    const dept = normalizeMasterPoDepartment(line.material?.department);
-    if (dept === "PRODUCE") continue;
-    const list = buckets.get(dept) ?? [];
-    list.push(line);
-    buckets.set(dept, list);
-  }
-  const sections: { key: string; label: string; lines: PurchaseLine[] }[] = [];
-  for (const key of MASTER_PO_DEPT_ORDER) {
-    const deptLines = buckets.get(key);
-    if (deptLines && deptLines.length > 0) {
-      sections.push({
-        key,
-        label: MASTER_PO_DEPT_LABELS[key] ?? key,
-        lines: deptLines,
-      });
-      buckets.delete(key);
-    }
-  }
-  for (const [key, deptLines] of [...buckets.entries()].sort((a, b) =>
-    a[0].localeCompare(b[0])
-  )) {
-    if (deptLines.length === 0) continue;
-    sections.push({
-      key,
-      label: MASTER_PO_DEPT_LABELS[key] ?? key,
-      lines: deptLines,
-    });
-  }
-  return sections;
-}
-
 function formatShortDate(value: string | null) {
   if (!value) return "—";
   try {
     return format(parseISO(value), "MM/dd");
-  } catch {
-    return value;
-  }
-}
-
-function formatArrivedAt(value: string | null) {
-  if (!value) return "—";
-  try {
-    return format(parseISO(value), "MM/dd/yyyy h:mm a");
   } catch {
     return value;
   }
@@ -245,16 +166,6 @@ function formatSyncedAt(value: string | null) {
   } catch {
     return null;
   }
-}
-
-function orderByTone(line: PurchaseLine): string {
-  if (line.status !== "to_order" || !line.order_by_date) return "";
-  const today = todayIso();
-  if (line.order_by_date < today) return "text-destructive font-semibold";
-  if (line.order_by_date === today) {
-    return "text-amber-700 dark:text-amber-400 font-semibold";
-  }
-  return "";
 }
 
 type ImportInfo = {
@@ -440,7 +351,6 @@ function MatrixLineRow({
   onChanged,
   onOpenDetail,
 }: LineRowProps) {
-  const [notes, setNotes] = useState(line.notes ?? "");
   const [casesRequired, setCasesRequired] = useState(String(line.cases_required));
   const [editingCases, setEditingCases] = useState(false);
   const casesInputRef = useRef<HTMLInputElement | null>(null);
@@ -492,16 +402,13 @@ function MatrixLineRow({
   }
 
   const material = line.material;
-  const isArrived = line.status === "arrived";
-  const deptKey = normalizeMasterPoDepartment(material?.department);
-  const deptName = departmentLabel(material?.department);
 
   return (
     <TableRow
       className={cn(
         "h-9",
         line.is_emergency && "bg-destructive/5",
-        line.required_to_order > 0 && line.status === "to_order" && "bg-amber-50/60 dark:bg-amber-950/20"
+        line.required_to_order > 0 && "bg-amber-50/60 dark:bg-amber-950/20"
       )}
     >
       {visibleColumns.itemCode && (
@@ -517,19 +424,6 @@ function MatrixLineRow({
           ) : (
             "—"
           )}
-        </TableCell>
-      )}
-      {visibleColumns.department && (
-        <TableCell className="px-2 py-1 text-xs">
-          <span
-            className={cn(
-              "inline-block max-w-36 truncate rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
-              MASTER_PO_DEPT_STYLES[deptKey] ?? MASTER_PO_DEPT_STYLES.OTHER
-            )}
-            title={deptName}
-          >
-            {deptName}
-          </span>
         </TableCell>
       )}
       {visibleColumns.description && (
@@ -604,63 +498,28 @@ function MatrixLineRow({
           {line.lbs_required != null ? Math.round(line.lbs_required).toLocaleString() : "—"}
         </TableCell>
       )}
-      {visibleColumns.orderBy && (
-        <TableCell className={cn("px-2 py-1 text-xs tabular-nums", orderByTone(line))}>
-          {formatShortDate(line.order_by_date)}
-        </TableCell>
-      )}
-      {visibleColumns.status && (
-        <TableCell className="px-1 py-1">
-          <select
-            value={line.status}
-            onChange={(event) => void save({ status: event.target.value as LineStatus })}
-            disabled={isSaving}
-            className="h-7 w-full min-w-24 rounded border border-input bg-background px-1 text-xs"
-          >
-            {(Object.keys(STATUS_LABELS) as LineStatus[]).map((status) => (
-              <option key={status} value={status}>
-                {STATUS_LABELS[status]}
-              </option>
-            ))}
-          </select>
-        </TableCell>
-      )}
-      {visibleColumns.eta && (
-        <TableCell className="px-1 py-1">
-          {isArrived ? (
-            <span
-              className="block min-w-36 px-1 text-xs font-medium text-green-700 dark:text-green-400"
-              title="Actual arrival"
-            >
-              {formatArrivedAt(line.arrived_at)}
-            </span>
-          ) : (
-            <Input
-              type="date"
-              value={line.arrival_date ?? ""}
-              onChange={(event) => void save({ arrival_date: event.target.value || null })}
-              disabled={isSaving}
-              className="h-7 w-32 px-1 text-xs"
-              title="Expected arrival (ETA)"
-            />
-          )}
-        </TableCell>
-      )}
-      {visibleColumns.notes && (
-        <TableCell className="px-1 py-1">
-          <Input
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            onBlur={() => {
-              const value = notes.trim() || null;
-              if (value !== (line.notes ?? null)) void save({ notes: value });
-            }}
-            placeholder=""
-            disabled={isSaving}
-            className="h-7 min-w-36 px-1 text-xs"
-          />
-        </TableCell>
-      )}
+    </TableRow>
+  );
+}
+
+type CategorySectionHeaderProps = {
+  label: string;
+  lineCount: number;
+  colSpan: number;
+};
+
+function CategorySectionHeader({
+  label,
+  lineCount,
+  colSpan,
+}: CategorySectionHeaderProps) {
+  return (
+    <TableRow className="bg-muted/70 hover:bg-muted/70">
+      <TableCell colSpan={colSpan} className="px-2 py-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wide">
+          {label} ({lineCount})
+        </span>
+      </TableCell>
     </TableRow>
   );
 }
@@ -702,10 +561,15 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
   const [isDeletingImport, setIsDeletingImport] = useState(false);
   const [detailMaterialId, setDetailMaterialId] = useState<string | null>(null);
   const [planOpen, setPlanOpen] = useState(false);
+  const [finalOrderOpen, setFinalOrderOpen] = useState(false);
+  const [finalOrderSnapshot, setFinalOrderSnapshot] =
+    useState<FinalOrderSnapshot | null>(null);
+  const [groupTracking, setGroupTracking] = useState<GroupTrackingMap>({});
   const [reloadKey, setReloadKey] = useState(0);
   const [isImporting, startImport] = useTransition();
   const [isGenerating, startGenerate] = useTransition();
   const [isSyncing, startSync] = useTransition();
+  const [isFinalizing, startFinalize] = useTransition();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -796,6 +660,11 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
       setLines(result.lines);
       if (result.cycle) {
         setRequiredDate(result.cycle.required_date);
+        setGroupTracking(loadGroupTracking(result.cycle.id));
+        setFinalOrderSnapshot(loadFinalOrder(result.cycle.id));
+      } else {
+        setGroupTracking({});
+        setFinalOrderSnapshot(null);
       }
     })();
 
@@ -842,14 +711,13 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
       if (!query) return true;
       return (
         (line.material?.item_code ?? "").toLowerCase().includes(query) ||
-        (line.material?.name ?? "").toLowerCase().includes(query) ||
-        departmentLabel(line.material?.department).toLowerCase().includes(query)
+        (line.material?.name ?? "").toLowerCase().includes(query)
       );
     });
   }, [activeLines, search, onlyToOrder]);
 
-  const departmentSections = useMemo(
-    () => groupLinesByDepartment(filteredLines),
+  const categorySections = useMemo(
+    () => groupLinesByItemCategory(filteredLines),
     [filteredLines]
   );
 
@@ -883,6 +751,18 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
       [...cycles].sort((a, b) => a.required_date.localeCompare(b.required_date)),
     [cycles]
   );
+
+  const localOrderByCycle = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const row of cycles) {
+      const saved = loadFinalOrder(row.id);
+      if (saved) map[row.id] = saved.orderNumber;
+    }
+    if (finalOrderSnapshot) {
+      map[finalOrderSnapshot.cycleId] = finalOrderSnapshot.orderNumber;
+    }
+    return map;
+  }, [cycles, finalOrderSnapshot]);
 
   function handleImportFile(file: File | null) {
     if (!file) return;
@@ -1003,6 +883,36 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
     }
   }
 
+  function handleCreateFinalOrder() {
+    if (!activeCycle) return;
+    setActionError(null);
+    setActionMessage(null);
+    startFinalize(() => {
+      const result = buildFinalOrderSnapshot({
+        cycle: activeCycle,
+        lines: activeLines,
+        tracking: groupTracking,
+      });
+      if (!result.ok) {
+        setActionError(result.message);
+        return;
+      }
+      saveFinalOrder(result.snapshot);
+      setFinalOrderSnapshot(result.snapshot);
+      setFinalOrderOpen(true);
+      setActionMessage(
+        `Final order ${result.snapshot.orderNumber} created (${result.snapshot.totals.lineCount} lines).`
+      );
+    });
+  }
+
+  function handleReopenFinalOrder() {
+    if (!activeCycle) return;
+    clearFinalOrderLocal(activeCycle.id);
+    setFinalOrderSnapshot(null);
+    setActionMessage("Final order cleared — you can edit and recreate it.");
+  }
+
   async function handleDeleteCycle() {
     if (!activeCycle) return;
     setIsDeleting(true);
@@ -1070,7 +980,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
             </div>
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-lg font-semibold tracking-tight">
-                Component Matrix
+                Total Orders
               </h1>
               <p className="truncate text-xs text-muted-foreground">
                 {latestImport ? (
@@ -1208,9 +1118,13 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                   )}
                 >
                   {formatTabDate(tab.required_date)}
-                  {tab.po_number != null && (
+                  {localOrderByCycle[tab.id] ? (
+                    <span className="ml-1 text-[10px] opacity-70">
+                      {localOrderByCycle[tab.id]}
+                    </span>
+                  ) : tab.po_number != null ? (
                     <span className="ml-1 text-[10px] opacity-70">#{tab.po_number}</span>
-                  )}
+                  ) : null}
                 </button>
               );
             })}
@@ -1361,7 +1275,11 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
           <div className="text-xs text-muted-foreground">
             {activeCycle ? (
               <>
-                Master PO #{activeCycle.po_number ?? "—"} · required{" "}
+                Master PO #{activeCycle.po_number ?? "—"}
+                {finalOrderSnapshot
+                  ? ` · Final ${finalOrderSnapshot.orderNumber}`
+                  : ""}{" "}
+                · required{" "}
                 {formatTabDate(activeCycle.required_date)}
                 {activeCycle.week_label ? ` · production ${activeCycle.week_label}` : ""} ·{" "}
                 {summary.total} to buy
@@ -1481,7 +1399,40 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
               />
               Need to order only
             </label>
-            {activeCycle && activeCycle.status === "in_progress" ? (
+            {activeCycle && !finalOrderSnapshot && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => handleCreateFinalOrder()}
+                disabled={isFinalizing || activeLines.length === 0}
+              >
+                {isFinalizing ? <Loader2 className="animate-spin" /> : <Send />}
+                Create Final Order PO
+              </Button>
+            )}
+            {activeCycle && finalOrderSnapshot && (
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setFinalOrderOpen(true)}
+                >
+                  <Printer />
+                  Print {finalOrderSnapshot.orderNumber}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleReopenFinalOrder()}
+                  disabled={isFinalizing}
+                >
+                  Reopen order
+                </Button>
+              </>
+            )}
+            {activeCycle && activeCycle.status === "in_progress" && !finalOrderSnapshot ? (
               <Button
                 type="button"
                 size="sm"
@@ -1490,7 +1441,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
               >
                 Mark done
               </Button>
-            ) : activeCycle ? (
+            ) : activeCycle && !finalOrderSnapshot ? (
               <Button
                 type="button"
                 size="sm"
@@ -1536,11 +1487,6 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                       Item #
                     </TableHead>
                   )}
-                  {visibleColumns.department && (
-                    <TableHead className="h-8 px-2 text-[11px] font-semibold uppercase tracking-wide">
-                      Department
-                    </TableHead>
-                  )}
                   {visibleColumns.description && (
                     <TableHead className="h-8 min-w-48 px-2 text-[11px] font-semibold uppercase tracking-wide">
                       Description
@@ -1566,26 +1512,6 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                       Total lbs
                     </TableHead>
                   )}
-                  {visibleColumns.orderBy && (
-                    <TableHead className="h-8 px-2 text-[11px] font-semibold uppercase tracking-wide">
-                      Order by
-                    </TableHead>
-                  )}
-                  {visibleColumns.status && (
-                    <TableHead className="h-8 w-28 px-2 text-[11px] font-semibold uppercase tracking-wide">
-                      Status
-                    </TableHead>
-                  )}
-                  {visibleColumns.eta && (
-                    <TableHead className="h-8 w-36 px-2 text-[11px] font-semibold uppercase tracking-wide">
-                      ETA / Arrived
-                    </TableHead>
-                  )}
-                  {visibleColumns.notes && (
-                    <TableHead className="h-8 min-w-40 px-2 text-[11px] font-semibold uppercase tracking-wide">
-                      Notes
-                    </TableHead>
-                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1602,22 +1528,13 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                   </TableRow>
                 ) : (
                   <>
-                    {departmentSections.map((section) => (
+                    {categorySections.map((section) => (
                       <Fragment key={section.key}>
-                        <TableRow
-                          className={cn(
-                            "hover:bg-inherit",
-                            MASTER_PO_DEPT_STYLES[section.key] ??
-                              MASTER_PO_DEPT_STYLES.OTHER
-                          )}
-                        >
-                          <TableCell
-                            colSpan={visibleColumnCount}
-                            className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide"
-                          >
-                            {section.label} ({section.lines.length})
-                          </TableCell>
-                        </TableRow>
+                        <CategorySectionHeader
+                          label={section.label}
+                          lineCount={section.lines.length}
+                          colSpan={visibleColumnCount}
+                        />
                         {section.lines.map((line) => (
                           <MatrixLineRow
                             key={line.id}
@@ -1645,6 +1562,13 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
           onAdded={() => setReloadKey((key) => key + 1)}
         />
       )}
+
+      <PurchasingFinalOrderDialog
+        open={finalOrderOpen}
+        onOpenChange={setFinalOrderOpen}
+        snapshot={finalOrderSnapshot}
+        isLoading={isFinalizing}
+      />
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="sm:max-w-md">
