@@ -313,9 +313,12 @@ export async function importMasterFile(formData: FormData): Promise<ImportResult
           name: row.name,
           department: row.department,
           type: row.type,
+          qtyOrder: row.qtyOrder,
+          spectCs: row.spectCs,
           lbsNeeded: row.lbsNeeded,
           casesNeeded: row.casesNeeded,
           productWeight: row.productWeight,
+          isProduce: row.isProduce,
         })),
         produce_item_codes: parsed.matrixItems
           .filter(
@@ -384,9 +387,10 @@ export async function importMasterFile(formData: FormData): Promise<ImportResult
 }
 
 /**
- * Generate Master PO buy list from the Excel MASTER PO# snapshot stored on import.
- * Excel already applied Component Usage + EXTRA %; TMS only nets on-hand and
- * tracks status / ETA / notes.
+ * Generate the Master PO buy list from the Excel MASTER PICKING ORDER table
+ * (MASTER PO# tab) captured at import. Every table row is kept so purchasing
+ * sees the full list; Excel column G "QTY ORDER" drives what is actually
+ * ordered, netted against on-hand.
  */
 export async function generateCycle(input: {
   importId: string;
@@ -408,10 +412,13 @@ export async function generateCycle(input: {
     itemCode: string;
     name: string;
     department: string;
-    type: string;
-    lbsNeeded: number;
-    casesNeeded: number;
-    productWeight: number | null;
+    type?: string;
+    qtyOrder?: number;
+    spectCs?: number | null;
+    lbsNeeded?: number;
+    casesNeeded?: number;
+    productWeight?: number | null;
+    isProduce?: boolean;
   };
 
   type MaterialRow = {
@@ -471,60 +478,42 @@ export async function generateCycle(input: {
     master_po_lines?: StoredMasterPoLine[];
     produce_item_codes?: string[];
   };
-  const produceCodes = new Set(
-    (importStats.produce_item_codes ?? []).map((code) => code.toUpperCase())
-  );
-  const masterPoLines = (importStats.master_po_lines ?? []).filter((line) => {
-    const dept = (line.department ?? "").trim().toUpperCase();
-    const type = (line.type ?? "").trim().toUpperCase();
-    if (type === "PRODUCE") return false;
-    if (dept === "PRODUCE" || dept.startsWith("PRODUCE ")) return false;
-    if (produceCodes.has(line.itemCode.toUpperCase())) return false;
-    return true;
-  });
+
+  const masterPoLines = importStats.master_po_lines ?? [];
   if (masterPoLines.length === 0) {
     return {
       ok: false,
       message:
-        "This import has no MASTER PO# snapshot. Re-import the master .xlsm after Excel has calculated Master PO.",
+        "This import has no MASTER PO# snapshot. Re-import the master .xlsm after Excel has calculated the picking order.",
     };
   }
-
-  function isProduceMaterial(material: MaterialRow) {
-    if (material.storage_type === "produce") return true;
-    const dept = (material.department ?? "").trim().toUpperCase();
-    if (dept === "PRODUCE" || dept.startsWith("PRODUCE ")) return true;
-    if (produceCodes.has(material.item_code.toUpperCase())) return true;
-    return false;
-  }
-
   const materialByCode = new Map(materials.map((m) => [m.item_code, m]));
   const materialByCodeUpper = new Map(
     materials.map((m) => [m.item_code.toUpperCase(), m])
   );
+  const materialByExactName = new Map<string, MaterialRow>();
+  for (const material of materials) {
+    const key = normalizeIngredientName(material.name);
+    if (!materialByExactName.has(key)) materialByExactName.set(key, material);
+  }
 
-  function findMaterial(line: StoredMasterPoLine) {
-    // Never trust item_code alone — Excel and Odoo reuse codes for different products
-    // (e.g. 510064 Gouda vs chocolate wafers).
+  /**
+   * Excel item code wins. A code collision (master 510064 = Gouda, Odoo 510064 =
+   * chocolate wafers) falls back to an exact name match only — never a fuzzy
+   * scan, which used to bind a row to whichever material happened to match first.
+   * No match at all is fine: the row still lists, just without a material.
+   */
+  function findMaterialByCode(itemCode: string, hintName?: string) {
     const byCode =
-      materialByCode.get(line.itemCode) ??
-      materialByCodeUpper.get(line.itemCode.toUpperCase());
-    if (
-      byCode &&
-      !isProduceMaterial(byCode) &&
-      ingredientMatchesMaterial(line.name, byCode.name)
-    ) {
-      return byCode;
+      materialByCode.get(itemCode) ??
+      materialByCodeUpper.get(itemCode.toUpperCase());
+    if (byCode) {
+      if (!hintName || ingredientMatchesMaterial(hintName, byCode.name)) {
+        return byCode;
+      }
     }
-
-    const key = normalizeIngredientName(line.name);
-    for (const material of materials) {
-      if (isProduceMaterial(material)) continue;
-      if (normalizeIngredientName(material.name) === key) return material;
-    }
-    for (const material of materials) {
-      if (isProduceMaterial(material)) continue;
-      if (ingredientMatchesMaterial(line.name, material.name)) return material;
+    if (hintName) {
+      return materialByExactName.get(normalizeIngredientName(hintName)) ?? null;
     }
     return null;
   }
@@ -668,13 +657,17 @@ export async function generateCycle(input: {
   }
 
   const linesWithoutSpec: string[] = [];
-  const droppedWithoutMaterial: string[] = [];
+  const unmatchedCodes: string[] = [];
+  const nameMismatches: string[] = [];
   const now = new Date().toISOString();
   const requiredDate = new Date(`${input.requiredDate}T00:00:00`);
 
   type BuyLine = {
     cycle_id: string;
-    material_id: string;
+    /** Null when the Excel code has no material — the row still lists. */
+    material_id: string | null;
+    item_code: string;
+    item_name: string;
     cases_required: number;
     lbs_required: number | null;
     on_hand_cases: number | null;
@@ -690,40 +683,48 @@ export async function generateCycle(input: {
     notes?: string | null;
   };
 
-  // Multiple Excel item codes can resolve to one Odoo material — merge so
-  // upsert does not hit the same (cycle_id, material_id) twice.
-  const mergedByMaterial = new Map<string, BuyLine>();
+  const mergedByKey = new Map<string, BuyLine>();
   const departmentUpdates = new Map<string, string>();
+  let rowsWithQty = 0;
 
   for (const poLine of masterPoLines) {
-    const material = findMaterial(poLine);
-    if (!material) {
-      droppedWithoutMaterial.push(`${poLine.itemCode} ${poLine.name}`);
-      continue;
-    }
+    const itemCode = (poLine.itemCode ?? "").trim();
+    if (!itemCode) continue;
 
     const dept = (poLine.department ?? "").trim();
-    if (dept && dept.toUpperCase() !== "OTHER") {
+    const excelName = (poLine.name ?? "").trim() || itemCode;
+
+    const material = findMaterialByCode(itemCode, poLine.name);
+    if (!material) {
+      const collision = materialByCodeUpper.get(itemCode.toUpperCase());
+      if (collision) {
+        // Same code, different product (master 510064 = Gouda, Odoo 510064 =
+        // chocolate wafers). Listing it under the Odoo name would be a lie, so
+        // the row keeps its Excel identity and lands in Other.
+        nameMismatches.push(
+          `${itemCode}: Excel "${excelName}" vs Odoo "${collision.name}"`
+        );
+      } else {
+        unmatchedCodes.push(`${itemCode} ${excelName}`);
+      }
+    }
+
+    if (material && dept && dept.toUpperCase() !== "OTHER") {
       departmentUpdates.set(material.id, dept);
     }
 
-    let casesRequired = Math.ceil(poLine.casesNeeded * extraFactor);
-    const lbs = poLine.lbsNeeded > 0 ? poLine.lbsNeeded * extraFactor : 0;
-    if (casesRequired <= 0 && lbs > 0) {
-      const weight =
-        (poLine.productWeight && poLine.productWeight > 0
-          ? poLine.productWeight
-          : null) ?? material.lbs_per_case;
-      if (weight && weight > 0) {
-        casesRequired = Math.ceil(lbs / weight);
-      } else {
-        casesRequired = Math.ceil(lbs);
-        linesWithoutSpec.push(`${material.item_code} ${material.name}`);
-      }
-    }
-    if (casesRequired <= 0) continue;
+    // Excel column G is the order quantity; 0 still lists so the full
+    // MASTER PICKING ORDER table stays visible in TMS.
+    const rawQty = Number(poLine.qtyOrder);
+    const qtyOrder = Number.isFinite(rawQty) && rawQty > 0 ? rawQty : 0;
+    const casesRequired = qtyOrder > 0 ? Math.ceil(qtyOrder * extraFactor) : 0;
+    if (casesRequired > 0) rowsWithQty += 1;
 
-    const existing = mergedByMaterial.get(material.id);
+    const rawLbs = Number(poLine.lbsNeeded);
+    const lbs = Number.isFinite(rawLbs) && rawLbs > 0 ? rawLbs * extraFactor : 0;
+
+    const key = material ? material.id : `code:${itemCode.toUpperCase()}`;
+    const existing = mergedByKey.get(key);
     if (existing) {
       existing.cases_required += casesRequired;
       const totalLbs = (existing.lbs_required ?? 0) + lbs;
@@ -731,13 +732,15 @@ export async function generateCycle(input: {
       continue;
     }
 
-    const bufferDays =
-      material.lead_time_days + (material.is_protein ? material.thaw_buffer_days : 0);
+    const bufferDays = material
+      ? material.lead_time_days +
+        (material.is_protein ? material.thaw_buffer_days : 0)
+      : 0;
     const orderBy = new Date(requiredDate);
     orderBy.setDate(orderBy.getDate() - bufferDays);
     const orderByDate = orderBy.toISOString().slice(0, 10);
 
-    const previous = existingByMaterial.get(material.id);
+    const previous = material ? existingByMaterial.get(material.id) : undefined;
     const carryOver =
       previous && !previous.is_emergency
         ? {
@@ -748,12 +751,14 @@ export async function generateCycle(input: {
           }
         : {};
 
-    mergedByMaterial.set(material.id, {
+    mergedByKey.set(key, {
       cycle_id: cycle.id,
-      material_id: material.id,
+      material_id: material?.id ?? null,
+      item_code: itemCode,
+      item_name: excelName,
       cases_required: casesRequired,
       lbs_required: lbs > 0 ? lbs : null,
-      on_hand_cases: onHand.get(material.id) ?? null,
+      on_hand_cases: material ? onHand.get(material.id) ?? null : null,
       required_to_order: 0,
       order_by_date: orderByDate,
       is_emergency: false,
@@ -764,34 +769,79 @@ export async function generateCycle(input: {
     });
   }
 
-  const newLines = [...mergedByMaterial.values()].map((line) => {
+  const newLines = [...mergedByKey.values()].map((line) => {
     const need = line.cases_required;
-    const before = earlierNeed.get(line.material_id) ?? 0;
-    const available = onHand.get(line.material_id) ?? 0;
+    const before = line.material_id
+      ? earlierNeed.get(line.material_id) ?? 0
+      : 0;
+    const available = line.material_id
+      ? onHand.get(line.material_id) ?? 0
+      : 0;
     return {
       ...line,
-      required_to_order: Math.min(need, Math.max(0, before + need - available)),
+      required_to_order:
+        need > 0 ? Math.min(need, Math.max(0, before + need - available)) : 0,
     };
   });
 
-  for (let i = 0; i < newLines.length; i += CHUNK_SIZE) {
-    const chunk = newLines.slice(i, i + CHUNK_SIZE);
-    let { error } = await supabase
-      .from("purchasing_lines")
-      .upsert(chunk, { onConflict: "cycle_id,material_id" });
-    if (error && error.message.includes("arrived_at")) {
-      const withoutArrived = chunk.map(({ arrived_at: _a, ...rest }) => rest);
-      const retry = await supabase
+  const matchedLines = newLines.filter((line) => line.material_id != null);
+  const unmatchedLines = newLines.filter((line) => line.material_id == null);
+  let unmatchedSkipped = 0;
+
+  async function saveChunk(
+    chunk: BuyLine[],
+    mode: "upsert" | "insert"
+  ): Promise<string | null> {
+    async function attempt(rows: Record<string, unknown>[]) {
+      if (mode === "insert") {
+        return supabase.from("purchasing_lines").insert(rows);
+      }
+      return supabase
         .from("purchasing_lines")
-        .upsert(withoutArrived, { onConflict: "cycle_id,material_id" });
-      error = retry.error;
+        .upsert(rows, { onConflict: "cycle_id,material_id" });
     }
-    if (error) {
-      return { ok: false, message: `Saving buy lines failed: ${error.message}` };
+
+    let rows: Record<string, unknown>[] = chunk;
+    let { error } = await attempt(rows);
+
+    if (error && error.message.includes("arrived_at")) {
+      rows = rows.map(({ arrived_at: _a, ...rest }) => rest);
+      ({ error } = await attempt(rows));
+    }
+    // Databases without the 20260826 migration have no item_code/item_name.
+    if (
+      error &&
+      (error.message.includes("item_code") || error.message.includes("item_name"))
+    ) {
+      if (mode === "insert") return "missing-columns";
+      rows = rows.map(({ item_code: _c, item_name: _n, ...rest }) => rest);
+      ({ error } = await attempt(rows));
+    }
+
+    return error ? error.message : null;
+  }
+
+  for (let i = 0; i < matchedLines.length; i += CHUNK_SIZE) {
+    const failure = await saveChunk(matchedLines.slice(i, i + CHUNK_SIZE), "upsert");
+    if (failure) {
+      return { ok: false, message: `Saving buy lines failed: ${failure}` };
     }
   }
 
-  // Stamp Master PO departments onto materials so filters/grouping stay correct.
+  // Material-less rows have no (cycle_id, material_id) key to conflict on, and
+  // the cycle's non-emergency lines were cleared above, so a plain insert is safe.
+  for (let i = 0; i < unmatchedLines.length; i += CHUNK_SIZE) {
+    const chunk = unmatchedLines.slice(i, i + CHUNK_SIZE);
+    const failure = await saveChunk(chunk, "insert");
+    if (failure === "missing-columns") {
+      unmatchedSkipped += chunk.length;
+      continue;
+    }
+    if (failure) {
+      return { ok: false, message: `Saving unmatched lines failed: ${failure}` };
+    }
+  }
+
   for (const [materialId, department] of departmentUpdates) {
     const { error } = await supabase
       .from("purchasing_materials")
@@ -811,26 +861,42 @@ export async function generateCycle(input: {
 
   revalidatePath("/purchasing");
 
+  const mergedAway = masterPoLines.length - newLines.length;
+  const savedLines = newLines.length - unmatchedSkipped;
+
+  const warnings = [
+    ...(unmatchedCodes.length > 0
+      ? [
+          `${unmatchedCodes.length} code(s) not in Odoo — listed under Other: ${unmatchedCodes
+            .slice(0, 8)
+            .join("; ")}${unmatchedCodes.length > 8 ? "…" : ""}`,
+        ]
+      : []),
+    ...(nameMismatches.length > 0
+      ? [
+          `${nameMismatches.length} code(s) exist in Odoo under a different product — listed under Other with the Excel name: ${nameMismatches
+            .slice(0, 5)
+            .join("; ")}${nameMismatches.length > 5 ? "…" : ""}`,
+        ]
+      : []),
+    ...(mergedAway > 0
+      ? [`${mergedAway} Excel row(s) merged into a duplicate item code.`]
+      : []),
+    ...(unmatchedSkipped > 0
+      ? [
+          `${unmatchedSkipped} unmatched row(s) could not be saved. Run migration 20260826_purchasing_unmatched_lines.sql, then regenerate.`,
+        ]
+      : []),
+  ];
+
   return {
     ok: true,
-    message: `Master PO for ${input.requiredDate} (production ${input.fromDate} to ${input.toDate}): ${newLines.length} lines from Excel MASTER PO#${
-      droppedWithoutMaterial.length > 0
-        ? `, ${droppedWithoutMaterial.length} codes missing from Odoo materials`
-        : ""
-    }.`,
+    message: `Master PO for ${input.requiredDate}: ${savedLines} of ${masterPoLines.length} Excel MASTER PICKING ORDER rows (${rowsWithQty} with QTY ORDER > 0).`,
     cycleId: cycle.id,
-    linesCreated: newLines.length,
+    linesCreated: savedLines,
     linesWithoutSpec,
     unresolved: [],
-    warnings: [
-      ...(droppedWithoutMaterial.length > 0
-        ? [
-            `No Odoo material for: ${droppedWithoutMaterial.slice(0, 8).join("; ")}${
-              droppedWithoutMaterial.length > 8 ? "…" : ""
-            }`,
-          ]
-        : []),
-    ],
+    warnings,
   };
 }
 

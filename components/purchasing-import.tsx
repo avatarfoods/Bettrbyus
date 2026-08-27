@@ -309,9 +309,10 @@ export function PurchasingImportPage() {
           <CardHeader>
             <CardTitle className="text-xl">2. Generate Master PO</CardTitle>
             <CardDescription>
-              Same as Excel: set production dates (Production Need window), then
-              generate the Master PO buy list. Requirements come from the
-              schedule and are netted against on-hand inventory.
+              Builds the buy list from the Excel MASTER PICKING ORDER table
+              (MASTER PO# tab). Every row is listed; column QTY ORDER decides
+              what gets ordered, netted against on-hand inventory. Production
+              dates only label the week.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">

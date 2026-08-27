@@ -35,7 +35,7 @@ export function PurchasingFinalOrderDialog({
           <DialogTitle>Final Order PO</DialogTitle>
           <DialogDescription>
             Printable order with Req. to order, production week, required date, and
-            order number. Items are grouped by item # prefix (22xxx, 31xxx, …).
+            order number. Items are grouped by Odoo category.
           </DialogDescription>
         </DialogHeader>
 

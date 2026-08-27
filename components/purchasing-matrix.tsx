@@ -43,6 +43,8 @@ import {
   fetchCycles,
   fetchCycleWithLines,
   fetchLatestImport,
+  lineItemCode,
+  lineItemName,
   type PurchaseCycle,
   type PurchaseLine,
 } from "@/lib/purchasing/fetch-cycles";
@@ -100,6 +102,30 @@ const DEFAULT_VISIBLE_COLUMNS: VisibleColumns = {
 };
 
 const VISIBLE_COLUMNS_STORAGE_KEY = "purchasing-matrix-visible-columns";
+
+const ONLY_TO_ORDER_STORAGE_KEY = "purchasing-matrix-only-to-order";
+
+const HIDE_PRODUCE_STORAGE_KEY = "purchasing-matrix-hide-produce";
+
+/** Produce is ordered separately, but it still belongs in the full count. */
+function loadHideProduce(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(HIDE_PRODUCE_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+/** Default shows the full Master PO list; buyers can narrow to shortages. */
+function loadOnlyToOrder(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(ONLY_TO_ORDER_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
 
 function loadVisibleColumns(): VisibleColumns {
   if (typeof window === "undefined") return DEFAULT_VISIBLE_COLUMNS;
@@ -422,7 +448,12 @@ function MatrixLineRow({
               {material.item_code}
             </button>
           ) : (
-            "—"
+            <span
+              className="text-muted-foreground"
+              title="Not in Odoo — shown from the Excel MASTER PICKING ORDER"
+            >
+              {lineItemCode(line)}
+            </span>
           )}
         </TableCell>
       )}
@@ -442,7 +473,12 @@ function MatrixLineRow({
                 {material.name}
               </button>
             ) : (
-              <span className="truncate">Unknown</span>
+              <span
+                className="truncate text-muted-foreground"
+                title="Not in Odoo — shown from the Excel MASTER PICKING ORDER"
+              >
+                {lineItemName(line)}
+              </span>
             )}
             {material?.is_protein && <Snowflake className="size-3 shrink-0 text-sky-500" />}
           </span>
@@ -539,7 +575,8 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [onlyToOrder, setOnlyToOrder] = useState(true);
+  const [onlyToOrder, setOnlyToOrder] = useState(false);
+  const [hideProduce, setHideProduce] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<VisibleColumns>(
     DEFAULT_VISIBLE_COLUMNS
   );
@@ -628,6 +665,8 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
 
   useEffect(() => {
     setVisibleColumns(loadVisibleColumns());
+    setOnlyToOrder(loadOnlyToOrder());
+    setHideProduce(loadHideProduce());
   }, []);
 
   useEffect(() => {
@@ -684,6 +723,24 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
     [visibleColumns]
   );
 
+  function handleOnlyToOrderChange(next: boolean) {
+    setOnlyToOrder(next);
+    try {
+      window.localStorage.setItem(ONLY_TO_ORDER_STORAGE_KEY, String(next));
+    } catch {
+      // ignore storage failures
+    }
+  }
+
+  function handleHideProduceChange(next: boolean) {
+    setHideProduce(next);
+    try {
+      window.localStorage.setItem(HIDE_PRODUCE_STORAGE_KEY, String(next));
+    } catch {
+      // ignore storage failures
+    }
+  }
+
   function toggleColumn(key: MatrixColumnKey) {
     const def = MATRIX_COLUMN_DEFS.find((col) => col.key === key);
     if (def?.always) return;
@@ -704,22 +761,44 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
   const filteredLines = useMemo(() => {
     const query = search.trim().toLowerCase();
     return activeLines.filter((line) => {
-      if (isProduceBuyLine(line)) return false;
+      if (hideProduce && isProduceBuyLine(line)) return false;
       if (onlyToOrder && !line.is_emergency && line.required_to_order <= 0) {
         return false;
       }
       if (!query) return true;
       return (
-        (line.material?.item_code ?? "").toLowerCase().includes(query) ||
-        (line.material?.name ?? "").toLowerCase().includes(query)
+        lineItemCode(line).toLowerCase().includes(query) ||
+        lineItemName(line).toLowerCase().includes(query)
       );
     });
-  }, [activeLines, search, onlyToOrder]);
+  }, [activeLines, search, onlyToOrder, hideProduce]);
 
   const categorySections = useMemo(
     () => groupLinesByItemCategory(filteredLines),
     [filteredLines]
   );
+
+  const totals = useMemo(() => {
+    return filteredLines.reduce(
+      (acc, line) => {
+        acc.items += 1;
+        acc.casesRequired += line.cases_required;
+        acc.onHand += line.on_hand_cases ?? 0;
+        acc.requiredToOrder += line.required_to_order;
+        acc.lbsRequired += line.lbs_required ?? 0;
+        if (line.required_to_order > 0) acc.itemsToOrder += 1;
+        return acc;
+      },
+      {
+        items: 0,
+        itemsToOrder: 0,
+        casesRequired: 0,
+        onHand: 0,
+        requiredToOrder: 0,
+        lbsRequired: 0,
+      }
+    );
+  }, [filteredLines]);
 
   const summary = useMemo(() => {
     const actionable = activeLines.filter(
@@ -1189,9 +1268,10 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                 : "Generate Master PO"}
             </div>
             <p className="mb-2 text-xs text-muted-foreground">
-              Quantities come from Excel MASTER PO# (without Excel EXTRA). Set
-              EXTRA % here if you want a buffer. You can also edit Total case
-              req. on any row after generating.
+              Quantities come from Excel MASTER PICKING ORDER (column QTY
+              ORDER), then netted against on-hand. Rows with QTY ORDER 0 still
+              list. Set EXTRA % if you want a buffer, and you can edit Total
+              case req. on any row after generating.
             </p>
             <div className="grid gap-3 sm:grid-cols-5 sm:items-end">
               <div className="flex flex-col gap-1">
@@ -1318,7 +1398,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                   variant="outline"
                   onClick={handleApplyExtra}
                   disabled={isGenerating}
-                  title="Recalculate cases/lbs from Excel snapshot with this EXTRA %"
+                  title="Recalculate cases/lbs from the production schedule with this EXTRA %"
                 >
                   {isGenerating ? <Loader2 className="animate-spin" /> : "Apply"}
                 </Button>
@@ -1390,14 +1470,29 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                 </div>
               )}
             </div>
-            <label className="flex items-center gap-1.5 text-xs">
+            <label
+              className="flex items-center gap-1.5 text-xs"
+              title="Hide rows already covered by on hand (Req. to order = 0)"
+            >
               <input
                 type="checkbox"
                 checked={onlyToOrder}
-                onChange={(event) => setOnlyToOrder(event.target.checked)}
+                onChange={(event) => handleOnlyToOrderChange(event.target.checked)}
                 className="size-3.5 accent-primary"
               />
               Need to order only
+            </label>
+            <label
+              className="flex items-center gap-1.5 text-xs"
+              title="Produce is ordered separately from the Produce Schedule"
+            >
+              <input
+                type="checkbox"
+                checked={hideProduce}
+                onChange={(event) => handleHideProduceChange(event.target.checked)}
+                className="size-3.5 accent-primary"
+              />
+              Hide produce
             </label>
             {activeCycle && !finalOrderSnapshot && (
               <Button
@@ -1474,8 +1569,8 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
           <p className="text-sm text-destructive">{loadError}</p>
         ) : !activeCycle ? (
           <div className="flex min-h-40 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
-            No Master PO selected. Import the master plan (with MASTER PO#
-            calculated), set production dates, then generate.
+            No Master PO selected. Import the master plan, set production dates,
+            then generate from the schedule.
           </div>
         ) : (
           <div className="overflow-x-auto rounded-md border">
@@ -1546,6 +1641,39 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                         ))}
                       </Fragment>
                     ))}
+                    <TableRow className="border-t-2 bg-muted/60 hover:bg-muted/60">
+                      {visibleColumns.itemCode && (
+                        <TableCell className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide">
+                          Total
+                        </TableCell>
+                      )}
+                      {visibleColumns.description && (
+                        <TableCell className="px-2 py-1.5 text-xs text-muted-foreground">
+                          {totals.items.toLocaleString()} items ·{" "}
+                          {totals.itemsToOrder.toLocaleString()} to order
+                        </TableCell>
+                      )}
+                      {visibleColumns.casesRequired && (
+                        <TableCell className="px-2 py-1.5 text-right text-xs font-semibold tabular-nums">
+                          {totals.casesRequired.toLocaleString()}
+                        </TableCell>
+                      )}
+                      {visibleColumns.onHand && (
+                        <TableCell className="px-2 py-1.5 text-right text-xs tabular-nums text-muted-foreground">
+                          {totals.onHand.toLocaleString()}
+                        </TableCell>
+                      )}
+                      {visibleColumns.requiredToOrder && (
+                        <TableCell className="px-2 py-1.5 text-right text-xs font-semibold tabular-nums">
+                          {totals.requiredToOrder.toLocaleString()}
+                        </TableCell>
+                      )}
+                      {visibleColumns.totalLbs && (
+                        <TableCell className="px-2 py-1.5 text-right text-xs tabular-nums text-muted-foreground">
+                          {Math.round(totals.lbsRequired).toLocaleString()}
+                        </TableCell>
+                      )}
+                    </TableRow>
                   </>
                 )}
               </TableBody>

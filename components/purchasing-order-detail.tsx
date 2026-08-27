@@ -12,6 +12,7 @@ import {
 } from "@/lib/purchasing/finalize-order";
 import { downloadFinalOrderExcel } from "@/lib/purchasing/download-final-order";
 import { printFinalOrder } from "@/lib/purchasing/print-final-order";
+import { PurchasingEmailCategoryDialog } from "@/components/purchasing-email-category-dialog";
 import { PurchasingFinalOrderView } from "@/components/purchasing-final-order-view";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ export function PurchasingOrderDetailPage({ cycleId }: Props) {
   const [snapshot, setSnapshot] = useState<FinalOrderSnapshot | null | undefined>(
     undefined
   );
+  const [emailGroupKey, setEmailGroupKey] = useState<string | null>(null);
 
   useEffect(() => {
     setSnapshot(loadFinalOrder(cycleId));
@@ -125,8 +127,18 @@ export function PurchasingOrderDetailPage({ cycleId }: Props) {
           interactive
           onGroupStatusChange={handleGroupStatusChange}
           onPrintGroup={handlePrintGroup}
+          onEmailGroup={setEmailGroupKey}
         />
       </div>
+
+      <PurchasingEmailCategoryDialog
+        open={emailGroupKey != null}
+        onOpenChange={(open) => {
+          if (!open) setEmailGroupKey(null);
+        }}
+        snapshot={snapshot}
+        groupKey={emailGroupKey}
+      />
     </div>
   );
 }

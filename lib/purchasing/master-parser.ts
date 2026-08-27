@@ -65,17 +65,23 @@ export type ParsedComponentUsage = {
   bySheet: Record<string, number>;
 };
 
-/** One row from Excel MASTER PO# (Component Usage lbs/cases already computed). */
+/** One row of the MASTER PICKING ORDER table on Excel MASTER PO#. */
 export type ParsedMasterPoLine = {
   itemCode: string;
   name: string;
   department: string;
   type: string;
+  /** Excel G "QTY ORDER" — cases purchasing actually orders. 0 = nothing to buy. */
+  qtyOrder: number;
+  /** Excel H "SPECT CS" — units per case. */
+  spectCs: number | null;
   /** LBS before EXTRA % (Excel R stripped of workbook EXTRA). */
   lbsNeeded: number;
   /** Cases before EXTRA % (Excel T stripped of workbook EXTRA). */
   casesNeeded: number;
   productWeight: number | null;
+  /** Produce rows stay in the list; the UI decides whether to show them. */
+  isProduce: boolean;
 };
 
 export type ParsedMasterFile = {
@@ -734,12 +740,13 @@ function parseComponentUsage(
 }
 
 /**
- * Read Excel MASTER PO# as purchasing already sees it.
+ * Read the MASTER PICKING ORDER table on Excel MASTER PO#.
  * Sheet range starts at column B, so sheet_to_json index 0 = Excel col B:
- *   B=TYPE, D=DEPT, E=CODE, F=ITEM, R=LBS NEEDED, S=weight, T=CASES NEEDED
+ *   B=TYPE, D=DEPT, E=CODE, F=ITEM, G=QTY ORDER, H=SPECT CS,
+ *   R=LBS NEEDED, S=weight, T=CASES NEEDED
  *
- * Excel R/T already include EXTRA (T2). We strip that so TMS can apply a
- * user-chosen EXTRA % at generate time (default 0 — not auto 15%).
+ * Every table row is kept — QTY ORDER 0 still lists in TMS so purchasing sees
+ * the full picking order. Excel R/T already include EXTRA (T2), stripped here.
  * Produce / Produce Raw rows are excluded (ordered separately).
  */
 function parseMasterPoSheet(
@@ -777,7 +784,10 @@ function parseMasterPoSheet(
 
   const lines: ParsedMasterPoLine[] = [];
   const seen = new Set<string>();
-  let skippedProduce = 0;
+  let produceCount = 0;
+  let duplicateCount = 0;
+  let skippedTypeRows = 0;
+  let skippedBlankRows = 0;
 
   for (const row of rows.slice(3)) {
     const type = String(row[0] ?? "")
@@ -789,28 +799,35 @@ function parseMasterPoSheet(
       .replace(/[\r\n]+/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-    if (!itemCode || !name) continue;
-    if (MASTER_PO_SKIP_TYPES.has(type)) continue;
-
-    if (
-      isProduceType(type) ||
-      isProduceDepartment(department) ||
-      produceCodes.has(itemCode.toUpperCase())
-    ) {
-      skippedProduce += 1;
+    if (!itemCode || !name) {
+      skippedBlankRows += 1;
+      continue;
+    }
+    if (MASTER_PO_SKIP_TYPES.has(type)) {
+      skippedTypeRows += 1;
       continue;
     }
 
+    const isProduce =
+      isProduceType(type) ||
+      isProduceDepartment(department) ||
+      produceCodes.has(itemCode.toUpperCase());
+    if (isProduce) produceCount += 1;
+
+    const qtyOrder = parseNumeric(String(row[5] ?? "")) ?? 0;
+    const spectCs = parseNumeric(String(row[6] ?? ""));
     const lbsWithExtra = parseNumeric(String(row[16] ?? "")) ?? 0;
     const productWeight = parseNumeric(String(row[17] ?? ""));
     const casesWithExtra = parseNumeric(String(row[18] ?? "")) ?? 0;
-    if (lbsWithExtra <= 0 && casesWithExtra <= 0) continue;
 
     const lbsNeeded = lbsWithExtra / stripFactor;
     const casesNeeded = casesWithExtra / stripFactor;
 
     const key = itemCode.toUpperCase();
-    if (seen.has(key)) continue;
+    if (seen.has(key)) {
+      duplicateCount += 1;
+      continue;
+    }
     seen.add(key);
 
     lines.push({
@@ -818,9 +835,12 @@ function parseMasterPoSheet(
       name,
       department: department || "OTHER",
       type: type || "UNKNOWN",
+      qtyOrder: qtyOrder > 0 ? qtyOrder : 0,
+      spectCs,
       lbsNeeded,
       casesNeeded,
       productWeight,
+      isProduce,
     });
   }
 
@@ -829,10 +849,15 @@ function parseMasterPoSheet(
       `No buy lines found on "${MASTER_PO_SHEET}". Save the workbook after Excel calculates Master PO, then re-import.`
     );
   } else {
+    const toOrder = lines.filter((line) => line.qtyOrder > 0).length;
+    const dropped: string[] = [];
+    if (skippedBlankRows > 0) dropped.push(`${skippedBlankRows} blank`);
+    if (skippedTypeRows > 0) dropped.push(`${skippedTypeRows} notes/divider`);
+    if (duplicateCount > 0) dropped.push(`${duplicateCount} duplicate code`);
     warnings.push(
-      `Imported ${lines.length} lines from ${MASTER_PO_SHEET} (skipped ${skippedProduce} produce; Excel EXTRA ${
-        excelExtra ? `${(excelExtra * 100).toFixed(0)}% stripped — set EXTRA in TMS when generating` : "none"
-      }).`
+      `Imported ${lines.length} lines from ${MASTER_PO_SHEET} (${toOrder} with QTY ORDER > 0, ${produceCount} produce)${
+        dropped.length > 0 ? `; skipped ${dropped.join(", ")} rows` : ""
+      }.`
     );
   }
 

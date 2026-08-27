@@ -14,6 +14,8 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import {
   fetchCycleWithLines,
+  lineItemCode,
+  lineItemName,
   type LineStatus,
   type PurchaseCycle,
   type PurchaseLine,
@@ -306,7 +308,7 @@ function LineRow({ line, onChanged }: LineRowProps) {
 
   return (
     <TableRow className={cn(line.is_emergency && "bg-destructive/5")}>
-      <TableCell className="font-mono text-sm">{material?.item_code ?? "—"}</TableCell>
+      <TableCell className="font-mono text-sm">{lineItemCode(line)}</TableCell>
       <TableCell className="text-sm">
         <span className="flex items-center gap-1.5">
           {line.is_emergency && (
@@ -315,7 +317,7 @@ function LineRow({ line, onChanged }: LineRowProps) {
               aria-label="Emergency item"
             />
           )}
-          {material?.name ?? "Unknown material"}
+          {lineItemName(line)}
           {material?.is_protein && (
             <Snowflake
               className="size-3.5 shrink-0 text-sky-500"
@@ -434,8 +436,8 @@ export function PurchasingCyclePage({ cycleId }: { cycleId: string }) {
       }
       if (!query) return true;
       return (
-        (line.material?.item_code ?? "").toLowerCase().includes(query) ||
-        (line.material?.name ?? "").toLowerCase().includes(query)
+        lineItemCode(line).toLowerCase().includes(query) ||
+        lineItemName(line).toLowerCase().includes(query)
       );
     });
   }, [lines, search, onlyToOrder]);

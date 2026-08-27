@@ -20,7 +20,11 @@ export type PurchaseCycle = {
 export type PurchaseLine = {
   id: string;
   cycle_id: string;
-  material_id: string;
+  /** Null when the Excel code has no purchasing_materials match. */
+  material_id: string | null;
+  /** Excel MASTER PICKING ORDER code — the fallback when material is null. */
+  item_code: string | null;
+  item_name: string | null;
   cases_required: number;
   lbs_required: number | null;
   on_hand_cases: number | null;
@@ -51,23 +55,54 @@ export type PurchaseLine = {
   > | null;
 };
 
+/** Odoo material wins; unmatched rows fall back to their Excel identity. */
+export function lineItemCode(line: PurchaseLine): string {
+  return line.material?.item_code ?? line.item_code ?? "—";
+}
+
+export function lineItemName(line: PurchaseLine): string {
+  return line.material?.name ?? line.item_name ?? "Unknown";
+}
+
 const MATERIAL_SELECT_WITH_DEPT =
   "material:purchasing_materials ( id, item_code, name, odoo_product_id, odoo_category, storage_type, department, lbs_per_case, is_protein, thaw_buffer_days, lead_time_days, price )";
 
 const MATERIAL_SELECT_WITHOUT_DEPT =
   "material:purchasing_materials ( id, item_code, name, odoo_product_id, odoo_category, storage_type, lbs_per_case, is_protein, thaw_buffer_days, lead_time_days, price )";
 
-const LINE_SELECT_WITH_ARRIVED =
-  `id, cycle_id, material_id, cases_required, lbs_required, on_hand_cases, required_to_order, order_by_date, status, arrival_date, arrived_at, is_emergency, required_time, notes, ${MATERIAL_SELECT_WITH_DEPT}`;
+const LINE_BASE_COLUMNS =
+  "id, cycle_id, material_id, cases_required, lbs_required, on_hand_cases, required_to_order, order_by_date, status, arrival_date, is_emergency, required_time, notes";
 
-const LINE_SELECT_WITHOUT_ARRIVED =
-  `id, cycle_id, material_id, cases_required, lbs_required, on_hand_cases, required_to_order, order_by_date, status, arrival_date, is_emergency, required_time, notes, ${MATERIAL_SELECT_WITH_DEPT}`;
+/**
+ * Column sets degrade for databases missing a migration: item_code/item_name
+ * (20260826), arrived_at (20260725), material department (20260729).
+ */
+function lineSelect(options: {
+  excelItem: boolean;
+  arrived: boolean;
+  department: boolean;
+}) {
+  return [
+    LINE_BASE_COLUMNS,
+    options.excelItem ? "item_code, item_name" : null,
+    options.arrived ? "arrived_at" : null,
+    options.department ? MATERIAL_SELECT_WITH_DEPT : MATERIAL_SELECT_WITHOUT_DEPT,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
 
-const LINE_SELECT_WITH_ARRIVED_NO_DEPT =
-  `id, cycle_id, material_id, cases_required, lbs_required, on_hand_cases, required_to_order, order_by_date, status, arrival_date, arrived_at, is_emergency, required_time, notes, ${MATERIAL_SELECT_WITHOUT_DEPT}`;
+const LINE_SELECT_ATTEMPTS = [
+  { excelItem: true, arrived: true, department: true },
+  { excelItem: true, arrived: true, department: false },
+  { excelItem: true, arrived: false, department: true },
+  { excelItem: false, arrived: true, department: true },
+  { excelItem: false, arrived: true, department: false },
+  { excelItem: false, arrived: false, department: true },
+  { excelItem: false, arrived: false, department: false },
+].map(lineSelect);
 
-const LINE_SELECT_WITHOUT_ARRIVED_NO_DEPT =
-  `id, cycle_id, material_id, cases_required, lbs_required, on_hand_cases, required_to_order, order_by_date, status, arrival_date, is_emergency, required_time, notes, ${MATERIAL_SELECT_WITHOUT_DEPT}`;
+const LINE_SELECT_WITH_ARRIVED = LINE_SELECT_ATTEMPTS[0];
 
 function isMissingArrivedAtColumn(error: { message?: string; code?: string } | null) {
   if (!error?.message) return false;
@@ -79,6 +114,11 @@ function isMissingDepartmentColumn(error: { message?: string; code?: string } | 
   return error.message.includes("department");
 }
 
+function isMissingItemColumn(error: { message?: string; code?: string } | null) {
+  if (!error?.message) return false;
+  return error.message.includes("item_code") || error.message.includes("item_name");
+}
+
 function normalizeLine(row: Record<string, unknown>): PurchaseLine {
   const material = row.material;
   const normalizedMaterial = Array.isArray(material)
@@ -87,6 +127,8 @@ function normalizeLine(row: Record<string, unknown>): PurchaseLine {
   return {
     ...(row as unknown as PurchaseLine),
     arrived_at: (row.arrived_at as string | null | undefined) ?? null,
+    item_code: (row.item_code as string | null | undefined) ?? null,
+    item_name: (row.item_name as string | null | undefined) ?? null,
     material: normalizedMaterial
       ? {
           ...normalizedMaterial,
@@ -101,15 +143,8 @@ async function selectPurchaseLines(
   supabase: SupabaseClient,
   cycleId?: string
 ): Promise<{ data: Record<string, unknown>[]; error: string | null }> {
-  const attempts = [
-    LINE_SELECT_WITH_ARRIVED,
-    LINE_SELECT_WITH_ARRIVED_NO_DEPT,
-    LINE_SELECT_WITHOUT_ARRIVED,
-    LINE_SELECT_WITHOUT_ARRIVED_NO_DEPT,
-  ];
-
   let lastError: string | null = null;
-  for (const select of attempts) {
+  for (const select of LINE_SELECT_ATTEMPTS) {
     let query = supabase.from("purchasing_lines").select(select);
     if (cycleId) query = query.eq("cycle_id", cycleId);
     const result = await query;
@@ -122,7 +157,8 @@ async function selectPurchaseLines(
     lastError = result.error.message;
     const canRetry =
       isMissingArrivedAtColumn(result.error) ||
-      isMissingDepartmentColumn(result.error);
+      isMissingDepartmentColumn(result.error) ||
+      isMissingItemColumn(result.error);
     if (!canRetry) break;
   }
 
@@ -176,6 +212,7 @@ function applyMasterPoDepartments(
     if (!material) return line;
     const fromSnap =
       byCode.get(material.item_code.toUpperCase()) ??
+      byCode.get((line.item_code ?? "").toUpperCase()) ??
       byName.get(normalizeIngredientName(material.name)) ??
       usable.find(
         (row) =>
@@ -234,9 +271,7 @@ export async function fetchCycleWithLines(
   const lines = applyMasterPoDepartments(
     linesRes.data
       .map(normalizeLine)
-      .sort((a, b) =>
-        (a.material?.item_code ?? "").localeCompare(b.material?.item_code ?? "")
-      ),
+      .sort((a, b) => lineItemCode(a).localeCompare(lineItemCode(b))),
     masterPoLines
   );
 
@@ -249,27 +284,33 @@ export async function fetchOpenLines(
   const cycleJoin =
     "cycle:purchasing_cycles!purchasing_lines_cycle_id_fkey ( id, po_number, required_date, week_label, status, import_id, created_at )";
 
-  const first = await supabase
-    .from("purchasing_lines")
-    .select(`${LINE_SELECT_WITH_ARRIVED}, ${cycleJoin}`)
-    .gt("required_to_order", 0);
-
   let rows: Record<string, unknown>[] = [];
-  if (!first.error) {
-    rows = (first.data ?? []) as unknown as Record<string, unknown>[];
-  } else if (isMissingArrivedAtColumn(first.error)) {
-    const second = await supabase
+  let lastError: string | null = null;
+  let loaded = false;
+
+  for (const select of LINE_SELECT_ATTEMPTS) {
+    const result = await supabase
       .from("purchasing_lines")
-      .select(`${LINE_SELECT_WITHOUT_ARRIVED}, ${cycleJoin}`)
+      .select(`${select}, ${cycleJoin}`)
       .gt("required_to_order", 0);
-    if (second.error) {
-      console.error("Failed to fetch open lines:", second.error);
-      return { data: [], error: second.error.message };
+
+    if (!result.error) {
+      rows = (result.data ?? []) as unknown as Record<string, unknown>[];
+      loaded = true;
+      break;
     }
-    rows = (second.data ?? []) as unknown as Record<string, unknown>[];
-  } else {
-    console.error("Failed to fetch open lines:", first.error);
-    return { data: [], error: first.error.message };
+
+    lastError = result.error.message;
+    const canRetry =
+      isMissingArrivedAtColumn(result.error) ||
+      isMissingDepartmentColumn(result.error) ||
+      isMissingItemColumn(result.error);
+    if (!canRetry) break;
+  }
+
+  if (!loaded) {
+    console.error("Failed to fetch open lines:", lastError);
+    return { data: [], error: lastError };
   }
 
   const lines = rows.map((row) => {

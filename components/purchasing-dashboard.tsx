@@ -17,6 +17,8 @@ import { createClient } from "@/lib/supabase/client";
 import {
   fetchCycles,
   fetchOpenLines,
+  lineItemCode,
+  lineItemName,
   type PurchaseCycle,
   type PurchaseLine,
 } from "@/lib/purchasing/fetch-cycles";
@@ -62,9 +64,9 @@ function LineList({ lines, empty }: { lines: OpenLine[]; empty: string }) {
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">
               <span className="font-mono text-xs text-muted-foreground">
-                {line.material?.item_code}
+                {lineItemCode(line)}
               </span>{" "}
-              {line.material?.name ?? "Unknown material"}
+              {lineItemName(line)}
               {line.material?.is_protein && (
                 <Snowflake className="ml-1 inline size-3.5 text-sky-500" />
               )}

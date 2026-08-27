@@ -1,4 +1,10 @@
-import type { LineStatus, PurchaseCycle, PurchaseLine } from "@/lib/purchasing/fetch-cycles";
+import {
+  lineItemCode,
+  lineItemName,
+  type LineStatus,
+  type PurchaseCycle,
+  type PurchaseLine,
+} from "@/lib/purchasing/fetch-cycles";
 
 export type GroupTracking = {
   status: LineStatus;
@@ -42,7 +48,23 @@ export type FinalOrderSnapshot = {
 const TRACKING_KEY = "purchasing-group-tracking";
 const ORDERS_KEY = "purchasing-final-orders";
 
-/** First two digits of the item code → category (220133 → "22"). */
+/** Stable group key from stored Odoo category path (or Other). */
+export function odooCategoryKey(category: string | null | undefined): string {
+  const raw = (category ?? "").trim();
+  return raw || "OTHER";
+}
+
+/** Short label for headers — last segment of "All / Expenses / 50105 Dairy…". */
+export function odooCategoryLabel(key: string): string {
+  if (!key || key === "OTHER") return "Other / uncategorized";
+  const parts = key
+    .split("/")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return parts[parts.length - 1] ?? key;
+}
+
+/** @deprecated Prefer odooCategoryKey — kept for older local snapshots. */
 export function itemCodeCategory(itemCode: string | null | undefined): string {
   const raw = (itemCode ?? "").trim();
   const digits = raw.replace(/\D/g, "");
@@ -51,29 +73,36 @@ export function itemCodeCategory(itemCode: string | null | undefined): string {
   return raw ? raw.toUpperCase() : "OTHER";
 }
 
+/** @deprecated Prefer odooCategoryLabel. */
 export function categoryLabel(key: string): string {
-  if (key === "OTHER") return "Other";
-  return `${key}xxx`;
+  if (key === "OTHER") return "Other / uncategorized";
+  if (key.includes("/")) return odooCategoryLabel(key);
+  if (/^\d{2}$/.test(key)) return `${key}xxx`;
+  return odooCategoryLabel(key);
 }
 
+/**
+ * Group buy lines by Odoo category on the matched material
+ * (Master Fresh item id → purchasing_materials.item_code → odoo_category).
+ */
 export function groupLinesByItemCategory(lines: PurchaseLine[]) {
   const buckets = new Map<string, PurchaseLine[]>();
   for (const line of lines) {
-    const key = itemCodeCategory(line.material?.item_code);
+    const key = odooCategoryKey(line.material?.odoo_category);
     const list = buckets.get(key) ?? [];
     list.push(line);
     buckets.set(key, list);
   }
 
   return [...buckets.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
     .map(([key, deptLines]) => ({
       key,
-      label: categoryLabel(key),
+      label: odooCategoryLabel(key),
       lines: deptLines.sort((a, b) =>
-        (a.material?.item_code ?? "").localeCompare(b.material?.item_code ?? "")
+        lineItemCode(a).localeCompare(lineItemCode(b))
       ),
-    }));
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
 }
 
 function formatOrderNumber(poNumber: number | null, requiredDate: string) {
@@ -232,8 +261,8 @@ export function buildFinalOrderSnapshot(input: {
       status: meta?.status ?? "to_order",
       notes: meta?.notes ?? null,
       lines: section.lines.map((line) => ({
-        itemCode: line.material?.item_code ?? "—",
-        name: line.material?.name ?? "Unknown",
+        itemCode: lineItemCode(line),
+        name: lineItemName(line),
         category: section.key,
         casesRequired: line.cases_required,
         onHandCases: line.on_hand_cases,

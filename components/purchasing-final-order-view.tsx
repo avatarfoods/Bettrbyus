@@ -1,7 +1,7 @@
 "use client";
 
 import { format, parseISO } from "date-fns";
-import { Printer } from "lucide-react";
+import { Mail, Printer } from "lucide-react";
 import type { LineStatus } from "@/lib/purchasing/fetch-cycles";
 import {
   GROUP_STATUS_OPTIONS,
@@ -35,10 +35,11 @@ function groupCases(group: FinalOrderGroup) {
 type Props = {
   snapshot: FinalOrderSnapshot;
   className?: string;
-  /** When set, each category shows status + print-as-separate-order controls. */
+  /** When set, each category shows status + print/email controls. */
   interactive?: boolean;
   onGroupStatusChange?: (groupKey: string, status: LineStatus) => void;
   onPrintGroup?: (groupKey: string) => void;
+  onEmailGroup?: (groupKey: string) => void;
 };
 
 /** Full Final Order PO body (header + item groups). */
@@ -48,6 +49,7 @@ export function PurchasingFinalOrderView({
   interactive = false,
   onGroupStatusChange,
   onPrintGroup,
+  onEmailGroup,
 }: Props) {
   return (
     <div className={className ?? "space-y-4 text-sm"}>
@@ -141,7 +143,16 @@ export function PurchasingFinalOrderView({
                     onClick={() => onPrintGroup?.(group.key)}
                   >
                     <Printer />
-                    Print category
+                    Print
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onEmailGroup?.(group.key)}
+                  >
+                    <Mail />
+                    Email
                   </Button>
                 </div>
               ) : null}
