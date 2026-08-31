@@ -5,7 +5,7 @@ import { LoginForm } from "@/components/login-form";
 import { resolvePostLoginPath } from "@/lib/auth/redirect";
 
 export const metadata = {
-  title: "Sign in | Protein Thaw Manager",
+  title: "Sign in",
 };
 
 export default async function LoginPage({

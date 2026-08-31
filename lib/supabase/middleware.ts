@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { POST_LOGIN_PATH, resolvePostLoginPath } from "@/lib/auth/redirect";
+import { resolvePostLoginPath } from "@/lib/auth/redirect";
 
 const PUBLIC_ROUTES = ["/login", "/auth/callback", "/set-password"];
 
@@ -47,11 +47,8 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && pathname === "/") {
-    const url = request.nextUrl.clone();
-    url.pathname = POST_LOGIN_PATH;
-    return NextResponse.redirect(url);
-  }
+  // "/" is the app launcher, so signed-in users stay there. It used to be a
+  // dead Supabase connection check, which is why it redirected away.
 
   if (user && pathname === "/login") {
     const next = request.nextUrl.searchParams.get("next");

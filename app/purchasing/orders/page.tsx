@@ -1,7 +1,7 @@
 import { PurchasingOpenOrdersPage } from "@/components/purchasing-open-orders";
 
 export const metadata = {
-  title: "Orders list | Protein Thaw Manager",
+  title: "Orders list",
 };
 
 export default function PurchasingOrdersRoute() {

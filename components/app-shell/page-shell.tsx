@@ -1,0 +1,119 @@
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+/**
+ * The Odoo control panel, ported.
+ *
+ * Every list and form page gets the same three-part frame: actions on the
+ * left, breadcrumb telling you where you are, then search and a record count
+ * on the right. Content below runs the full width of the window rather than
+ * sitting in a centred column - on a 1920px screen a 1100px box wastes half
+ * the display, which is most of why the app felt scattered.
+ */
+
+export type Crumb = {
+  label: string;
+  href?: string;
+};
+
+type PageShellProps = {
+  /** Trail ending in the current record or view. Last item renders as text. */
+  breadcrumbs: Crumb[];
+  /** Primary actions, e.g. a New button. Sits left of the breadcrumb. */
+  actions?: React.ReactNode;
+  /** Search input and filter chips. */
+  search?: React.ReactNode;
+  /** Record count or pager, far right. */
+  meta?: React.ReactNode;
+  /** Full-bleed content; supply your own padding via contentClassName. */
+  children: React.ReactNode;
+  contentClassName?: string;
+};
+
+export function PageShell({
+  breadcrumbs,
+  actions,
+  search,
+  meta,
+  children,
+  contentClassName,
+}: PageShellProps) {
+  return (
+    <div className="flex min-h-full flex-1 flex-col">
+      <div className="sticky top-(--app-bar-height) z-30 border-b-2 border-b-brand/25 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 sm:px-4">
+          {actions && (
+            <div className="order-1 flex shrink-0 items-center gap-2">
+              {actions}
+            </div>
+          )}
+
+          <Breadcrumbs items={breadcrumbs} />
+
+          {search && (
+            <div className="order-4 w-full min-w-0 sm:order-3 sm:ml-auto sm:w-auto sm:max-w-md sm:flex-1">
+              {search}
+            </div>
+          )}
+
+          {meta && (
+            <div
+              className={cn(
+                "order-3 ml-auto shrink-0 text-xs text-muted-foreground sm:order-4",
+                // Only give up the right edge when a search box has claimed it;
+                // otherwise the meta ends up crammed against the breadcrumb.
+                search && "sm:ml-0"
+              )}
+            >
+              {meta}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className={cn("flex-1", contentClassName)}>{children}</div>
+    </div>
+  );
+}
+
+function Breadcrumbs({ items }: { items: Crumb[] }) {
+  return (
+    <nav
+      aria-label="Breadcrumb"
+      className="order-2 flex min-w-0 items-center gap-1 text-sm"
+    >
+      {items.map((crumb, index) => {
+        const last = index === items.length - 1;
+        return (
+          <span key={`${crumb.label}-${index}`} className="flex min-w-0 items-center gap-1">
+            {index > 0 && (
+              <ChevronRight
+                aria-hidden
+                className="size-3.5 shrink-0 text-muted-foreground/60"
+              />
+            )}
+            {crumb.href && !last ? (
+              <Link
+                href={crumb.href}
+                className="truncate text-muted-foreground transition-colors hover:text-foreground hover:underline"
+              >
+                {crumb.label}
+              </Link>
+            ) : (
+              <span
+                aria-current={last ? "page" : undefined}
+                className={cn(
+                  "truncate",
+                  last ? "font-semibold" : "text-muted-foreground"
+                )}
+              >
+                {crumb.label}
+              </span>
+            )}
+          </span>
+        );
+      })}
+    </nav>
+  );
+}

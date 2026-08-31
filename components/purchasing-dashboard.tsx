@@ -165,7 +165,7 @@ export function PurchasingDashboard() {
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="sticky top-0 z-10 border-b bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="mx-auto flex w-full max-w-6xl items-center gap-3">
+        <div className="mx-auto flex w-full max-w-none items-center gap-3">
           <Link
             href="/"
             className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-input bg-background text-foreground transition-colors hover:bg-muted"
@@ -198,7 +198,7 @@ export function PurchasingDashboard() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 px-4 py-6">
+      <main className="mx-auto flex w-full max-w-none flex-1 flex-col gap-4 px-4 py-6">
         {isLoading ? (
           <div className="flex min-h-40 items-center justify-center">
             <Loader2 className="size-6 animate-spin text-muted-foreground" />

@@ -2,14 +2,21 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/*
+ * Theme is driven by data-theme on <html>, set by the inline script in the root
+ * layout before first paint (see components/theme/theme-script.tsx). The stored
+ * preference may be "system"; the script resolves it so data-theme is always
+ * either "light" or "dark" and CSS never has to duplicate a media query.
+ */
+@custom-variant dark ([data-theme="dark"] &);
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  /* Real Calibri on Windows; Carlito is metric-identical everywhere else. */
+  --font-sans: Calibri, var(--font-carlito), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-heading: Calibri, var(--font-carlito), system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -18,6 +25,8 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-link: var(--sidebar-link);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -27,6 +36,7 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -39,6 +49,21 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+
+  /* Avatar Foods / BettrBowl brand + status colors. */
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-muted: var(--brand-muted);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-muted: var(--success-muted);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-muted: var(--warning-muted);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-muted: var(--info-muted);
+
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -48,73 +73,152 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * LIGHT - the default. Contrast ratios are noted where they matter; every
+ * body-text pairing clears WCAG AA (4.5:1), because this runs on tablets under
+ * plant lighting where anything marginal becomes unreadable.
+ */
 :root {
-  --background: oklch(0.99 0.002 240);
-  --foreground: oklch(0.2 0.02 250);
+  /* Page sits on a soft blue-grey so white cards read as raised, not flush. */
+  --background: oklch(0.972 0.003 248); /* #f4f6f8 */
+  --foreground: oklch(0.236 0.012 248); /* #1a1f24 - 14.9:1 */
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.02 250);
+  --card-foreground: oklch(0.236 0.012 248);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.02 250);
-  --primary: oklch(0.55 0.14 238);
+  --popover-foreground: oklch(0.236 0.012 248);
+
+  /* Avatar Foods blue, darkened just enough to hold white text (4.9:1). */
+  --primary: oklch(0.54 0.13 238);
   --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.96 0.02 238);
-  --secondary-foreground: oklch(0.35 0.08 238);
-  --muted: oklch(0.96 0.01 240);
-  --muted-foreground: oklch(0.5 0.03 250);
-  --accent: oklch(0.94 0.04 238);
-  --accent-foreground: oklch(0.35 0.1 238);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.9 0.02 240);
-  --input: oklch(0.92 0.02 240);
-  --ring: oklch(0.55 0.14 238);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --secondary: oklch(0.96 0.018 238);
+  --secondary-foreground: oklch(0.36 0.08 238);
+  --muted: oklch(0.954 0.005 248); /* #edf0f3 */
+  --muted-foreground: oklch(0.437 0.018 245); /* #4a535b - 7.8:1, darker than before so tables read */
+  --accent: oklch(0.945 0.032 238);
+  --accent-foreground: oklch(0.36 0.1 238);
+
+  --destructive: oklch(0.53 0.2 27);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.910 0.009 248); /* #dde2e7 */
+  --input: oklch(0.910 0.009 248);
+  --ring: oklch(0.54 0.13 238);
+
+  /* Brand blue exactly as it appears in the logo (#1A8CC6) - for marks, tints
+     and decoration, never as a background for small text. */
+  --brand: oklch(0.609 0.128 238);
+  --brand-foreground: oklch(0.99 0 0);
+  --brand-muted: oklch(0.955 0.028 238);
+
+  /* BettrBowl green #009439, darkened to hold white text (5.2:1). */
+  --success: oklch(0.52 0.15 148);
+  --success-foreground: oklch(0.99 0 0);
+  --success-muted: oklch(0.95 0.04 148);
+
+  /* BettrBowl yellow #FFC600. Far too light for white text - pairs with
+     near-black (11.2:1). Means "needs attention", never destructive. */
+  --warning: oklch(0.854 0.175 87.5);
+  --warning-foreground: oklch(0.24 0.03 90);
+  --warning-muted: oklch(0.965 0.05 90);
+
+  --info: oklch(0.54 0.13 238);
+  --info-foreground: oklch(0.99 0 0);
+  --info-muted: oklch(0.955 0.028 238);
+
+  /* Placeholder categorical ramp derived from the brand. Replace with a
+     validated palette when real charts land. */
+  --chart-1: oklch(0.609 0.128 238);
+  --chart-2: oklch(0.58 0.15 148);
+  --chart-3: oklch(0.78 0.16 78);
+  --chart-4: oklch(0.68 0.16 45);
+  --chart-5: oklch(0.55 0.12 285);
+
+  --radius: 0.4375rem; /* 7px - controls; cards use radius-xl */
+
+  /* Height of the sticky app bar. Pages that need a full-viewport region
+     subtract this instead of hard-coding a number. */
+  --app-bar-height: 3.5rem;
+
+  --sidebar: oklch(0.375 0.017 248);            /* #3a424a */
+  --sidebar-foreground: oklch(0.857 0.014 248); /* #c9d1d9 */
+  --sidebar-primary: oklch(0.629 0.135 237);    /* #1093d0 active pill */
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(1 0 0 / 6%);          /* hover */
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(1 0 0 / 7%);
+  --sidebar-ring: oklch(0.629 0.135 237);
+  --sidebar-muted: oklch(0.519 0.022 248);      /* #5f6a75 group labels */
+  --sidebar-link: oklch(0.778 0.018 248);       /* #aeb8c2 */
+
+  /* Launcher wallpaper. Overridden at runtime from app_settings; these are the
+     fallbacks used before settings load or when none is configured. */
+  --wallpaper-color: oklch(0.319 0.046 161.2); /* deep kitchen green */
+  --wallpaper-foreground: oklch(0.99 0 0);
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+/*
+ * DARK - authored, not derived. Chroma is carried through so the app keeps its
+ * identity; the previous dark palette was pure greyscale, which is why it
+ * looked dead everywhere it did apply.
+ */
+[data-theme="dark"] {
+  --background: oklch(0.17 0.01 248);
+  --foreground: oklch(0.96 0.005 240);
+  --card: oklch(0.235 0.012 248);
+  --card-foreground: oklch(0.96 0.005 240);
+  --popover: oklch(0.245 0.013 248);
+  --popover-foreground: oklch(0.96 0.005 240);
+
+  /* Lifted so it reads on a dark card (6.8:1) - the light-mode blue vanishes
+     against this background. */
+  --primary: oklch(0.72 0.13 238);
+  --primary-foreground: oklch(0.17 0.02 248);
+  --secondary: oklch(0.3 0.025 240);
+  --secondary-foreground: oklch(0.93 0.02 238);
+  --muted: oklch(0.28 0.014 246);
+  --muted-foreground: oklch(0.72 0.02 246);
+  --accent: oklch(0.33 0.045 238);
+  --accent-foreground: oklch(0.9 0.05 238);
+
+  --destructive: oklch(0.68 0.19 25);
+  --destructive-foreground: oklch(0.17 0.02 248);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.72 0.13 238);
+
+  --brand: oklch(0.72 0.13 238);
+  --brand-foreground: oklch(0.17 0.02 248);
+  --brand-muted: oklch(0.33 0.045 238);
+
+  --success: oklch(0.7 0.16 149);
+  --success-foreground: oklch(0.17 0.02 248);
+  --success-muted: oklch(0.32 0.05 149);
+
+  --warning: oklch(0.85 0.17 87.5);
+  --warning-foreground: oklch(0.22 0.03 90);
+  --warning-muted: oklch(0.35 0.06 87);
+
+  --info: oklch(0.72 0.13 238);
+  --info-foreground: oklch(0.17 0.02 248);
+  --info-muted: oklch(0.33 0.045 238);
+
+  --chart-1: oklch(0.72 0.13 238);
+  --chart-2: oklch(0.72 0.16 149);
+  --chart-3: oklch(0.84 0.16 82);
+  --chart-4: oklch(0.74 0.16 45);
+  --chart-5: oklch(0.68 0.13 285);
+
+  --sidebar: oklch(0.28 0.014 248);
+  --sidebar-foreground: oklch(0.857 0.014 248);
+  --sidebar-primary: oklch(0.629 0.135 237);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(1 0 0 / 7%);
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.629 0.135 237);
+  --sidebar-muted: oklch(0.556 0.022 248);
+  --sidebar-link: oklch(0.778 0.018 248);
+
+  --wallpaper-color: oklch(0.22 0.03 161);
 }
 
 @layer base {
@@ -123,9 +227,51 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Calibri runs narrow, so 15px here sits at roughly the 12.5px density of
+       avatar-production_8.html while staying readable on a floor tablet. */
+    font-size: 0.9375rem;
+    line-height: 1.45;
   }
   html {
     @apply font-sans;
+    /* Native controls (date pickers, scrollbars) follow the app theme. */
+    color-scheme: light;
+  }
+
+  /* Figures line up in their columns instead of drifting row to row. */
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+  html[data-theme="dark"] {
+    color-scheme: dark;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-heading tracking-tight;
+  }
+
+  /*
+   * Touch targets. Movings and Inventory Checks are done on phones and iPads on
+   * the floor, where the 28-32px desktop control heights sit well under the
+   * 44px minimum. Coarse pointers get the larger target; mice keep the dense
+   * layout. Opt a dense region out with data-density="compact".
+   */
+  @media (pointer: coarse) {
+    [data-slot="button"]:not([data-density="compact"] *),
+    [data-slot="select-trigger"]:not([data-density="compact"] *),
+    [data-slot="popover-trigger"]:not([data-density="compact"] *) {
+      min-block-size: 2.75rem;
+    }
+
+    input:not([type="checkbox"]):not([type="radio"]):not(
+        [data-density="compact"] *
+      ),
+    select:not([data-density="compact"] *),
+    textarea:not([data-density="compact"] *) {
+      min-block-size: 2.75rem;
+    }
   }
 
   /* iOS Safari renders date/time inputs taller than text inputs (WebKit shadow DOM padding). */
@@ -181,8 +327,50 @@
   }
 
   #purchasing-final-order-print,
-  #purchasing-final-order-print * {
+  #purchasing-final-order-print *,
+  #production-print,
+  #production-print * {
     visibility: visible !important;
+  }
+
+  /* Production sheets: the page IS the document, so it takes over the sheet
+     rather than being positioned over the app like the PO dialog. */
+  #production-print {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  /* One sheet per recipe, one section per department - a supervisor is
+     handed their own pages and nobody else's. */
+  .print-break-before {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  .print-break-after {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .print-keep {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Table headers repeat when a long ingredient list runs over a page. */
+  #production-print thead {
+    display: table-header-group;
+  }
+
+  #production-print tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   #purchasing-final-order-print {

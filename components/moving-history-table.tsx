@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
-import { ArrowLeft, History, Loader2, Search } from "lucide-react";
-import Link from "next/link";
+import { Loader2, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { fetchMovingsHistory } from "@/lib/movings/fetch-movings-history";
 import {
@@ -12,23 +11,15 @@ import {
   getProfileSummary,
   type MovingHistoryRecord,
 } from "@/lib/movings/types";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  DataTable,
+  TBody,
+  TD,
+  THead,
+  TR,
+  TableEmpty,
+  TableTitle,
+} from "@/components/ui/data-table";
 import { AvailableItemsSummary } from "@/components/available-items-summary";
 import { AvailableLotsTable } from "@/components/available-lots-table";
 import { formatTimeInFreezer } from "@/lib/movings/format-freezer-duration";
@@ -125,177 +116,141 @@ export function MovingHistoryTable() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="flex flex-col gap-2 sm:col-span-2 lg:col-span-1">
-          <Label htmlFor="history-search">Search</Label>
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="history-search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="PO, lot, item, user…"
-              className="h-10 pl-9"
-            />
-          </div>
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-0 flex-1 sm:max-w-xs">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            id="history-search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="PO, lot, item, user…"
+            aria-label="Search history"
+            className="h-8 w-full rounded-md border border-border bg-card pr-2 pl-8 text-sm"
+          />
         </div>
 
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="history-item-filter">Item</Label>
-          <select
-            id="history-item-filter"
-            value={itemFilter}
-            onChange={(e) => setItemFilter(e.target.value)}
-            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50 dark:bg-input/30"
-          >
-            <option value="all">All items</option>
-            {itemOptions.map(([id, label]) => (
-              <option key={id} value={id}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <select
+          id="history-item-filter"
+          value={itemFilter}
+          onChange={(event) => setItemFilter(event.target.value)}
+          aria-label="Filter by item"
+          className="h-8 max-w-56 rounded-md border border-border bg-card px-2 text-sm"
+        >
+          <option value="all">All items</option>
+          {itemOptions.map(([id, label]) => (
+            <option key={id} value={id}>
+              {label}
+            </option>
+          ))}
+        </select>
 
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="history-user-filter">Removed by</Label>
-          <select
-            id="history-user-filter"
-            value={removedByFilter}
-            onChange={(e) => setRemovedByFilter(e.target.value)}
-            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50 dark:bg-input/30"
-          >
-            <option value="all">All users</option>
-            {removedByOptions.map(([id, label]) => (
-              <option key={id} value={id}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <select
+          id="history-user-filter"
+          value={removedByFilter}
+          onChange={(event) => setRemovedByFilter(event.target.value)}
+          aria-label="Filter by who removed it"
+          className="h-8 max-w-56 rounded-md border border-border bg-card px-2 text-sm"
+        >
+          <option value="all">All users</option>
+          {removedByOptions.map(([id, label]) => (
+            <option key={id} value={id}>
+              {label}
+            </option>
+          ))}
+        </select>
+
+        <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">
+          {filteredMovings.length} / {movings.length}
+        </span>
       </div>
 
       {loadError && (
-        <p className="text-sm text-destructive">Could not load history: {loadError}</p>
+        <p className="text-sm text-destructive">
+          Could not load history: {loadError}
+        </p>
       )}
 
-      <div className="rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Removed</TableHead>
-              <TableHead>Item</TableHead>
-              <TableHead>Amount</TableHead>
-              <TableHead>Lot</TableHead>
-              <TableHead>Time in freezer</TableHead>
-              <TableHead>In PO</TableHead>
-              <TableHead>Out PO</TableHead>
-              <TableHead>Moved in by</TableHead>
-              <TableHead>Removed by</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredMovings.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
-                  No removal history matches your search or filters.
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredMovings.map((moving) => {
-                const item = getMovingItem(moving);
+      <DataTable>
+        <THead
+          columns={[
+            { label: "Removed" },
+            { label: "Item" },
+            { label: "Amount", numeric: true },
+            { label: "Lot" },
+            { label: "Time in freezer" },
+            { label: "In PO" },
+            { label: "Out PO" },
+            { label: "Moved in by" },
+            { label: "Removed by" },
+          ]}
+        />
+        <TBody>
+          {filteredMovings.length === 0 ? (
+            <TableEmpty colSpan={9}>
+              No removal history matches your search or filters.
+            </TableEmpty>
+          ) : (
+            filteredMovings.map((moving) => {
+              const item = getMovingItem(moving);
 
-                return (
-                  <TableRow key={moving.id}>
-                    <TableCell>{formatIsoDateTime(moving.moved_at)}</TableCell>
-                    <TableCell>
-                      {item ? `${item.code ?? "—"} – ${item.item_name ?? "Unnamed"}` : "—"}
-                    </TableCell>
-                    <TableCell>{moving.amount}</TableCell>
-                    <TableCell>{moving.lot_number ?? "—"}</TableCell>
-                    <TableCell>
-                      {formatTimeInFreezer(moving.prep_date, moving.moved_at)}
-                    </TableCell>
-                    <TableCell>{moving.po_number}</TableCell>
-                    <TableCell>{moving.out_po_number ?? "—"}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span>{getProfileDisplayName(moving.starter)}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {formatIsoDateTime(moving.created_at)}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>{getProfileDisplayName(moving.completer)}</TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      <p className="text-sm text-muted-foreground">
-        Showing {filteredMovings.length} of {movings.length} removed moving
-        {movings.length === 1 ? "" : "s"}.
-      </p>
+              return (
+                <TR key={moving.id}>
+                  <TD muted>{formatIsoDateTime(moving.moved_at)}</TD>
+                  <TD strong>
+                    {item
+                      ? `${item.code ?? "—"} – ${item.item_name ?? "Unnamed"}`
+                      : "—"}
+                  </TD>
+                  <TD numeric strong>
+                    {moving.amount}
+                  </TD>
+                  <TD mono muted>
+                    {moving.lot_number ?? "—"}
+                  </TD>
+                  <TD muted>
+                    {formatTimeInFreezer(moving.prep_date, moving.moved_at)}
+                  </TD>
+                  <TD mono muted>
+                    {moving.po_number}
+                  </TD>
+                  <TD mono muted>
+                    {moving.out_po_number ?? "—"}
+                  </TD>
+                  <TD>
+                    <span className="flex flex-col">
+                      <span>{getProfileDisplayName(moving.starter)}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatIsoDateTime(moving.created_at)}
+                      </span>
+                    </span>
+                  </TD>
+                  <TD muted>{getProfileDisplayName(moving.completer)}</TD>
+                </TR>
+              );
+            })
+          )}
+        </TBody>
+      </DataTable>
     </div>
   );
 }
 
 export function MovingHistoryPage() {
   return (
-    <div className="flex min-h-full flex-1 flex-col">
-      <header className="sticky top-0 z-10 border-b bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="mx-auto flex w-full max-w-6xl items-center gap-3">
-          <Link
-            href="/movings/new"
-            className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-input bg-background text-foreground transition-colors hover:bg-muted"
-            aria-label="Back to new moving"
-          >
-            <ArrowLeft className="size-5" />
-          </Link>
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <History className="size-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg font-semibold tracking-tight">
-              Removal history
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Log of removed movings and who performed each action.
-            </p>
-          </div>
+    <div className="flex flex-col gap-6 px-3 py-4 sm:px-4">
+      <section>
+        <TableTitle aside="Not yet moved out">Currently in thaw</TableTitle>
+        <div className="flex flex-col gap-4">
+          <AvailableItemsSummary />
+          <AvailableLotsTable />
         </div>
-      </header>
+      </section>
 
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6">
-        <Card className="border shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-xl">Currently available</CardTitle>
-            <CardDescription>
-              Total amount in thaw by item (not yet moved out).
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-6">
-            <AvailableItemsSummary />
-            <AvailableLotsTable />
-          </CardContent>
-        </Card>
-
-        <Card className="border shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-xl">History & logs</CardTitle>
-            <CardDescription>
-              All protein lots that have been moved out of thaw, with original and out PO numbers.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <MovingHistoryTable />
-          </CardContent>
-        </Card>
-      </main>
+      <section>
+        <TableTitle>Removal history</TableTitle>
+        <MovingHistoryTable />
+      </section>
     </div>
   );
 }

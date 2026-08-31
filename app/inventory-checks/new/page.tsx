@@ -1,7 +1,7 @@
 import { InventoryCheckForm } from "@/components/inventory-check-form";
 
 export const metadata = {
-  title: "Daily inventory check | Protein Thaw Manager",
+  title: "Daily inventory check",
 };
 
 export default function NewInventoryCheckPage() {

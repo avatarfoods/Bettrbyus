@@ -1,7 +1,7 @@
 import { InventoryCheckHistoryPage } from "@/components/inventory-check-history";
 
 export const metadata = {
-  title: "Inventory check history | Protein Thaw Manager",
+  title: "Inventory check history",
 };
 
 export default function InventoryChecksHistoryPage() {

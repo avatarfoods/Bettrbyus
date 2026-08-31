@@ -1,7 +1,7 @@
 import { PurchasingMatrix } from "@/components/purchasing-matrix";
 
 export const metadata = {
-  title: "Total Orders | Protein Thaw Manager",
+  title: "Total Orders",
 };
 
 export default async function PurchasingCycleRoute({

@@ -230,7 +230,7 @@ export function PurchasingImportPage() {
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="sticky top-0 z-10 border-b bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="mx-auto flex w-full max-w-5xl items-center gap-3">
+        <div className="mx-auto flex w-full max-w-none items-center gap-3">
           <Link
             href="/purchasing"
             className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-input bg-background text-foreground transition-colors hover:bg-muted"
@@ -253,7 +253,7 @@ export function PurchasingImportPage() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-6">
+      <main className="mx-auto flex w-full max-w-none flex-1 flex-col gap-6 px-4 py-6">
         <Card className="border shadow-sm">
           <CardHeader>
             <CardTitle className="text-xl">1. Upload the master file</CardTitle>

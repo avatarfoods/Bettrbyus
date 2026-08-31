@@ -1,0 +1,125 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { getCurrentUserProfile, isAdminProfile } from "@/lib/auth/profile";
+import { createClient } from "@/lib/supabase/server";
+import { isMissingTable } from "@/lib/supabase/missing";
+import { lotToDate } from "@/lib/production/wip/model";
+
+/**
+ * Recording a count.
+ *
+ * A count is an observation, so any signed-in person may make one - this is
+ * floor work at four in the morning, not an admin task. Deleting one is
+ * rewriting history and stays with admins.
+ */
+
+export type ActionResult = { ok: true } | { ok: false; message: string };
+
+const WIP_PATH = "/production/wip";
+
+function fail(message: string): ActionResult {
+  return { ok: false, message };
+}
+
+export type CountLotInput = {
+  recipeId: string;
+  /** As written on the bucket. MMDDYYYY. */
+  lotCode: string;
+  containers: number;
+  containerSize: number;
+  containerLabel?: string;
+  note?: string | null;
+};
+
+/**
+ * Saves the lots found for one recipe.
+ *
+ * Every lot is a new row rather than an update, so the history stays intact:
+ * "what did we count Tuesday morning" has to remain answerable. The latest
+ * row for a lot is what counts as on-hand.
+ */
+export async function saveWipCount(input: {
+  lots: CountLotInput[];
+}): Promise<ActionResult & { saved?: number }> {
+  const lots = input.lots ?? [];
+  if (lots.length === 0) return fail("Nothing to record");
+
+  for (const lot of lots) {
+    if (!lot.recipeId) return fail("Missing recipe");
+
+    const code = (lot.lotCode ?? "").trim();
+    if (!code) return fail("Every lot needs a lot number");
+    if (lotToDate(code) === null) {
+      return fail(
+        `Lot "${code}" is not a date. Lots are MMDDYYYY — the day it was produced — because that is what tells the app which day the stock came from.`
+      );
+    }
+
+    if (!Number.isFinite(lot.containers) || lot.containers < 0) {
+      return fail("The number of containers must be zero or more");
+    }
+    if (!Number.isFinite(lot.containerSize) || lot.containerSize <= 0) {
+      return fail("A container has to hold more than nothing");
+    }
+    if (lot.containers > 10_000 || lot.containerSize > 10_000) {
+      return fail("That is larger than any real count — check the numbers");
+    }
+  }
+
+  const supabase = await createClient();
+  const profile = await getCurrentUserProfile(supabase);
+  if (!profile) return fail("You are signed out");
+
+  const rows = lots.map((lot) => ({
+    recipe_id: lot.recipeId,
+    lot_code: lot.lotCode.trim(),
+    produced_on: lotToDate(lot.lotCode.trim()),
+    containers: lot.containers,
+    container_size: lot.containerSize,
+    container_label: (lot.containerLabel ?? "bucket").trim() || "bucket",
+    note: lot.note?.trim() || null,
+    counted_by: profile.id,
+  }));
+
+  const { error } = await supabase.from("wip_counts").insert(rows);
+
+  if (error) {
+    if (isMissingTable(error)) {
+      return fail(
+        "WIP counts need the 20260830_wip_counts migration. Run it, then try again."
+      );
+    }
+    return fail(error.message);
+  }
+
+  revalidatePath(WIP_PATH);
+  revalidatePath("/production/wip/count");
+  revalidatePath("/production/schedule");
+  return { ok: true, saved: rows.length };
+}
+
+/**
+ * Removes a count.
+ *
+ * Kept admin-only: a count is a record of what was physically there, and
+ * deleting one changes the answer to a question someone may ask later.
+ */
+export async function deleteWipCount(input: {
+  id: string;
+}): Promise<ActionResult> {
+  if (!input.id) return fail("Missing count");
+
+  const supabase = await createClient();
+  const profile = await getCurrentUserProfile(supabase);
+  if (!profile) return fail("You are signed out");
+  if (!isAdminProfile(profile)) {
+    return fail("Only an administrator can remove a count");
+  }
+
+  const { error } = await supabase.from("wip_counts").delete().eq("id", input.id);
+  if (error) return fail(error.message);
+
+  revalidatePath(WIP_PATH);
+  return { ok: true };
+}

@@ -1,13 +1,20 @@
+import { PageShell } from "@/components/app-shell/page-shell";
 import { MovingHistoryPage } from "@/components/moving-history-table";
 
 export const metadata = {
-  title: "Removal history | Protein Thaw Manager",
+  title: "Thaw history",
 };
 
-export default function MovingsHistoryPage() {
+export default function MovingsHistoryRoute() {
   return (
-    <div className="min-h-full bg-gradient-to-b from-background via-background to-muted/30">
+    <PageShell
+      breadcrumbs={[
+        { label: "Production" },
+        { label: "Thawing", href: "/movings/new" },
+        { label: "History" },
+      ]}
+    >
       <MovingHistoryPage />
-    </div>
+    </PageShell>
   );
 }

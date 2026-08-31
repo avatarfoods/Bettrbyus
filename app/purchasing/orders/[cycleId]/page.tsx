@@ -1,7 +1,7 @@
 import { PurchasingOrderDetailPage } from "@/components/purchasing-order-detail";
 
 export const metadata = {
-  title: "Order | Protein Thaw Manager",
+  title: "Order",
 };
 
 type Props = {

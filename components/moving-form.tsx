@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import {
   ArrowDownToLine,
@@ -11,12 +10,9 @@ import {
   ChevronLeft,
   Clock,
   Hash,
-  ClipboardList,
-  History,
   Loader2,
   Package,
   CheckCircle2,
-  Snowflake,
 } from "lucide-react";
 import {
   movingAmountSchema,
@@ -204,7 +200,7 @@ export function MovingForm() {
       : ((inputSteps.indexOf(step) + 1) / inputSteps.length) * 100;
 
   const isMovingIn = direction === "in";
-  const contentMaxWidth = step === "select" ? "max-w-6xl" : "max-w-lg";
+  const contentMaxWidth = step === "select" ? "max-w-none" : "max-w-lg";
 
   const selectedItem = items.find((i) => i.id === itemId);
 
@@ -513,52 +509,31 @@ export function MovingForm() {
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-10 border-b bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className={cn("mx-auto flex w-full flex-col gap-3", contentMaxWidth)}>
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <Snowflake className="size-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-muted-foreground">
-                Step {displayStep} of {inputSteps.length}
-              </p>
-              <h1 className="truncate text-lg font-semibold tracking-tight">
-                {step === "direction" && "Direction"}
-                {step === "po" && "PO number"}
-                {step === "item" && "Select item"}
-                {step === "select" && "Select moving"}
-                {step === "amount" && "Amount"}
-                {step === "details" && (isMovingIn ? "Details" : "Date & time")}
-                {step === "complete" && "Review"}
-                {step === "saved" && "Saved"}
-              </h1>
-            </div>
-            <Link
-              href="/inventory-checks/new"
-              className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-input bg-background text-foreground transition-colors hover:bg-muted"
-              aria-label="Daily inventory check"
-              title="Daily inventory check"
-            >
-              <ClipboardList className="size-5" />
-            </Link>
-            <Link
-              href="/movings/history"
-              className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-input bg-background text-foreground transition-colors hover:bg-muted"
-              aria-label="View removal history"
-              title="Removal history"
-            >
-              <History className="size-5" />
-            </Link>
+      {/* Step header. The wizard owns this - it is state, not chrome. */}
+      <div className="border-b border-border bg-card px-3 py-3 sm:px-4">
+        <div className={cn("mx-auto flex w-full flex-col gap-2.5", contentMaxWidth)}>
+          <div className="flex items-baseline gap-3">
+            <h1 className="font-heading text-base font-semibold tracking-tight">
+              {step === "direction" && "Direction"}
+              {step === "po" && "PO number"}
+              {step === "item" && "Select item"}
+              {step === "select" && "Select moving"}
+              {step === "amount" && "Amount"}
+              {step === "details" && (isMovingIn ? "Details" : "Date & time")}
+              {step === "complete" && "Review"}
+              {step === "saved" && "Saved"}
+            </h1>
+            <span className="text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase">
+              Step {displayStep} of {inputSteps.length}
+            </span>
           </div>
           <Progress value={progressValue}>
-            <ProgressTrack className="h-1.5">
+            <ProgressTrack className="h-1">
               <ProgressIndicator />
             </ProgressTrack>
           </Progress>
         </div>
-      </header>
+      </div>
 
       {/* Main content */}
       <main className={cn("mx-auto flex w-full flex-1 flex-col px-4 py-6", contentMaxWidth)}>

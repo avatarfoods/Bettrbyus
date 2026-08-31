@@ -407,7 +407,7 @@ export function InventoryCheckForm() {
   return (
     <div className="flex min-h-full flex-1 flex-col pb-24 xl:pb-0">
       <header className="sticky top-0 z-10 border-b bg-background/95 px-3 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-4 sm:py-4">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 sm:gap-4">
+        <div className="mx-auto flex w-full max-w-none flex-col gap-3 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary sm:size-10">
               <ClipboardList className="size-5" />
@@ -474,7 +474,7 @@ export function InventoryCheckForm() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-3 px-3 py-4 sm:gap-4 sm:px-4 sm:py-6">
+      <main className="mx-auto flex w-full max-w-none flex-1 flex-col gap-3 px-3 py-4 sm:gap-4 sm:px-4 sm:py-6">
         <Card className="gap-0 border py-0 shadow-sm">
           <CardHeader className="px-3 py-4 sm:px-6">
             <div className="flex items-start justify-between gap-3">

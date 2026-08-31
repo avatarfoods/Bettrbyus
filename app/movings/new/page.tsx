@@ -1,13 +1,20 @@
+import { PageShell } from "@/components/app-shell/page-shell";
 import { MovingForm } from "@/components/moving-form";
 
 export const metadata = {
-  title: "New moving | Protein Thaw Manager",
+  title: "New thaw",
 };
 
 export default function NewMovingPage() {
   return (
-    <div className="min-h-full bg-gradient-to-b from-background via-background to-muted/30">
+    <PageShell
+      breadcrumbs={[
+        { label: "Production" },
+        { label: "Thawing", href: "/movings/new" },
+        { label: "New thaw" },
+      ]}
+    >
       <MovingForm />
-    </div>
+    </PageShell>
   );
 }

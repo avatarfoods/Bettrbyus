@@ -1,7 +1,7 @@
 import { PurchasingMaterialsPage } from "@/components/purchasing-materials-table";
 
 export const metadata = {
-  title: "Purchasing materials | Protein Thaw Manager",
+  title: "Purchasing materials",
 };
 
 export default function PurchasingMaterialsRoute() {

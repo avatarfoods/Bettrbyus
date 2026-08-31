@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { SetPasswordForm } from "@/components/set-password-form";
 
 export const metadata = {
-  title: "Set password | Protein Thaw Manager",
+  title: "Set password",
 };
 
 export default async function SetPasswordPage({
