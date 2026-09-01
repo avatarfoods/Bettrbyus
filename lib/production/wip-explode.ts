@@ -56,6 +56,22 @@ const MAX_DEPTH = 12;
  * The workbook has no explicit recipe type - the department sheet a recipe
  * came from carries that meaning, so it is read back out here.
  */
+/**
+ * How the floor is told what to make, from where it is made.
+ *
+ * Kitchen runs kettles, so it is called in batches. Assembly builds one bowl
+ * at a time, so units. Finished product ships pallets, so cases. It follows
+ * the department rather than being typed per recipe because a recipe's own
+ * answer could disagree with the room it is made in, and then nobody knows
+ * which to believe.
+ */
+export function callBasisFor(department: string | null): "batch" | "unit" | "case" {
+  const kind = recipeKind(department);
+  if (kind === "assembly") return "unit";
+  if (kind === "finished") return "case";
+  return "batch";
+}
+
 export function recipeKind(department: string | null): RecipeKind {
   const value = (department ?? "").trim().toUpperCase();
   if (value === "FINISHED PRODUCT") return "finished";

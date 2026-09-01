@@ -32,7 +32,16 @@ export type WipData = {
 
 export async function fetchWipData(
   supabase: SupabaseClient,
-  options: { from?: string; to?: string } = {}
+  /**
+   * `asOf` is one day: what was in the cooler then. That is the latest count
+   * of each lot taken on or before it, so a lot counted a fortnight earlier
+   * and never recounted is still there.
+   *
+   * `from`/`to` narrows to counts taken inside a span, which answers the
+   * other question people ask - what moved last week - and deliberately
+   * leaves out lots nobody touched in it.
+   */
+  options: { asOf?: string; from?: string; to?: string } = {}
 ): Promise<WipData> {
   const [recipesResult, deptResult, windowsResult] = await Promise.all([
     supabase
@@ -100,13 +109,16 @@ export async function fetchWipData(
   let query = supabase
     .from("wip_counts")
     .select(
-      "id, recipe_id, lot_code, produced_on, containers, container_size, container_label, quantity, counted_at, note, profiles ( full_name, email )"
+      // "*" plus the author: naming partial_quantity before its migration
+      // has run would fail the whole query and empty the page.
+      "*, profiles ( full_name, email )"
     )
     .order("counted_at", { ascending: false })
     .limit(2000);
 
+  const until = options.to ?? options.asOf;
   if (options.from) query = query.gte("counted_at", `${options.from}T00:00:00Z`);
-  if (options.to) query = query.lte("counted_at", `${options.to}T23:59:59Z`);
+  if (until) query = query.lte("counted_at", `${until}T23:59:59.999Z`);
 
   const { data: countRows, error: countError } = await query;
 
@@ -133,6 +145,7 @@ export async function fetchWipData(
         producedOn: (row.produced_on as string | null) ?? null,
         containers: Number(row.containers ?? 0),
         containerSize: Number(row.container_size ?? 0),
+        partialQuantity: Number(row.partial_quantity ?? 0),
         containerLabel: (row.container_label as string) ?? "bucket",
         quantity: Number(row.quantity ?? 0),
         countedAt: (row.counted_at as string) ?? "",

@@ -5,6 +5,7 @@ import {
   departmentLineMap,
   fetchProductionConfig,
 } from "@/lib/production/config";
+import { getCurrentUserProfile, isAdminProfile } from "@/lib/auth/profile";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = {
@@ -18,9 +19,10 @@ export default async function RecipesPage({
 }) {
   const { kind } = await searchParams;
   const supabase = await createClient();
-  const [catalog, productionConfig] = await Promise.all([
+  const [catalog, productionConfig, profile] = await Promise.all([
     fetchRecipeCatalog(supabase),
     fetchProductionConfig(supabase),
+    getCurrentUserProfile(supabase),
   ]);
 
   const needsReview = catalog.recipes.filter(
@@ -44,6 +46,7 @@ export default async function RecipesPage({
           departmentLineMap(productionConfig)
         )}
         initialFinishedOnly={kind === "finished"}
+        canCreate={isAdminProfile(profile)}
       />
     </PageShell>
   );

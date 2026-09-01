@@ -86,7 +86,7 @@ export function MasterBom({
   }
 
   return (
-    <section className="min-w-0">
+    <section className="min-w-0 px-3 py-3 sm:px-4">
       <h2 className="mb-2 text-[0.6875rem] font-semibold tracking-wider uppercase">
         Master BOM
       </h2>

@@ -156,21 +156,21 @@ export function FinishedProductsTable({
               </TD>
               <TD>
                 {math.fits === false ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-destructive/12 px-2 py-0.5 text-[0.6875rem] font-semibold text-destructive">
+                  <span className="inline-flex items-center gap-1 rounded-[1px] bg-destructive/12 px-2 py-0.5 text-[0.6875rem] font-semibold text-destructive">
                     <AlertTriangle className="size-3" />
                     Does not fit
                   </span>
                 ) : warnings.length > 0 ? (
                   <span
                     title={warnings.join("\n")}
-                    className="inline-flex cursor-help items-center gap-1 rounded-full bg-warning-muted px-2 py-0.5 text-[0.6875rem] font-medium text-warning-foreground"
+                    className="inline-flex cursor-help items-center gap-1 rounded-[1px] bg-warning-muted px-2 py-0.5 text-[0.6875rem] font-medium text-warning-foreground"
                   >
                     <AlertTriangle className="size-3" />
                     {warnings.length} to finish
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <span className="size-1.5 rounded-full bg-success" />
+                    <span className="size-1.5 rounded-[1px] bg-success" />
                     Complete
                   </span>
                 )}

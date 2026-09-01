@@ -169,7 +169,7 @@ export function WarehousesSettings({
 
       <section className="rounded-lg border border-border bg-card">
         <header className="flex items-center gap-2 border-b border-border px-3 py-2">
-          <span className="size-1.5 rounded-full bg-success" />
+          <span className="size-1.5 rounded-[1px] bg-success" />
           <h2 className="text-[0.6875rem] font-semibold tracking-wider text-primary uppercase">
             Pulling from Odoo now
           </h2>
@@ -249,7 +249,7 @@ export function WarehousesSettings({
                 <TD>
                   {live ? (
                     <span className="inline-flex items-center gap-1.5 text-xs font-medium text-success">
-                      <span className="size-1.5 rounded-full bg-success" />
+                      <span className="size-1.5 rounded-[1px] bg-success" />
                       Pulling now
                     </span>
                   ) : included ? (

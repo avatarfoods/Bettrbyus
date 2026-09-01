@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import type { CellAllocation, RecipeDemand } from "@/lib/production/schedule/model";
 import type { ScheduleRecipe } from "@/lib/production/schedule/fetch";
 import { saveScheduleCell } from "@/lib/production/schedule/actions";
+import { FinishedStar } from "@/components/recipes/finished-star";
 import { cn } from "@/lib/utils";
 
 /**
@@ -34,6 +35,14 @@ export type GridRow = {
   /** Planned, but on days the window does not allow, so it does not count. */
   rejectedQuantity: number;
   rejectedReason: string | null;
+  /** Counted stock, as of the WIP date. Null means never counted. */
+  wipOnHand: number | null;
+  wipNote: string | null;
+  /** How much of that stock is covering the plan. */
+  stockUsed: number;
+  /** Stock that reaches nothing - almost always past its date. */
+  stockStranded: number;
+  stockReason: string | null;
   /** Unique per position: the same recipe appears under every bowl using it. */
   path: string;
   parentPath: string | null;
@@ -139,7 +148,7 @@ export function ScheduleGrid({
   const inRange = (date: string) =>
     range !== null && date >= range.from && date <= range.to;
 
-  const LEAD = 6; // item, recipe, dept, allergen, open, u/m
+  const LEAD = 7; // item, recipe, dept, allergen, wip, open, u/m
 
   return (
     <div className="overflow-auto rounded-md ring-1 ring-foreground/10">
@@ -154,6 +163,11 @@ export function ScheduleGrid({
             </Th>
             <Th className="w-[7rem] min-w-[7rem]">Dept</Th>
             <Th className="w-[5.5rem] min-w-[5.5rem]">Allergen</Th>
+            {/* What is already in the cooler. Planning a run without it is
+                how you make 500 lb of something you already have 300 of. */}
+            <Th numeric className="w-[3.75rem] min-w-[3.75rem]">
+              WIP
+            </Th>
             <Th numeric className="w-[3.75rem] min-w-[3.75rem]">
               Open
             </Th>
@@ -205,6 +219,70 @@ export function ScheduleGrid({
           </tr>
         </thead>
 
+        {/*
+          Day totals per department, at the top where they are read.
+
+          Each in the unit that department counts in - a day is not "4,300"
+          of anything when it is stew, bowls and cases at once. They sit under
+          the dates rather than at the foot of two hundred rows, because the
+          question they answer ("can the kitchen take this?") is asked while
+          typing, not after scrolling to the end.
+        */}
+        <tbody>
+          {[...totals.entries()]
+            .filter(([, perDate]) => [...perDate.values()].some((v) => v > 0))
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([dept, perDate], index) => {
+              const style = styles.get(dept) ?? {
+                unit: "lb" as const,
+                spine: "bg-muted-foreground/30",
+                tint: "bg-muted",
+              };
+              return (
+                <tr key={dept}>
+                  <th
+                    scope="row"
+                    colSpan={LEAD}
+                    className={cn(
+                      "sticky left-0 z-20 border-l border-border px-2 py-0.5 text-right",
+                      index === 0 && "border-t-2 border-t-brand/40",
+                      style.tint
+                    )}
+                  >
+                    <span className="flex items-center justify-end gap-1.5">
+                      <span
+                        className={cn("h-3 w-1 rounded-[1px]", style.spine)}
+                      />
+                      <span className="text-[0.625rem] font-bold tracking-wide uppercase">
+                        {dept}
+                      </span>
+                      <span className="text-[0.5625rem] text-muted-foreground">
+                        {style.unit}
+                      </span>
+                    </span>
+                  </th>
+                  {dates.map((date) => {
+                    const total = perDate.get(date) ?? 0;
+                    return (
+                      <td
+                        key={date}
+                        className={cn(
+                          "border-l border-border px-1 text-center text-[0.6875rem] font-bold tabular-nums",
+                          index === 0 && "border-t-2 border-t-brand/40",
+                          style.tint,
+                          inRange(date) && "bg-primary/15"
+                        )}
+                      >
+                        {total > 0 ? fmt(total) : ""}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+        </tbody>
+
+
         <tbody>
           {rows.map((row) => (
             <Row
@@ -230,63 +308,6 @@ export function ScheduleGrid({
             />
           ))}
         </tbody>
-
-        {/* Day totals per department, each in the unit that department counts
-            in - a day is not "4,300" of anything when it is stew, bowls and
-            cases at once. */}
-        <tfoot>
-          {[...totals.entries()]
-            .filter(([, perDate]) => [...perDate.values()].some((v) => v > 0))
-            .sort((a, b) => a[0].localeCompare(b[0]))
-            .map(([dept, perDate], index) => {
-              const style = styles.get(dept) ?? {
-                unit: "lb" as const,
-                spine: "bg-muted-foreground/30",
-                tint: "bg-muted",
-              };
-              return (
-                <tr key={dept}>
-                  <th
-                    scope="row"
-                    colSpan={LEAD}
-                    className={cn(
-                      "sticky left-0 z-20 border-l border-border px-2 py-0.5 text-right",
-                      index === 0 && "border-t-2 border-t-brand/30",
-                      style.tint
-                    )}
-                  >
-                    <span className="flex items-center justify-end gap-1.5">
-                      <span
-                        className={cn("h-3 w-1 rounded-full", style.spine)}
-                      />
-                      <span className="text-[0.625rem] font-bold tracking-wide uppercase">
-                        {dept}
-                      </span>
-                      <span className="text-[0.5625rem] text-muted-foreground">
-                        {style.unit}
-                      </span>
-                    </span>
-                  </th>
-                  {dates.map((date) => {
-                    const total = perDate.get(date) ?? 0;
-                    return (
-                      <td
-                        key={date}
-                        className={cn(
-                          "border-l border-border px-1 text-center text-[0.6875rem] font-bold tabular-nums",
-                          index === 0 && "border-t-2 border-t-brand/30",
-                          style.tint,
-                          inRange(date) && "bg-primary/15"
-                        )}
-                      >
-                        {total > 0 ? fmt(total) : ""}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-        </tfoot>
 
         {rows.length === 0 && (
           <tbody>
@@ -380,7 +401,7 @@ function Row({
         )}
       >
         <span className="flex min-w-0 items-center gap-1">
-          <span className={cn("h-3.5 w-0.5 shrink-0 rounded-full", style.spine)} />
+          <span className={cn("h-3.5 w-0.5 shrink-0 rounded-[1px]", style.spine)} />
 
           <span
             className="flex min-w-0 items-center gap-1"
@@ -403,6 +424,8 @@ function Row({
             ) : (
               <span className="w-3.5 shrink-0" />
             )}
+
+            {finished && <FinishedStar className="size-3" />}
 
             <button
               type="button"
@@ -428,7 +451,7 @@ function Row({
           className="flex items-center gap-1.5 truncate"
           title={row.rootName ? `For ${row.rootName}` : undefined}
         >
-          <span className={cn("size-1.5 shrink-0 rounded-full", style.spine)} />
+          <span className={cn("size-1.5 shrink-0 rounded-[1px]", style.spine)} />
           <span
             className="truncate text-muted-foreground"
             title={row.recipe.department ?? undefined}
@@ -443,6 +466,42 @@ function Row({
           {row.recipe.allergens.length > 0
             ? row.recipe.allergens.join(", ")
             : "—"}
+        </span>
+      </td>
+
+      <td
+        title={
+          row.wipOnHand === null
+            ? "Never counted"
+            : (row.wipNote ?? `${fmt(row.wipOnHand)} ${style.unit} on hand`)
+        }
+        className={cn(
+          "border-b border-border/60 border-l border-l-border/40 px-2 py-0.5 text-right text-[0.6875rem] tabular-nums",
+          row.wipOnHand === null
+            ? "text-muted-foreground/30"
+            : row.stockStranded > 0.01
+              ? // Stock that exists but reaches nothing. Amber, not green:
+                // it is not helping, and somebody has to decide about it.
+                "bg-warning-muted/60 font-semibold text-warning-foreground"
+              : row.stockUsed > 0.01
+                ? "bg-success/10 font-semibold text-success"
+                : "text-muted-foreground/50"
+        )}
+      >
+        <span className="flex items-center justify-end gap-1">
+          {row.wipOnHand === null ? "" : fmt(row.wipOnHand)}
+          {row.stockStranded > 0.01 && (
+            <span
+              title={
+                row.stockReason
+                  ? `${fmt(row.stockStranded)} ${style.unit} reaches nothing — ${row.stockReason}`
+                  : `${fmt(row.stockStranded)} ${style.unit} on hand that nothing needs`
+              }
+              className="inline-flex size-3.5 shrink-0 cursor-help items-center justify-center rounded-[1px] bg-warning-foreground text-[0.5625rem] font-bold text-white"
+            >
+              ?
+            </span>
+          )}
         </span>
       </td>
 
@@ -466,10 +525,15 @@ function Row({
               been planned, and Open still will not close because the day it
               was planned on cannot be used. A row nobody has planned yet is
               not a problem to explain - the number already says it. */}
-          {row.openBalance > 0.01 && row.rejectedQuantity > 0.01 && (
+          {row.openBalance > 0.01 &&
+            (row.rejectedQuantity > 0.01 || row.stockStranded > 0.01) && (
             <span
-              title={`${fmt(row.rejectedQuantity)} ${style.unit} planned outside the window — ${row.rejectedReason ?? "it cannot cover this"}`}
-              className="inline-flex size-3.5 shrink-0 cursor-help items-center justify-center rounded-full bg-destructive text-[0.5625rem] font-bold text-white"
+              title={
+                row.rejectedQuantity > 0.01
+                  ? `${fmt(row.rejectedQuantity)} ${style.unit} planned outside the window — ${row.rejectedReason ?? "it cannot cover this"}`
+                  : `${fmt(row.stockStranded)} ${style.unit} is on hand but reaches nothing${row.stockReason ? ` — ${row.stockReason}` : ""}, so it does not close this gap`
+              }
+              className="inline-flex size-3.5 shrink-0 cursor-help items-center justify-center rounded-[1px] bg-destructive text-[0.5625rem] font-bold text-white"
             >
               ?
             </span>
@@ -672,7 +736,7 @@ function Cell({
           <span
             title={problem}
             className={cn(
-              "absolute left-0.5 inline-flex size-3 cursor-help items-center justify-center rounded-full text-[0.5rem] leading-none font-bold text-white",
+              "absolute left-0.5 inline-flex size-3 cursor-help items-center justify-center rounded-[1px] text-[0.5rem] leading-none font-bold text-white",
               overrun ? "bg-success" : "bg-destructive"
             )}
           >

@@ -387,7 +387,7 @@ function ChartRow({
           <span
             aria-hidden
             className={cn(
-              "size-1.5 shrink-0 rounded-full",
+              "size-1.5 shrink-0 rounded-[1px]",
               isThaw
                 ? "bg-destructive"
                 : row.depth === 0
@@ -682,7 +682,7 @@ function TableRow({ row, canEdit }: { row: TimingRow; canEdit: boolean }) {
               ? ` — lands T${row.absoluteEarliest} to T${row.absoluteLatest} against the ship day.`
               : "")
           }
-          className="inline-flex size-4 cursor-help items-center justify-center rounded-full bg-muted text-[0.5625rem] font-bold text-muted-foreground"
+          className="inline-flex size-4 cursor-help items-center justify-center rounded-[1px] bg-muted text-[0.5625rem] font-bold text-muted-foreground"
         >
           ?
         </span>

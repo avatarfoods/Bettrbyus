@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { X } from "lucide-react";
+import { ArrowUpRight, X } from "lucide-react";
 import type { ScheduleRecipe } from "@/lib/production/schedule/fetch";
 import type { RecipeDemand } from "@/lib/production/schedule/model";
 import { describeWindow, type TimingWindow } from "@/lib/production/schedule/model";
+import { FinishedStar } from "@/components/recipes/finished-star";
 import { cn } from "@/lib/utils";
 
 /**
@@ -56,27 +57,45 @@ export function RecipePanel({
           <p className="font-mono text-[0.625rem] text-muted-foreground">
             {recipe.wipCode}
           </p>
-          <h2
-            className={cn(
-              "text-sm leading-snug font-semibold",
-              recipe.isFinished && "text-primary"
-            )}
-          >
-            {recipe.name}
+          {/* The name is where people aim first, so it is a link too. */}
+          <h2 className="flex items-start gap-1.5 text-sm leading-snug font-semibold">
+            {recipe.isFinished && <FinishedStar className="mt-0.5 size-3" />}
+            <Link
+              href={`/recipes/${recipe.id}?back=${encodeURIComponent(backHref)}`}
+              className={cn(
+                "hover:underline",
+                recipe.isFinished && "text-primary"
+              )}
+            >
+              {recipe.name}
+            </Link>
           </h2>
           <p className="mt-0.5 text-[0.625rem] text-muted-foreground">
             {recipe.department ?? "No department"}
             {recipe.lineName && ` · ${recipe.lineName}`}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <X className="size-4" />
-        </button>
+        {/* Up here, not pinned to the bottom of a panel that scrolls: on a
+            recipe with ten ingredients and eight parents the button was below
+            the fold, which is the same as not having one. */}
+        <div className="flex shrink-0 items-center gap-0.5">
+          <Link
+            href={`/recipes/${recipe.id}?back=${encodeURIComponent(backHref)}`}
+            title="Open the recipe"
+            className="inline-flex h-7 items-center gap-1 rounded-md bg-primary px-2 text-[0.6875rem] font-medium text-primary-foreground hover:opacity-90"
+          >
+            Open recipe
+            <ArrowUpRight className="size-3" />
+          </Link>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
       </header>
 
       {recipe.allergens.length > 0 && (
@@ -188,12 +207,6 @@ export function RecipePanel({
         </Section>
       )}
 
-      <Link
-        href={`/recipes/${recipe.id}?back=${encodeURIComponent(backHref)}`}
-        className="mt-auto inline-flex h-8 items-center justify-center rounded-md border border-border text-xs text-muted-foreground hover:bg-muted"
-      >
-        Open the recipe
-      </Link>
     </aside>
   );
 }

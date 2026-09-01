@@ -34,7 +34,7 @@ import {
  * a shell change and nothing breaks underneath it.
  */
 
-export type AppId = "production" | "purchasing" | "inventory" | "settings";
+export type AppId = "production" | "purchasing" | "settings";
 
 /** Tile colour. Maps to a token pair, never a raw hex. */
 export type AppTint = "brand" | "warning" | "success" | "slate";
@@ -44,6 +44,17 @@ export type AppMenuItem = {
   href: string;
   icon?: LucideIcon;
   description?: string;
+  /**
+   * Heading this item sits under inside its menu.
+   *
+   * Configuration is a list of pages that each belong to somewhere else in
+   * the app - the order schedule is an Orders rule, lead times is a Planning
+   * rule - and a flat list of six makes you read all six to find the one you
+   * want. Grouping them under the thing they configure means you look in one
+   * place. Consecutive items sharing a group are drawn under one heading, so
+   * order in this array is what decides the grouping.
+   */
+  group?: string;
 };
 
 export type AppMenu = {
@@ -99,11 +110,31 @@ export const APPS: AppDefinition[] = [
         label: "Planning",
         href: "/production/schedule",
         items: [
-          { label: "Schedule", href: "/production/schedule", icon: CalendarRange },
-          { label: "Orders", href: "/orders", icon: CalendarDays },
-          { label: "Thawing", href: "/movings/new", icon: ArrowLeftRight },
-          { label: "Thawing history", href: "/movings/history", icon: ListChecks },
-          { label: "Print for the floor", href: "/production/print", icon: Printer },
+          {
+            group: "Plan",
+            label: "Schedule",
+            href: "/production/schedule",
+            icon: CalendarRange,
+          },
+          { group: "Plan", label: "Orders", href: "/orders", icon: CalendarDays },
+          {
+            group: "Thawing",
+            label: "New thaw",
+            href: "/movings/new",
+            icon: ArrowLeftRight,
+          },
+          {
+            group: "Thawing",
+            label: "History",
+            href: "/movings/history",
+            icon: ListChecks,
+          },
+          {
+            group: "Paper",
+            label: "Print for the floor",
+            href: "/production/print",
+            icon: Printer,
+          },
         ],
       },
       {
@@ -112,13 +143,24 @@ export const APPS: AppDefinition[] = [
         label: "WIP",
         href: "/production/wip",
         items: [
-          { label: "WIP on hand", href: "/production/wip", icon: Boxes },
           {
+            group: "On hand",
+            label: "WIP on hand",
+            href: "/production/wip",
+            icon: Boxes,
+          },
+          {
+            group: "On hand",
             label: "Count WIP",
             href: "/production/wip/count",
             icon: ClipboardList,
           },
-          { label: "WIP calculator", href: "/wip", icon: Calculator },
+          {
+            group: "Work it out",
+            label: "WIP calculator",
+            href: "/wip",
+            icon: Calculator,
+          },
         ],
       },
       {
@@ -127,65 +169,46 @@ export const APPS: AppDefinition[] = [
         items: [{ label: "All recipes", href: "/recipes", icon: CookingPot }],
       },
       {
-        label: "Settings",
+        // Grouped by what each page configures, in the same order those
+        // things appear in the menu bar above.
+        label: "Configuration",
         href: "/production/settings/orders",
         items: [
           {
+            group: "Planning",
+            label: "Lead times",
+            href: "/production/settings/schedule",
+            icon: CalendarRange,
+          },
+          {
+            group: "Orders",
             label: "Order schedule",
             href: "/production/settings/orders",
             icon: CalendarDays,
           },
           {
+            group: "Orders",
             label: "Warehouses",
             href: "/production/settings/warehouses",
             icon: Warehouse,
           },
           {
+            group: "Production",
             label: "Lines",
             href: "/production/settings/lines",
             icon: SlidersHorizontal,
           },
           {
+            group: "Production",
             label: "Departments",
             href: "/production/settings/departments",
             icon: Building2,
           },
           {
+            group: "Recipes",
             label: "Product Groups",
             href: "/production/settings/groups",
             icon: Layers,
-          },
-          {
-            label: "Lead times",
-            href: "/production/settings/schedule",
-            icon: CalendarRange,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "inventory",
-    name: "Inventory",
-    href: "/inventory-checks/new",
-    icon: Boxes,
-    tint: "success",
-    description: "Counts and stock on hand",
-    routes: ["/inventory-checks"],
-    menus: [
-      {
-        label: "Checks",
-        href: "/inventory-checks/new",
-        items: [
-          {
-            label: "New check",
-            href: "/inventory-checks/new",
-            icon: ClipboardList,
-          },
-          {
-            label: "History",
-            href: "/inventory-checks/history",
-            icon: ListChecks,
           },
         ],
       },

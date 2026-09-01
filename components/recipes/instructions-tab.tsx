@@ -300,7 +300,7 @@ function StepCard({
   return (
     <li className="rounded-md bg-card ring-1 ring-foreground/10">
       <div className="flex items-center gap-2 border-b border-border px-3 py-1.5">
-        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground tabular-nums">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-[1px] bg-primary text-xs font-bold text-primary-foreground tabular-nums">
           {index + 1}
         </span>
 

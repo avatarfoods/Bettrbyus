@@ -96,7 +96,7 @@ export function AvailableItemsSummary({
 function AvailableItemCard({ row }: { row: ItemAvailableTotal }) {
   return (
     <div className="flex items-start gap-3 rounded-lg border bg-background px-4 py-3">
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+      <div className="flex size-9 shrink-0 items-center justify-center rounded-[1px] bg-primary/10 text-primary">
         <Package className="size-4" />
       </div>
       <div className="min-w-0 flex-1">

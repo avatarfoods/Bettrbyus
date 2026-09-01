@@ -11,6 +11,9 @@ import {
 } from "@/lib/production/schedule/workbook-seed";
 import { fetchProductionConfig } from "@/lib/production/config";
 import { getCurrentUserProfile, isAdminProfile } from "@/lib/auth/profile";
+import { scopeFromParams } from "@/lib/date-scope";
+import { fetchWipData } from "@/lib/production/wip/fetch";
+import { onHandByRecipe } from "@/lib/production/wip/model";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Planning" };
@@ -31,6 +34,10 @@ export default async function PlanningPage({
     to?: string;
     dept?: string;
     q?: string;
+    /** Which day's WIP the grid shows, or a span of them. */
+    wip?: string;
+    wipFrom?: string;
+    wipTo?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -62,6 +69,25 @@ export default async function PlanningPage({
   const data = await fetchScheduleData(supabase, liveId ?? undefined, myDraftId);
   const config = await fetchProductionConfig(supabase);
 
+  // What is already in the cooler on the chosen day, so a run can be planned
+  // against stock rather than from zero.
+  const wipScope = scopeFromParams(
+    { asOf: params.wip, from: params.wipFrom, to: params.wipTo },
+    today
+  );
+  const wipDate = wipScope.kind === "day" ? wipScope.date : wipScope.to;
+  const wipData = await fetchWipData(
+    supabase,
+    wipScope.kind === "day"
+      ? { asOf: wipScope.date }
+      : { from: wipScope.from, to: wipScope.to }
+  );
+  const wipOnHand = onHandByRecipe(
+    wipData.counts,
+    new Map(wipData.recipes.map((recipe) => [recipe.id, recipe.shelfLife])),
+    wipDate
+  );
+
   // Without the planning tables the grid still renders from the recipes, so
   // the tree and the cascade work; nothing can be saved and the view says so.
   const readOnly = data.missingTable || !liveId;
@@ -91,6 +117,18 @@ export default async function PlanningPage({
         today={today}
         from={from}
         to={to}
+        wipScope={wipScope}
+        wipDate={wipDate}
+        wipOnHand={[...wipOnHand.entries()].map(([id, held]) => [
+          id,
+          // The lots themselves, with the expiry each one carries. A single
+          // total cannot say which part of it survives to Friday.
+          held.lots.map((lot) => ({
+            lotCode: lot.lotCode,
+            quantity: lot.quantity,
+            expiresOn: lot.age.expiresOn,
+          })),
+        ])}
         departmentColors={config.departments.map((d) => [d.name, d.color])}
         initialDept={params.dept}
         initialQuery={params.q}

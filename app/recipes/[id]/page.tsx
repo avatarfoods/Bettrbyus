@@ -92,6 +92,9 @@ export default async function RecipePage({ params, searchParams }: Params) {
   const pickerOptions: PickerOption[] = [
     ...catalog.recipes
       .filter((entry) => entry.id !== id)
+      // An archived recipe cannot be added to anything new. Existing uses
+      // stay - archiving is not a demolition - but the list stops regrowing.
+      .filter((entry) => entry.archivedAt === null)
       .map((entry) => ({
         id: entry.id,
         code: entry.wipCode,
@@ -314,17 +317,35 @@ export default async function RecipePage({ params, searchParams }: Params) {
       ]}
       contentClassName="pb-10"
       meta={
-        <RecordPager
+        <span className="flex items-center gap-2">
+          {/* Just information, up by the arrows where the other page-level
+              facts live rather than inside the recipe's own content. */}
+          <span
+            className={recipe.archivedAt
+              ? "rounded-sm bg-destructive/15 px-1.5 py-0.5 text-[0.6875rem] font-semibold text-destructive uppercase"
+              : "rounded-sm bg-success/15 px-1.5 py-0.5 text-[0.6875rem] font-semibold text-success uppercase"}
+          >
+            {recipe.archivedAt ? "Archived" : "Active"}
+          </span>
+          <RecordPager
           index={index}
           total={catalog.recipes.length}
           prevHref={previous ? `/recipes/${previous.id}` : null}
           nextHref={next ? `/recipes/${next.id}` : null}
           label="recipe"
-        />
+          />
+        </span>
       }
     >
       <RecipeDetail
         data={{
+          departmentColor:
+            config.departments.find(
+              (entry) => entry.name === recipe.department
+            )?.color ?? null,
+          departmentIndex: config.departments.findIndex(
+            (entry) => entry.name === recipe.department
+          ),
           recipe,
           raws: explodeRawMaterials(catalog, id),
           bom: bomRows,

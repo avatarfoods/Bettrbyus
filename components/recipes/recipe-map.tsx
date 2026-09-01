@@ -72,7 +72,7 @@ export function RecipeMap({
   }
 
   return (
-    <section className="min-w-0">
+    <section className="min-w-0 px-3 py-3 sm:px-4">
       <div className="mb-2 flex items-center justify-between gap-3">
         <h2 className="text-[0.6875rem] font-semibold tracking-wider uppercase">
           Map

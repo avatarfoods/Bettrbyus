@@ -320,7 +320,7 @@ function PresetSwatch({
         style={{ background }}
       >
         {selected && (
-          <span className="flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <span className="flex size-6 items-center justify-center rounded-[1px] bg-primary text-primary-foreground">
             <Check className="size-3.5" />
           </span>
         )}

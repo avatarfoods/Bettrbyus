@@ -1179,3 +1179,55 @@ drop index if exists production_schedules_one_open_draft_idx;
 create unique index if not exists production_schedules_one_working_draft_idx
   on public.production_schedules (parent_schedule_id, created_by)
   where status = 'draft' and is_working;
+
+-- 20260901_wip_partial
+-- A lot is rarely whole buckets. Four 50 lb buckets and a part-full one
+-- holding 30 is one lot, one line, one number - not two rows the on-hand
+-- calculation would have to guess were meant together.
+alter table public.wip_counts
+  add column if not exists partial_quantity numeric not null default 0
+    check (partial_quantity >= 0);
+
+-- quantity is derived, so it can be rebuilt rather than migrated.
+alter table public.wip_counts drop column if exists quantity;
+
+alter table public.wip_counts
+  add column quantity numeric
+    generated always as (containers * container_size + partial_quantity) stored;
+
+comment on column public.wip_counts.partial_quantity is
+  'Loose amount on top of the whole containers, in the recipe uom.';
+
+-- 20260901_drop_inventory_checks
+-- The inventory-check app is gone; these are its tables.
+drop table if exists public.inventory_check_entries;
+drop table if exists public.inventory_checks;
+drop table if exists public.inventory_check_items;
+drop table if exists public.departments;
+
+-- 20260901_recipe_archive
+-- Archiving a recipe: out of every list, and no longer choosable as an
+-- ingredient, but the record and its history stay. `active` already existed
+-- and nothing ever set it, so the timestamp is what carries the meaning -
+-- when it happened, and who decided.
+alter table public.purchasing_recipes
+  add column if not exists archived_at timestamptz,
+  add column if not exists archived_by uuid references public.profiles (id);
+
+create index if not exists purchasing_recipes_archived_idx
+  on public.purchasing_recipes (archived_at);
+
+-- 20260901_spec_sheet
+-- What the printed spec sheet says that nothing was storing yet.
+--
+-- The ingredient statement is deliberately its own field rather than being
+-- built from the recipe tree: what goes on a label is a legal declaration
+-- with its own order and wording, and generating it from the BOM would put a
+-- guess on a carton.
+alter table public.finished_products
+  add column if not exists ingredient_statement text,
+  add column if not exists handling_instructions text,
+  add column if not exists heating_instructions text,
+  add column if not exists guaranteed_shelf_life_days integer,
+  add column if not exists pallet_weight_lb numeric,
+  add column if not exists case_weight_lb numeric;

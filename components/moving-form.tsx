@@ -582,7 +582,7 @@ export function MovingForm() {
                   >
                     <div
                       className={cn(
-                        "flex size-12 shrink-0 items-center justify-center rounded-full",
+                        "flex size-12 shrink-0 items-center justify-center rounded-[1px]",
                         isSelected
                           ? "bg-primary text-primary-foreground"
                           : "bg-muted text-muted-foreground"
@@ -1138,7 +1138,7 @@ export function MovingForm() {
         {step === "saved" && (
           <Card className="border shadow-sm">
             <CardHeader className="items-center text-center">
-              <div className="mx-auto mb-2 flex size-14 items-center justify-center rounded-full bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400">
+              <div className="mx-auto mb-2 flex size-14 items-center justify-center rounded-[1px] bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400">
                 <CheckCircle2 className="size-8" />
               </div>
               <CardTitle className="text-xl">{MOVING_SUBMIT_SUCCESS_MESSAGE}</CardTitle>

@@ -65,7 +65,10 @@ export function RecipePrintSheet({
   const hasFinal = finalBatch > 0.005;
 
   return (
-    <div className="text-black">
+    // The batch record prints sideways: the ingredient table is wide and the
+    // method needs room beside it, and a landscape sheet on a clipboard is
+    // what the floor already works from.
+    <div data-print-landscape className="text-black">
       {/* 1. Right sheet? Name, code, department, allergens, date. */}
       <header className="flex items-start justify-between gap-6 border-b-[3px] border-black pb-2">
         <div className="min-w-0">
@@ -125,11 +128,11 @@ export function RecipePrintSheet({
         </div>
       </header>
 
-      {/* Written at the start, in one place. */}
-      <div className="flex gap-4 border-b border-neutral-300 py-2">
+      {/* Written at the start, in one place. Times are not recorded on this
+          sheet - the lot number already carries the day, and a blank nobody
+          fills in trains people to skip the ones that matter. */}
+      <div className="flex gap-6 border-b border-neutral-300 py-2">
         <Blank label="Lot number" prefill={lotFrom(productionDate)} />
-        <Blank label="Start time" />
-        <Blank label="Finish time" />
         <Blank label="Produced by" wide />
       </div>
 
@@ -234,12 +237,11 @@ export function RecipePrintSheet({
         </ol>
       </section>
 
-      {/* 5. Sign off, once. */}
+      {/* 5. Sign off, once. QA release is a separate record on its own
+          document, so asking for it here only invites two answers. */}
       <div className="mt-5 flex gap-6">
         <Blank label="Total produced" wide />
         <Blank label="Checked by" wide />
-        <Blank label="QA released" wide />
-        <Blank label="Date" />
       </div>
     </div>
   );

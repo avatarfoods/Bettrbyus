@@ -1054,7 +1054,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
       <header className="sticky top-0 z-10 border-b bg-background/95 px-3 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-4">
         <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-[1px] bg-primary/10 text-primary">
               <ShoppingCart className="size-4" />
             </div>
             <div className="min-w-0 flex-1">

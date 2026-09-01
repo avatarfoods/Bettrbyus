@@ -8,12 +8,12 @@ import {
   History,
   Loader2,
   Save,
-  Search,
   Trash2,
   Wand2,
 } from "lucide-react";
 import {
   allocateRecipe,
+  type StockLot,
   buildScheduleTree,
   dateRange,
   deriveDemand,
@@ -35,6 +35,9 @@ import {
   type GridRow,
 } from "@/components/production/schedule/schedule-grid";
 import { RecipePanel } from "@/components/production/schedule/recipe-panel";
+import { DateScopePicker } from "@/components/ui/date-scope";
+import type { DateScope } from "@/lib/date-scope";
+import { SearchPanel } from "@/components/ui/search-panel";
 import { departmentColor } from "@/lib/production/department-colors";
 import { cn } from "@/lib/utils";
 
@@ -75,6 +78,12 @@ type Props = {
   initialQuery?: string;
   /** Department name to the colour key chosen in Settings. */
   departmentColors: [string, string | null][];
+  /** The day, or span of days, the WIP column reads. */
+  wipScope: DateScope;
+  /** The end of the WIP scope: counts on or before this supersede the plan. */
+  wipDate: string;
+  /** Recipe id to the lots counted, each with the day it goes out of date. */
+  wipOnHand: [string, StockLot[]][];
 };
 
 /**
@@ -120,6 +129,9 @@ export function ScheduleView({
   initialDept,
   initialQuery,
   departmentColors: departmentColorList,
+  wipScope,
+  wipDate,
+  wipOnHand: wipList,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -128,16 +140,31 @@ export function ScheduleView({
   /** Non-null once the name box has been touched, so typing is not clobbered. */
   const [draftName, setDraftName] = useState<string | null>(null);
   const [savedName, setSavedName] = useState(false);
-  const [line, setLine] = useState("");
+
   // Opening on finished products is the point: that is where the typing
   // starts, and everything else follows from it.
-  const [dept, setDept] = useState<string>(initialDept ?? "__finished__");
+
   const [inspected, setInspected] = useState<string | null>(null);
   // Closed by default: the page opens as the thirty-two things you type into,
   // and a bowl unfolds only when you ask it to.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [hideEmpty, setHideEmpty] = useState(false);
+
   const [query, setQuery] = useState(initialQuery ?? "");
+
+  /**
+   * Line, department and the two view switches, all as one list of ids -
+   * which is what the pills in the search field are. Decoded back into the
+   * values the grid already reads, so only the control changed.
+   */
+  const [filters, setFilters] = useState<string[]>(() => [
+    `view:${initialDept ?? "__finished__"}`,
+  ]);
+
+  const line = filters.find((id) => id.startsWith("line:"))?.slice(5) ?? "";
+  const dept =
+    filters.find((id) => id.startsWith("view:"))?.slice(5) ?? "__finished__";
+  const hideEmpty = filters.includes("hide-empty");
+  const expandAll = filters.includes("expand-all");
   const [selection, setSelection] = useState<{ from: string; to: string } | null>(
     null
   );
@@ -151,6 +178,7 @@ export function ScheduleView({
     () => new Map(departmentColorList),
     [departmentColorList]
   );
+  const wip = useMemo(() => new Map(wipList), [wipList]);
 
   const entries = useMemo(() => {
     if (localEntries.length === 0) return serverEntries;
@@ -198,6 +226,19 @@ export function ScheduleView({
     const roots = recipes.filter((r) => r.isFinished).map((r) => r.id);
     return buildScheduleTree({ rootIds: roots, recipesById, linesByRecipeId });
   }, [recipes, recipesById, linesByRecipeId]);
+
+  /**
+   * The whole tree open, or whatever has been opened by hand.
+   *
+   * Making the switch a filter rather than a button means the grid stays
+   * open as rows come and go, instead of a one-shot expansion that goes
+   * stale the moment the department changes.
+   */
+  const openPaths = useMemo(
+    () => (expandAll ? new Set(tree.map((node) => node.path)) : expanded),
+    [expandAll, tree, expanded]
+  );
+
 
   const nodeByPath = useMemo(
     () => new Map(tree.map((node) => [node.path, node])),
@@ -249,12 +290,12 @@ export function ScheduleView({
       let current: string | null = parent;
       let guard = 0;
       while (current && guard++ < 12) {
-        if (!expanded.has(current)) return false;
+        if (!openPaths.has(current)) return false;
         current = nodeByPath.get(current)?.parentPath ?? null;
       }
       return true;
     };
-  }, [nodeByPath, expanded]);
+  }, [nodeByPath, openPaths]);
 
   /** Suggestions from the tree, for recipes nobody has planned by hand. */
   const suggestions = useMemo(() => {
@@ -303,10 +344,26 @@ export function ScheduleView({
           ? ownWindow.latestOffset - ownWindow.earliestOffset
           : null;
 
+      /*
+        Where somebody has counted, the count is the truth for everything up
+        to that day.
+
+        A plan entry for the 31st and a count taken on the 31st describe the
+        same material, so letting both cover demand would halve what still
+        has to be made. Recipes nobody counted keep their planned history -
+        "nobody looked" is not the same as "there is none".
+      */
+      const lots = wip.get(recipe.id) ?? [];
+      const supplying =
+        lots.length > 0
+          ? own.filter((e) => e.productionDate > wipDate)
+          : own;
+
       const allocation = allocateRecipe(
-        own.map((e) => ({ date: e.productionDate, quantity: e.quantity })),
+        supplying.map((e) => ({ date: e.productionDate, quantity: e.quantity })),
         recipeDemand,
-        span === null ? undefined : { earliestOffset: -span, latestOffset: 0 }
+        span === null ? undefined : { earliestOffset: -span, latestOffset: 0 },
+        lots
       );
 
       const cells = new Map(
@@ -355,6 +412,22 @@ export function ScheduleView({
         unmet: allocation.unmetByNeed,
         wasNeeded: neededInRange > 0.01,
         openBalance,
+        wipOnHand: lots.length === 0 ? null : lots.reduce((sum, l) => sum + l.quantity, 0),
+        wipNote: (() => {
+          if (lots.length === 0) return null;
+          const total = lots.reduce((sum, l) => sum + l.quantity, 0);
+          const when =
+            wipScope.kind === "day"
+              ? `counted by ${wipScope.date}`
+              : `counted between ${wipScope.from} and ${wipScope.to}`;
+          const head = `${Math.round(total)} on hand across ${lots.length} ${lots.length === 1 ? "lot" : "lots"}, ${when}`;
+          return allocation.stockStranded > 0.01
+            ? `${head}. ${Math.round(allocation.stockStranded)} of it reaches nothing${allocation.stockReason ? ` — ${allocation.stockReason}` : ""}.`
+            : `${head}. ${Math.round(allocation.stockUsed)} is covering the plan.`;
+        })(),
+        stockUsed: allocation.stockUsed,
+        stockStranded: allocation.stockStranded,
+        stockReason: allocation.stockReason,
         rejectedQuantity: rejected.reduce((sum, e) => sum + e.quantity, 0),
         rejectedReason:
           rejected.length === 0
@@ -449,6 +522,9 @@ export function ScheduleView({
   }, [
     recipes,
     tree,
+    wip,
+    wipScope,
+    wipDate,
     line,
     dept,
     query,
@@ -558,10 +634,28 @@ export function ScheduleView({
     return n;
   }, [suggestions, from, to]);
 
+  /** Keeps the plan range while moving what the WIP column reads. */
+  function goWip(next: DateScope) {
+    const search = new URLSearchParams({ from, to });
+    if (next.kind === "day") search.set("wip", next.date);
+    else {
+      search.set("wipFrom", next.from);
+      search.set("wipTo", next.to);
+    }
+    router.push(`/production/schedule?${search}`);
+  }
+
   function goRange(nextFrom: string, nextTo: string) {
-    router.push(
-      `/production/schedule?from=${nextFrom}&to=${nextTo < nextFrom ? nextFrom : nextTo}`
-    );
+    const search = new URLSearchParams({
+      from: nextFrom,
+      to: nextTo < nextFrom ? nextFrom : nextTo,
+    });
+    if (wipScope.kind === "day") search.set("wip", wipScope.date);
+    else {
+      search.set("wipFrom", wipScope.from);
+      search.set("wipTo", wipScope.to);
+    }
+    router.push(`/production/schedule?${search}`);
   }
 
   function acceptAll() {
@@ -624,92 +718,59 @@ export function ScheduleView({
           </span>
         </div>
 
-        {/* Line, then the departments that belong to it. */}
-        <div className="flex items-end gap-1.5">
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
-              Line
-            </span>
-            <select
-              value={line}
-              onChange={(event) => {
-                setLine(event.target.value);
-                setDept("");
-              }}
-              aria-label="Production line"
-              className="h-8 rounded-md border border-border bg-card px-2 text-sm"
-            >
-              <option value="">All lines</option>
-              {lineNames.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
+        {/*
+          One field, everything else behind Filter.
 
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
-              Department
-            </span>
-            <select
-              value={dept}
-              onChange={(event) => setDept(event.target.value)}
-              aria-label="Department"
-              className="h-8 rounded-md border border-border bg-card px-2 text-sm"
-            >
-              <option value="__finished__">Finished products</option>
-              <option value="__all__">All departments</option>
-              <optgroup label="Department">
-                {departmentOptions.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
-          </label>
-        </div>
+          Six controls across the top is six things to read before you can
+          type. The live filters show as pills inside the field, which is
+          where you were already looking.
+        */}
+        {/* Which day's cooler the WIP column is showing. Separate from the
+            plan's own range: you plan next week against what is in the
+            cooler this morning. */}
+        <DateScopePicker
+          label="WIP as of"
+          scope={wipScope}
+          onChange={goWip}
+          max={today}
+          className="mb-0.5"
+        />
 
-        <div className="relative mb-0.5 min-w-0 flex-1 sm:max-w-52">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Find a recipe…"
-            aria-label="Search recipes"
-            className="h-8 w-full rounded-md border border-border bg-card pr-2 pl-8 text-sm"
-          />
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setHideEmpty((v) => !v)}
-          aria-pressed={hideEmpty}
-          title="Hide rows with nothing planned and nothing needed in this range"
-          className={cn(
-            "mb-0.5 h-8 rounded-md px-2.5 text-sm transition-colors",
-            hideEmpty
-              ? "bg-accent font-medium text-accent-foreground"
-              : "border border-border bg-card text-muted-foreground hover:bg-muted"
-          )}
-        >
-          Hide empty
-        </button>
-
-        <button
-          type="button"
-          onClick={() =>
-            setExpanded(
-              expanded.size > 0
-                ? new Set()
-                : new Set(tree.map((node) => node.path))
-            )
-          }
-          className="mb-0.5 h-8 rounded-md border border-border bg-card px-2.5 text-sm text-muted-foreground hover:bg-muted"
-        >
-          {expanded.size > 0 ? "Collapse all" : "Expand all"}
-        </button>
+        <SearchPanel
+          query={query}
+          onQueryChange={setQuery}
+          placeholder="Find a recipe…"
+          aria-label="Search recipes"
+          filters={filters}
+          onFiltersChange={setFilters}
+          filterGroups={[
+            {
+              exclusive: true,
+              items: [
+                { id: "view:__finished__", label: "Finished products" },
+                { id: "view:__all__", label: "All departments" },
+                ...departmentOptions.map((name) => ({
+                  id: `view:${name}`,
+                  label: name,
+                })),
+              ],
+            },
+            {
+              exclusive: true,
+              items: lineNames.map((name) => ({
+                id: `line:${name}`,
+                label: name,
+              })),
+            },
+            {
+              items: [
+                { id: "hide-empty", label: "Hide empty rows" },
+                { id: "expand-all", label: "Open the whole tree" },
+              ],
+            },
+          ].filter((group) => group.items.length > 0)}
+          className="mb-0.5 sm:max-w-lg"
+        />
 
         <span className="mb-1.5 text-[0.6875rem] text-muted-foreground">
           {shown.length} of {recipes.length} recipes
@@ -1015,7 +1076,7 @@ export function ScheduleView({
         dates={dates}
         rows={shown}
         styles={styles}
-        expanded={expanded}
+        expanded={openPaths}
         onToggle={toggle}
         onSelectionChange={setSelection}
         onInspect={(id) => setInspected((prev) => (prev === id ? null : id))}

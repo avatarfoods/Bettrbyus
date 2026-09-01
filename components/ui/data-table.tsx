@@ -188,7 +188,7 @@ export function TableTitle({
   return (
     <div className="mb-2 flex items-baseline justify-between gap-3">
       <h2 className="flex items-center gap-2 text-[0.6875rem] font-semibold tracking-wider text-primary uppercase">
-        <span aria-hidden className="h-3 w-0.5 rounded-full bg-brand" />
+        <span aria-hidden className="h-3 w-0.5 rounded-[1px] bg-brand" />
         {children}
       </h2>
       {aside && (

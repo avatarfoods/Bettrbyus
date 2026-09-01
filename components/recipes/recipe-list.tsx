@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { HelpCircle, Search, X } from "lucide-react";
+import { HelpCircle } from "lucide-react";
 import { RECIPE_KIND_SHORT, type CatalogRecipe } from "@/lib/recipes/catalog";
 import type { RecipeKind } from "@/lib/production/wip-explode";
 import {
@@ -14,12 +14,14 @@ import {
   TR,
   TableEmpty,
 } from "@/components/ui/data-table";
+import { NewRecipeDialog } from "@/components/recipes/new-recipe-dialog";
+import { FinishedStar } from "@/components/recipes/finished-star";
+import { SearchPanel } from "@/components/ui/search-panel";
 import { cn } from "@/lib/utils";
 
 type SortKey = "wipCode" | "name" | "kind" | "department" | "lines";
 
 /** Bucket for departments with no line assigned yet. */
-const UNGROUPED = "__ungrouped__";
 
 const KINDS: RecipeKind[] = ["finished", "assembly", "kitchen"];
 
@@ -28,6 +30,7 @@ export function RecipeList({
   departments,
   departmentLines = {},
   initialFinishedOnly,
+  canCreate = false,
 }: {
   recipes: CatalogRecipe[];
   departments: string[];
@@ -35,15 +38,29 @@ export function RecipeList({
   departmentLines?: Record<string, string>;
   /** Set by /recipes?kind=finished, which is where the nav points. */
   initialFinishedOnly?: boolean;
+  canCreate?: boolean;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [kind, setKind] = useState<RecipeKind | "">("");
-  const [department, setDepartment] = useState("");
-  const [line, setLine] = useState("");
-  const [onlyIssues, setOnlyIssues] = useState(false);
   const [finishedOnly, setFinishedOnly] = useState(initialFinishedOnly ?? false);
   const [groupByDept, setGroupByDept] = useState(false);
+
+  /**
+   * Every filter as one list of ids, which is what the pills in the search
+   * field are. Decoded back into the values the list already filters on, so
+   * only the control changed and none of the filtering did.
+   */
+  const [filters, setFilters] = useState<string[]>([]);
+
+  const onlyIssues = filters.includes("issues");
+  /** Archived recipes are out of the way unless asked for by name. */
+  const showArchived = filters.includes("archived");
+  const kind = (filters
+    .find((id) => id.startsWith("kind:"))
+    ?.slice(5) ?? "") as RecipeKind | "";
+  const line = filters.find((id) => id.startsWith("line:"))?.slice(5) ?? "";
+  const department = filters.find((id) => id.startsWith("dept:"))?.slice(5) ?? "";
+
   const [sort, setSort] = useState<SortKey>("name");
   const [dir, setDir] = useState(1);
 
@@ -51,6 +68,7 @@ export function RecipeList({
     const needle = query.trim().toLowerCase();
 
     const filtered = recipes.filter((recipe) => {
+      if (recipe.archivedAt !== null && !showArchived) return false;
       if (finishedOnly && !recipe.isFinished) return false;
       if (kind && recipe.kind !== kind) return false;
       if (department && recipe.department !== department) return false;
@@ -82,6 +100,7 @@ export function RecipeList({
     department,
     line,
     onlyIssues,
+    showArchived,
     finishedOnly,
     sort,
     dir,
@@ -100,33 +119,43 @@ export function RecipeList({
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [rows, groupByDept]);
 
-  /**
-   * Departments shown under their line, the way Odoo nests locations under a
-   * warehouse. Anything not yet linked in Production settings falls to the
-   * bottom ungrouped rather than disappearing.
-   */
-  const groupedDepartments = useMemo(() => {
-    const groups = new Map<string, string[]>();
-    const visible = line
-      ? departments.filter((name) => departmentLines[name] === line)
-      : departments;
-
-    for (const name of visible) {
-      const key = departmentLines[name] ?? UNGROUPED;
-      const bucket = groups.get(key);
-      if (bucket) bucket.push(name);
-      else groups.set(key, [name]);
-    }
-
-    return [...groups.entries()].sort(([a], [b]) =>
-      a === UNGROUPED ? 1 : b === UNGROUPED ? -1 : a.localeCompare(b)
-    );
-  }, [departments, departmentLines, line]);
-
   const lineNames = useMemo(
     () => [...new Set(Object.values(departmentLines))].sort(),
     [departmentLines]
   );
+
+  const filterGroups = useMemo(() => {
+    const visibleDepartments = line
+      ? departments.filter((name) => departmentLines[name] === line)
+      : departments;
+
+    return [
+      {
+        items: [
+          { id: "issues", label: "Needs review" },
+          { id: "archived", label: "Show archived" },
+        ],
+      },
+      {
+        exclusive: true,
+        items: KINDS.map((option) => ({
+          id: `kind:${option}`,
+          label: RECIPE_KIND_SHORT[option],
+        })),
+      },
+      {
+        exclusive: true,
+        items: lineNames.map((name) => ({ id: `line:${name}`, label: name })),
+      },
+      {
+        exclusive: true,
+        items: visibleDepartments.map((name) => ({
+          id: `dept:${name}`,
+          label: name,
+        })),
+      },
+    ].filter((group) => group.items.length > 0);
+  }, [departments, departmentLines, line, lineNames]);
 
   function toggleSort(key: SortKey) {
     if (sort === key) setDir((value) => -value);
@@ -144,110 +173,50 @@ export function RecipeList({
 
   return (
     <div className="flex flex-col gap-3 px-3 py-3 sm:px-4">
-      {/* Filters — one row of same-shaped controls. */}
+      {/*
+        One search field, and everything else behind Filter.
+        Six controls in a row is six things to read before you can type; a
+        field with the live filters shown as pills inside it says the same
+        thing in the place you were already looking.
+      */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-0 flex-1 sm:max-w-xs">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search recipe or ingredient…"
-            aria-label="Search recipes"
-            className="h-8 w-full rounded-md border border-border bg-card pr-7 pl-8 text-sm"
-          />
-          {query && (
+        {/* The one filter people reach for stays out where it can be hit
+            without opening anything. The rest live behind Filter. */}
+        <div className="flex overflow-hidden rounded-sm border border-zinc-300 dark:border-zinc-600">
+          {(
+            [
+              [false, "All recipes"],
+              [true, "Finished products"],
+            ] as const
+          ).map(([value, label]) => (
             <button
+              key={label}
               type="button"
-              onClick={() => setQuery("")}
-              aria-label="Clear search"
-              className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
+              onClick={() => setFinishedOnly(value)}
+              aria-pressed={finishedOnly === value}
+              className={cn(
+                "h-8 px-2.5 text-sm transition-colors",
+                finishedOnly === value
+                  ? "bg-primary font-medium text-primary-foreground"
+                  : "bg-card text-muted-foreground hover:bg-muted"
+              )}
             >
-              <X className="size-3.5" />
+              {label}
             </button>
-          )}
+          ))}
         </div>
 
-        <button
-          type="button"
-          onClick={() => setFinishedOnly((value) => !value)}
-          aria-pressed={finishedOnly}
-          className={cn(
-            "h-8 rounded-md px-2.5 text-sm transition-colors",
-            finishedOnly
-              ? "bg-primary text-primary-foreground font-medium"
-              : "border border-border bg-card text-muted-foreground hover:bg-muted"
-          )}
-        >
-          Finished products
-        </button>
+        <SearchPanel
+          query={query}
+          onQueryChange={setQuery}
+          placeholder="Search recipe or ingredient…"
+          aria-label="Search recipes"
+          filters={filters}
+          onFiltersChange={setFilters}
+          filterGroups={filterGroups}
+          className="sm:max-w-xl"
+        />
 
-        <FilterLabel>Type</FilterLabel>
-        <select
-          value={kind}
-          onChange={(event) => setKind(event.target.value as RecipeKind | "")}
-          aria-label="Filter by type"
-          className="h-8 rounded-md border border-border bg-card px-2 text-sm"
-        >
-          <option value="">All types</option>
-          {KINDS.map((option) => (
-            <option key={option} value={option}>
-              {RECIPE_KIND_SHORT[option]}
-            </option>
-          ))}
-        </select>
-
-{lineNames.length > 0 && (
-          <>
-            <FilterLabel>Line</FilterLabel>
-            <select
-              value={line}
-              onChange={(event) => {
-                setLine(event.target.value);
-                setDepartment("");
-              }}
-              aria-label="Filter by production line"
-              className="h-8 rounded-md border border-border bg-card px-2 text-sm"
-            >
-              <option value="">All lines</option>
-              {lineNames.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </>
-        )}
-
-        <FilterLabel>Dept</FilterLabel>
-        <select
-          value={department}
-          onChange={(event) => setDepartment(event.target.value)}
-          aria-label="Filter by department"
-          className="h-8 max-w-56 rounded-md border border-border bg-card px-2 text-sm"
-        >
-          <option value="">All</option>
-          {groupedDepartments.map(([groupName, names]) =>
-            groupName === UNGROUPED ? (
-              names.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))
-            ) : (
-              <optgroup key={groupName} label={groupName}>
-                {names.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </optgroup>
-            )
-          )}
-        </select>
-
-        <Toggle active={onlyIssues} onClick={() => setOnlyIssues((v) => !v)}>
-          Needs review
-        </Toggle>
         <Toggle active={groupByDept} onClick={() => setGroupByDept((v) => !v)}>
           By dept
         </Toggle>
@@ -255,6 +224,8 @@ export function RecipeList({
         <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">
           {rows.length} / {recipes.length}
         </span>
+
+        <NewRecipeDialog departments={departments} canCreate={canCreate} />
       </div>
 
       {/* Desktop / iPad */}
@@ -310,8 +281,9 @@ export function RecipeList({
             >
               <div className="flex items-start justify-between gap-2">
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold">
-                    {recipe.name}
+                  <span className="flex items-center gap-1.5 text-sm font-semibold">
+                    {recipe.isFinished && <FinishedStar />}
+                    <span className="min-w-0 truncate">{recipe.name}</span>
                   </span>
                   <span className="font-mono text-xs text-muted-foreground">
                     {recipe.wipCode}
@@ -346,7 +318,12 @@ function Row({
       <TD mono muted>
         {recipe.wipCode}
       </TD>
-      <TD strong>{recipe.name}</TD>
+      <TD strong>
+        <span className="flex items-center gap-1.5">
+          {recipe.isFinished && <FinishedStar />}
+          {recipe.name}
+        </span>
+      </TD>
       <TD>
         <KindTag kind={recipe.kind} />
       </TD>
@@ -388,7 +365,7 @@ export function AllergenChips({ recipe }: { recipe: CatalogRecipe }) {
     if (unverified.length === 0) {
       return (
         <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="size-1.5 rounded-full bg-success" />
+          <span className="size-1.5 rounded-[1px] bg-success" />
           None
         </span>
       );
@@ -432,13 +409,13 @@ function StatusCell({ recipe }: { recipe: CatalogRecipe }) {
   if (recipe.issues.length === 0) {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-        <span className="size-1.5 rounded-full bg-success" />
+        <span className="size-1.5 rounded-[1px] bg-success" />
         OK
       </span>
     );
   }
   return (
-    <span className="inline-flex shrink-0 rounded-full bg-warning-muted px-2 py-0.5 text-[0.6875rem] font-medium text-warning-foreground">
+    <span className="inline-flex shrink-0 rounded-[1px] bg-warning-muted px-2 py-0.5 text-[0.6875rem] font-medium text-warning-foreground">
       {recipe.issues.length} to review
     </span>
   );
@@ -462,13 +439,6 @@ export function KindTag({ kind }: { kind: RecipeKind }) {
   );
 }
 
-function FilterLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="ml-1 text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase">
-      {children}
-    </span>
-  );
-}
 
 function Toggle({
   active,

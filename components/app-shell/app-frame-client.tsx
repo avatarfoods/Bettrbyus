@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
+import { clearTrail } from "@/lib/nav-trail";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -59,7 +60,7 @@ export function AppFrameClient({
           className={cn(
             "inline-flex size-8 shrink-0 items-center justify-center rounded-md text-sidebar-link transition-colors",
             "hover:bg-sidebar-accent hover:text-white",
-            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring"
+            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring",
           )}
         >
           <LayoutGrid className="size-[1.05rem]" />
@@ -115,13 +116,14 @@ function BarMenu({ menu, pathname }: { menu: AppMenu; pathname: string }) {
     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring",
     active
       ? "bg-sidebar-primary text-white"
-      : "text-sidebar-link hover:bg-sidebar-accent hover:text-white"
+      : "text-sidebar-link hover:bg-sidebar-accent hover:text-white",
   );
 
   if (menu.items.length === 1) {
     return (
       <Link
         href={menu.items[0].href}
+        onClick={clearTrail}
         aria-current={active ? "page" : undefined}
         className={base}
       >
@@ -133,31 +135,57 @@ function BarMenu({ menu, pathname }: { menu: AppMenu; pathname: string }) {
   return (
     <Menu.Root>
       <Menu.Trigger
-        className={cn(base, "data-popup-open:bg-sidebar-accent data-popup-open:text-white")}
+        className={cn(
+          base,
+          "data-popup-open:bg-sidebar-accent data-popup-open:text-white",
+        )}
       >
         {menu.label}
         <ChevronDown className="size-3.5 opacity-70" />
       </Menu.Trigger>
       <Menu.Portal>
-        <Menu.Positioner sideOffset={6} align="start" className="isolate z-50 outline-hidden">
+        <Menu.Positioner
+          sideOffset={6}
+          align="start"
+          className="isolate z-50 outline-hidden"
+        >
           <Menu.Popup className="min-w-52 origin-(--transform-origin) rounded-lg bg-popover p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-hidden transition-[scale,opacity] duration-100 data-starting-style:scale-95 data-starting-style:opacity-0 data-ending-style:scale-95 data-ending-style:opacity-0">
-            {menu.items.map((item) => {
+            {menu.items.map((item, index) => {
               const Icon = item.icon;
               const itemActive = isMenuItemActive(pathname, item.href);
+              // A heading is drawn where the group changes, so a run of items
+              // that belong together sits under one label.
+              const heading =
+                item.group && item.group !== menu.items[index - 1]?.group
+                  ? item.group
+                  : null;
+
               return (
-                <Menu.LinkItem
-                  key={item.href}
-                  href={item.href}
-                  render={<Link href={item.href} />}
-                  className={cn(
-                    "flex cursor-default items-center gap-2.5 rounded-md px-2.5 py-2 outline-hidden select-none",
-                    "data-highlighted:bg-accent data-highlighted:text-accent-foreground",
-                    itemActive && "font-semibold text-primary"
+                <Fragment key={item.href}>
+                  {heading && (
+                    <div
+                      className={cn(
+                        "px-2.5 pt-2 pb-1 text-[0.625rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase",
+                        index > 0 && "mt-1 border-t border-border/70",
+                      )}
+                    >
+                      {heading}
+                    </div>
                   )}
-                >
-                  {Icon && <Icon className="size-4 opacity-70" />}
-                  {item.label}
-                </Menu.LinkItem>
+                  <Menu.LinkItem
+                    href={item.href}
+                    onClick={clearTrail}
+                    render={<Link href={item.href} />}
+                    className={cn(
+                      "flex cursor-default items-center gap-2.5 rounded-md px-2.5 py-1.5 outline-hidden select-none",
+                      "data-highlighted:bg-accent data-highlighted:text-accent-foreground",
+                      itemActive && "font-semibold text-primary",
+                    )}
+                  >
+                    {Icon && <Icon className="size-4 opacity-70" />}
+                    {item.label}
+                  </Menu.LinkItem>
+                </Fragment>
               );
             })}
           </Menu.Popup>
@@ -168,7 +196,13 @@ function BarMenu({ menu, pathname }: { menu: AppMenu; pathname: string }) {
 }
 
 /** Phone menu: this app's pages only. Apps are switched from the launcher. */
-function MobileNav({ app, pathname }: { app: AppDefinition; pathname: string }) {
+function MobileNav({
+  app,
+  pathname,
+}: {
+  app: AppDefinition;
+  pathname: string;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -186,7 +220,7 @@ function MobileNav({ app, pathname }: { app: AppDefinition; pathname: string }) 
             className={cn(
               "relative flex h-full w-[min(17rem,82vw)] flex-col overflow-y-auto bg-sidebar p-2 text-sidebar-foreground outline-none",
               "[transform:translateX(var(--drawer-swipe-movement-x))] transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
-              "data-starting-style:-translate-x-full data-ending-style:-translate-x-full"
+              "data-starting-style:-translate-x-full data-ending-style:-translate-x-full",
             )}
           >
             <div className="mb-1 flex items-center justify-between px-1.5 py-2">
@@ -206,25 +240,37 @@ function MobileNav({ app, pathname }: { app: AppDefinition; pathname: string }) 
                 <p className="px-2.5 pt-2 pb-1 text-[0.625rem] tracking-[0.08em] text-sidebar-muted uppercase">
                   {menu.label}
                 </p>
-                {menu.items.map((item) => {
+                {menu.items.map((item, index) => {
                   const Icon = item.icon;
                   const active = isMenuItemActive(pathname, item.href);
+                  const heading =
+                    item.group && item.group !== menu.items[index - 1]?.group
+                      ? item.group
+                      : null;
                   return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setOpen(false)}
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        "mb-0.5 flex min-h-11 items-center gap-2.5 rounded-md px-2.5 text-sm font-medium transition-colors",
-                        active
-                          ? "bg-sidebar-primary text-white"
-                          : "text-sidebar-link hover:bg-sidebar-accent hover:text-white"
+                    <Fragment key={item.href}>
+                      {heading && (
+                        <p className="px-2.5 pt-2 pb-0.5 text-[0.5625rem] tracking-[0.08em] text-sidebar-muted/80 uppercase">
+                          {heading}
+                        </p>
                       )}
-                    >
-                      {Icon && <Icon className="size-[0.95rem] shrink-0 opacity-90" />}
-                      <span className="truncate">{item.label}</span>
-                    </Link>
+                      <Link
+                        href={item.href}
+                        onClick={() => setOpen(false)}
+                        aria-current={active ? "page" : undefined}
+                        className={cn(
+                          "mb-0.5 flex min-h-11 items-center gap-2.5 rounded-md px-2.5 text-sm font-medium transition-colors",
+                          active
+                            ? "bg-sidebar-primary text-white"
+                            : "text-sidebar-link hover:bg-sidebar-accent hover:text-white",
+                        )}
+                      >
+                        {Icon && (
+                          <Icon className="size-[0.95rem] shrink-0 opacity-90" />
+                        )}
+                        <span className="truncate">{item.label}</span>
+                      </Link>
+                    </Fragment>
                   );
                 })}
               </div>
@@ -245,7 +291,13 @@ function MobileNav({ app, pathname }: { app: AppDefinition; pathname: string }) 
   );
 }
 
-function UserMenuButton({ email, isAdmin }: { email: string; isAdmin: boolean }) {
+function UserMenuButton({
+  email,
+  isAdmin,
+}: {
+  email: string;
+  isAdmin: boolean;
+}) {
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
 
@@ -261,14 +313,18 @@ function UserMenuButton({ email, isAdmin }: { email: string; isAdmin: boolean })
     <Menu.Root>
       <Menu.Trigger
         aria-label="Account"
-        className="inline-flex size-8 items-center justify-center rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring"
+        className="inline-flex size-8 items-center justify-center rounded-[1px] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring"
       >
-        <span className="flex size-7 items-center justify-center rounded-full bg-sidebar-primary text-xs font-semibold text-white">
+        <span className="flex size-7 items-center justify-center rounded-[1px] bg-sidebar-primary text-xs font-semibold text-white">
           {email.trim().charAt(0).toUpperCase() || "?"}
         </span>
       </Menu.Trigger>
       <Menu.Portal>
-        <Menu.Positioner sideOffset={6} align="end" className="isolate z-50 outline-hidden">
+        <Menu.Positioner
+          sideOffset={6}
+          align="end"
+          className="isolate z-50 outline-hidden"
+        >
           <Menu.Popup className="min-w-56 origin-(--transform-origin) rounded-lg bg-popover p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-hidden transition-[scale,opacity] duration-100 data-starting-style:scale-95 data-starting-style:opacity-0 data-ending-style:scale-95 data-ending-style:opacity-0">
             <div className="px-2.5 py-2">
               <p className="truncate text-sm font-medium" title={email}>

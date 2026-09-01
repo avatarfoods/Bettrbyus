@@ -233,12 +233,12 @@ export function PurchasingImportPage() {
         <div className="mx-auto flex w-full max-w-none items-center gap-3">
           <Link
             href="/purchasing"
-            className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-input bg-background text-foreground transition-colors hover:bg-muted"
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-[1px] border border-input bg-background text-foreground transition-colors hover:bg-muted"
             aria-label="Back to purchasing"
           >
             <ArrowLeft className="size-5" />
           </Link>
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-[1px] bg-primary/10 text-primary">
             <FileUp className="size-5" />
           </div>
           <div className="min-w-0 flex-1">

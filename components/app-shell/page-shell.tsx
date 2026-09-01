@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import Link from "next/link";
+import { NavTrail } from "@/components/app-shell/nav-trail";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,8 +20,16 @@ export type Crumb = {
 };
 
 type PageShellProps = {
-  /** Trail ending in the current record or view. Last item renders as text. */
+  /**
+   * Where this page sits, used until the live trail takes over.
+   *
+   * The rendered breadcrumb is a record of how somebody actually got here -
+   * see NavTrail - so these are the fallback for a first load, and the last
+   * one supplies this page's own crumb label.
+   */
   breadcrumbs: Crumb[];
+  /** True for an app's own home: arriving here starts the trail again. */
+  trailRoot?: boolean;
   /** Primary actions, e.g. a New button. Sits left of the breadcrumb. */
   actions?: React.ReactNode;
   /** Search input and filter chips. */
@@ -33,6 +43,7 @@ type PageShellProps = {
 
 export function PageShell({
   breadcrumbs,
+  trailRoot,
   actions,
   search,
   meta,
@@ -49,7 +60,13 @@ export function PageShell({
             </div>
           )}
 
-          <Breadcrumbs items={breadcrumbs} />
+          <Suspense fallback={<Breadcrumbs items={breadcrumbs} />}>
+            <NavTrail
+              label={breadcrumbs[breadcrumbs.length - 1]?.label ?? "Page"}
+              root={trailRoot}
+              fallback={breadcrumbs}
+            />
+          </Suspense>
 
           {search && (
             <div className="order-4 w-full min-w-0 sm:order-3 sm:ml-auto sm:w-auto sm:max-w-md sm:flex-1">

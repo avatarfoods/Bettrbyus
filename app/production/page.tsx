@@ -49,6 +49,7 @@ export default async function ProductionDashboardPage({
   return (
     <PageShell
       breadcrumbs={[{ label: "Production" }, { label: "Dashboard" }]}
+      trailRoot
       meta={<span>{days.length} days with work</span>}
     >
       <ProductionDashboard

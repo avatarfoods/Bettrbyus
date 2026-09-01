@@ -3,16 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  ArrowLeftRight,
-  ChevronDown,
-  ClipboardList,
-  CookingPot,
-  LogOut,
-  Package,
-  ShoppingCart,
-  UserPlus,
-} from "lucide-react";
+import { ArrowLeftRight, ChevronDown, CookingPot, LogOut, Package, ShoppingCart, UserPlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -29,12 +20,6 @@ const NAV_ITEMS = [
     label: "Movings",
     icon: ArrowLeftRight,
     match: (pathname: string) => pathname.startsWith("/movings"),
-  },
-  {
-    href: "/inventory-checks/new",
-    label: "Inventory",
-    icon: ClipboardList,
-    match: (pathname: string) => pathname.startsWith("/inventory-checks"),
   },
   {
     href: "/recipes",

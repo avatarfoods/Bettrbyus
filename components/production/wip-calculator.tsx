@@ -397,13 +397,13 @@ function CoverageTag({ cases, plan }: { cases: number; plan: number }) {
   }
   if (cases >= plan) {
     return (
-      <span className="inline-flex rounded-full bg-success-muted px-2 py-0.5 text-[0.6875rem] font-medium text-success">
+      <span className="inline-flex rounded-[1px] bg-success-muted px-2 py-0.5 text-[0.6875rem] font-medium text-success">
         covered
       </span>
     );
   }
   return (
-    <span className="inline-flex rounded-full bg-destructive/10 px-2 py-0.5 text-[0.6875rem] font-medium text-destructive">
+    <span className="inline-flex rounded-[1px] bg-destructive/10 px-2 py-0.5 text-[0.6875rem] font-medium text-destructive">
       short {fmt(plan - cases, 0)} cs
     </span>
   );

@@ -45,6 +45,21 @@ export type FinishedProduct = {
   expirationOffsetDays: number;
   lotFormat: string;
 
+  /**
+   * What the carton declares.
+   *
+   * Its own field, not built from the recipe tree: a label statement is a
+   * legal declaration with its own order and wording, and generating one
+   * from the BOM would put a guess on a carton.
+   */
+  ingredientStatement: string | null;
+  handlingInstructions: string | null;
+  heatingInstructions: string | null;
+  /** Days of life a customer is promised on arrival, not from production. */
+  guaranteedShelfLifeDays: number | null;
+  palletWeightLb: number | null;
+  caseWeightLb: number | null;
+
   validFrom: string;
   active: boolean;
   notes: string | null;

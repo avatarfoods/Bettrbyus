@@ -30,7 +30,7 @@ export default async function WipCountPage({
   const counting = params.date ?? addDays(today, -1);
 
   const [data, list, planned] = await Promise.all([
-    fetchWipData(supabase, { from: counting, to: today }),
+    fetchWipData(supabase, { asOf: today }),
     fetchCountList(supabase, counting),
     fetchPlanned(supabase, counting),
   ]);

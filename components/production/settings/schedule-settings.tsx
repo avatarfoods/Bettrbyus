@@ -370,7 +370,7 @@ function Offset({
 function WindowBar({ from, to }: { from: number | null; to: number | null }) {
   if (from === null && to === null) {
     return (
-      <span className="block h-1.5 rounded-full bg-[repeating-linear-gradient(90deg,var(--color-border)_0_3px,transparent_3px_6px)]" />
+      <span className="block h-1.5 rounded-[1px] bg-[repeating-linear-gradient(90deg,var(--color-border)_0_3px,transparent_3px_6px)]" />
     );
   }
 
@@ -383,12 +383,12 @@ function WindowBar({ from, to }: { from: number | null; to: number | null }) {
   const openEnd = to === null;
 
   return (
-    <span className="relative block h-1.5 rounded-full bg-muted">
+    <span className="relative block h-1.5 rounded-[1px] bg-muted">
       {/* Day 0 - the day it is wanted. Everything is measured back from here. */}
       <span className="absolute inset-y-[-2px] right-0 w-px bg-foreground/25" />
       <span
         className={cn(
-          "absolute inset-y-0 rounded-full bg-primary",
+          "absolute inset-y-0 rounded-[1px] bg-primary",
           openStart && "rounded-l-none opacity-70",
           openEnd && "rounded-r-none"
         )}

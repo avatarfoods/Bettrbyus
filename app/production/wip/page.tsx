@@ -2,33 +2,33 @@ import { PageShell } from "@/components/app-shell/page-shell";
 import { WipView } from "@/components/production/wip/wip-view";
 import { fetchWipData } from "@/lib/production/wip/fetch";
 import { fetchProductionConfig } from "@/lib/production/config";
+import { scopeFromParams } from "@/lib/date-scope";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "WIP" };
 export const dynamic = "force-dynamic";
 
-function addDays(iso: string, days: number): string {
-  const date = new Date(`${iso}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
 export default async function WipPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string }>;
+  searchParams: Promise<{ asOf?: string; from?: string; to?: string }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
 
   const today = new Date().toISOString().slice(0, 10);
-  // A fortnight back by default: long enough to still see a lot that has been
-  // sitting, short enough that the page is about now.
-  const from = params.from ?? addDays(today, -14);
-  const to = params.to && params.to >= from ? params.to : today;
+  const scope = scopeFromParams(params, today);
+  // Ages are judged against the end of whatever was asked for, so looking
+  // back at the 31st says what was good on the 31st.
+  const asOf = scope.kind === "day" ? scope.date : scope.to;
 
   const [data, config] = await Promise.all([
-    fetchWipData(supabase, { from, to }),
+    fetchWipData(
+      supabase,
+      scope.kind === "day"
+        ? { asOf: scope.date }
+        : { from: scope.from, to: scope.to }
+    ),
     fetchProductionConfig(supabase),
   ]);
 
@@ -44,8 +44,9 @@ export default async function WipPage({
           .filter((line) => line.active)
           .map((line) => line.name)}
         today={today}
-        from={from}
-        to={to}
+        asOf={asOf}
+        scope={scope}
+        departmentColors={config.departments.map((d) => [d.name, d.color])}
         missingTable={data.missingTable}
         windowsMissing={data.windowsMissing}
       />

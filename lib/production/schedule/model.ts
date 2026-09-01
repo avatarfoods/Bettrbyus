@@ -316,6 +316,20 @@ export type CellAllocation = {
  * the earliest order still open, not reserved for a particular one - and it
  * is what makes a single date meaningful under each cell.
  */
+/**
+ * A lot already sitting in the cooler, from a WIP count.
+ *
+ * Stock is supply that has already happened, so it covers demand before any
+ * new production does - both because that is what FIFO means and because
+ * something used is something not thrown away.
+ */
+export type StockLot = {
+  lotCode: string;
+  quantity: number;
+  /** Null means nothing was ever set, so it keeps indefinitely. */
+  expiresOn: string | null;
+};
+
 export type Allocation = {
   /** Keyed by production date: what that run is serving, and whether it works. */
   byRun: Map<string, CellAllocation>;
@@ -328,6 +342,17 @@ export type Allocation = {
    * does not exist.
    */
   unmetByNeed: Map<string, number>;
+  /** How much of the counted stock is covering demand. */
+  stockUsed: number;
+  /**
+   * Stock that reaches nothing, and why.
+   *
+   * Almost always because it is past its date by the day it is wanted. It
+   * has to be said out loud: silently ignoring buckets somebody can see in
+   * the cooler is the one behaviour nobody would forgive.
+   */
+  stockStranded: number;
+  stockReason: string | null;
 };
 
 /**
@@ -344,7 +369,8 @@ export type Allocation = {
 export function allocateRecipe(
   produced: { date: string; quantity: number }[],
   demand: RecipeDemand | undefined,
-  window: TimingWindow | undefined
+  window: TimingWindow | undefined,
+  stock: StockLot[] = []
 ): Allocation {
   const byRun = new Map<string, CellAllocation>();
 
@@ -352,6 +378,46 @@ export function allocateRecipe(
     date: day.date,
     remaining: day.quantity,
   }));
+
+  /*
+    Counted stock is spent first, oldest lot first.
+
+    A lot is judged by its own expiry rather than by the timing window: the
+    window says how far ahead something MAY be made, the expiry says how long
+    what was actually made will last, and for something already in the cooler
+    only the second one is a fact.
+  */
+  let stockUsed = 0;
+  let stockStranded = 0;
+  let stockReason: string | null = null;
+
+  const lots = [...stock]
+    .filter((lot) => lot.quantity > 0.0001)
+    .sort((a, b) => (a.expiresOn ?? "9999").localeCompare(b.expiresOn ?? "9999"));
+
+  for (const lot of lots) {
+    let left = lot.quantity;
+    for (const need of needs) {
+      if (left <= 0.0001) break;
+      if (need.remaining <= 0.0001) continue;
+      // Past its date by the day it is wanted, so it cannot serve it.
+      if (lot.expiresOn !== null && need.date > lot.expiresOn) continue;
+      const take = Math.min(left, need.remaining);
+      need.remaining -= take;
+      left -= take;
+      stockUsed += take;
+    }
+
+    if (left > 0.0001) {
+      stockStranded += left;
+      const firstOpen = needs.find((need) => need.remaining > 0.0001);
+      if (!stockReason && firstOpen && lot.expiresOn !== null) {
+        stockReason =
+          `lot ${lot.lotCode} expired ${monthDay(lot.expiresOn)}` +
+          `, too old for ${monthDay(firstOpen.date)}`;
+      }
+    }
+  }
 
   const runs = [...produced]
     .filter((run) => run.quantity > 0)
@@ -410,7 +476,7 @@ export function allocateRecipe(
     if (need.remaining > 0.0001) unmetByNeed.set(need.date, need.remaining);
   }
 
-  return { byRun, unmetByNeed };
+  return { byRun, unmetByNeed, stockUsed, stockStranded, stockReason };
 }
 
 /** Days from production to need. Positive means produced in advance. */
@@ -441,27 +507,38 @@ function judgeWindow(
   if (!needDate) {
     return { verdict: "unknown", explanation: null };
   }
-  if (!window || (window.earliestOffset === null && window.latestOffset === null)) {
-    return { verdict: "unknown", explanation: null };
-  }
 
   // The day it is made, expressed the same way the window is: an offset from
   // the day it is needed. Made two days early is -2.
   const offset = -daysBetween(productionDate, needDate);
+
+  /*
+    Day zero is structural, not a shelf-life question.
+
+    Nothing can be made after the day it is wanted - you cannot assemble a
+    bowl on the 7th for a bowl that ships on the 6th - so the late edge holds
+    whether or not anyone has configured a window. Only the early edge depends
+    on a shelf life, because without one the app genuinely cannot say how far
+    ahead is too far.
+  */
+  const latest = window?.latestOffset ?? 0;
+  if (offset > latest) {
+    const late = offset - latest;
+    return {
+      verdict: "too-late",
+      explanation: `${late} ${dayWord(late)} too late for ${monthDay(needDate)}`,
+    };
+  }
+
+  if (!window || window.earliestOffset === null) {
+    return { verdict: "unknown", explanation: null };
+  }
 
   if (window.earliestOffset !== null && offset < window.earliestOffset) {
     const over = window.earliestOffset - offset;
     return {
       verdict: "too-early",
       explanation: `${over} ${dayWord(over)} too early for ${monthDay(needDate)}`,
-    };
-  }
-
-  if (window.latestOffset !== null && offset > window.latestOffset) {
-    const short = offset - window.latestOffset;
-    return {
-      verdict: "too-late",
-      explanation: `${short} ${dayWord(short)} too late for ${monthDay(needDate)}`,
     };
   }
 

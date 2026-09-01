@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Carlito, Geist_Mono } from "next/font/google";
 import { AppFrame } from "@/components/app-shell/app-frame";
-import { ThemeScript } from "@/components/theme/theme-script";
+import Script from "next/script";
+import { THEME_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 // Calibri is a Windows font, so it is not available to a browser on a Mac,
@@ -26,7 +27,7 @@ export const metadata: Metadata = {
     default: "Bettrbyus",
     template: "%s · Bettrbyus",
   },
-  description: "Production, inventory and purchasing for Avatar Foods",
+  description: "Production and purchasing for Avatar Foods",
 };
 
 export const viewport: Viewport = {
@@ -49,11 +50,29 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${carlito.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <head>
-        <ThemeScript />
-      </head>
       <body className="min-h-full font-sans">
         <AppFrame>{children}</AppFrame>
+
+        {/*
+          The saved theme, applied before the browser paints.
+
+          It has to run during HTML parsing rather than after hydration - a
+          useEffect would flash the wrong theme on every load - and
+          `beforeInteractive` is the supported way to say so: Next injects it
+          into the initial HTML and runs it before any of its own modules.
+
+          It sits here, literally in the root layout, because that is where
+          the docs require a beforeInteractive script to be. A plain <script>
+          element does the same job, but React warns about one rendered inside
+          a component, and the usual trick for silencing that warning -
+          flipping the type between server and client - made the two trees
+          disagree, taking a hydration error to avoid a warning.
+        */}
+        <Script
+          id="theme"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }}
+        />
       </body>
     </html>
   );

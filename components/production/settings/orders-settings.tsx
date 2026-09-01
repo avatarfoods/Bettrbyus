@@ -143,12 +143,12 @@ export function OrdersSettings({
               )}
             >
               <header className="flex items-center gap-2 border-b border-border bg-brand-muted/60 px-3 py-2">
-                <span className="size-2 shrink-0 rounded-full bg-brand" />
+                <span className="size-2 shrink-0 rounded-[1px] bg-brand" />
                 <span className="min-w-0 flex-1 truncate font-semibold">
                   {line.name}
                 </span>
                 {selection.length > 0 ? (
-                  <span className="shrink-0 rounded-full bg-card px-2 py-0.5 text-[0.6875rem] font-medium text-primary">
+                  <span className="shrink-0 rounded-[1px] bg-card px-2 py-0.5 text-[0.6875rem] font-medium text-primary">
                     {selection.length} linked
                   </span>
                 ) : (

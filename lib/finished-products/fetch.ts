@@ -74,6 +74,13 @@ function toProduct(row: Row): FinishedProduct {
     expirationOffsetDays: (row.expiration_offset_days as number) ?? -1,
     lotFormat: (str(row.lot_format) as string) ?? "MMDDYYYY",
 
+    ingredientStatement: str(row.ingredient_statement),
+    handlingInstructions: str(row.handling_instructions),
+    heatingInstructions: str(row.heating_instructions),
+    guaranteedShelfLifeDays: num(row.guaranteed_shelf_life_days),
+    palletWeightLb: num(row.pallet_weight_lb),
+    caseWeightLb: num(row.case_weight_lb),
+
     validFrom: (row.valid_from as string) ?? "",
     active: (row.active as boolean) ?? true,
     notes: str(row.notes),

@@ -49,6 +49,7 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-surface-sunk: var(--surface-sunk);
 
   /* Avatar Foods / BettrBowl brand + status colors. */
   --color-brand: var(--brand);
@@ -64,13 +65,15 @@
   --color-info-foreground: var(--info-foreground);
   --color-info-muted: var(--info-muted);
 
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  /* Every step is the same 2px: rounded-lg and rounded-sm cannot drift
+     apart, so nothing sneaks back to a pill by picking a bigger name. */
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xl: var(--radius);
+  --radius-2xl: var(--radius);
+  --radius-3xl: var(--radius);
+  --radius-4xl: var(--radius);
 }
 
 /*
@@ -82,8 +85,12 @@
   /* Page sits on a soft blue-grey so white cards read as raised, not flush. */
   --background: oklch(0.972 0.003 248); /* #f4f6f8 */
   --foreground: oklch(0.236 0.012 248); /* #1a1f24 - 14.9:1 */
-  --card: oklch(1 0 0);
+  /* Not pure white. A page of #fff under plant lighting is what "it hurts
+     the eye" means; a card a shade above the ground still reads as raised. */
+  --card: oklch(0.995 0.002 248);
   --card-foreground: oklch(0.236 0.012 248);
+  /* Recessed: headers, rails, anything the eye should skip over. */
+  --surface-sunk: oklch(0.945 0.006 248);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.236 0.012 248);
 
@@ -132,7 +139,13 @@
   --chart-4: oklch(0.68 0.16 45);
   --chart-5: oklch(0.55 0.12 285);
 
-  --radius: 0.4375rem; /* 7px - controls; cards use radius-xl */
+  /*
+    Square, not rounded.
+    An instrument reads as an instrument; soft corners read as a consumer
+    app. 2px keeps an edge from looking accidentally jagged without ever
+    reading as a pill.
+  */
+  --radius: 0.125rem; /* 2px */
 
   /* Height of the sticky app bar. Pages that need a full-viewport region
      subtract this instead of hard-coding a number. */
@@ -165,6 +178,7 @@
   --foreground: oklch(0.96 0.005 240);
   --card: oklch(0.235 0.012 248);
   --card-foreground: oklch(0.96 0.005 240);
+  --surface-sunk: oklch(0.205 0.011 248);
   --popover: oklch(0.245 0.013 248);
   --popover-foreground: oklch(0.96 0.005 240);
 
@@ -319,6 +333,23 @@
   @page {
     size: letter portrait;
     margin: 0.4in;
+  }
+
+  /*
+    Some documents want the paper the other way round.
+
+    A named page rather than flipping the default: the purchasing PO and the
+    floor sheets are portrait and should stay that way, so a document opts in
+    by carrying data-print-landscape rather than by everything changing
+    underneath it.
+  */
+  @page landscape {
+    size: letter landscape;
+    margin: 0.4in;
+  }
+
+  [data-print-landscape] {
+    page: landscape;
   }
 
   /* Hide app chrome; show only the Final Order PO body. */

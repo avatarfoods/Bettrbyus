@@ -137,7 +137,7 @@ export function GroupsSettings({
                 <TD numeric>{group.members.length}</TD>
                 <TD>
                   {group.incompleteCount > 0 ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-warning-muted px-2 py-0.5 text-[0.6875rem] font-medium text-warning-foreground">
+                    <span className="inline-flex items-center gap-1 rounded-[1px] bg-warning-muted px-2 py-0.5 text-[0.6875rem] font-medium text-warning-foreground">
                       <AlertTriangle className="size-3" />
                       {group.incompleteCount} missing pack size
                     </span>
@@ -147,7 +147,7 @@ export function GroupsSettings({
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <span className="size-1.5 rounded-full bg-success" />
+                      <span className="size-1.5 rounded-[1px] bg-success" />
                       Ready
                     </span>
                   )}

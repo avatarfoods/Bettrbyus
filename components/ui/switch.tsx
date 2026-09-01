@@ -10,7 +10,7 @@ function Switch({ className, ...props }: SwitchPrimitive.Root.Props) {
     <SwitchPrimitive.Root
       data-slot="switch"
       className={cn(
-        "peer inline-flex h-6 w-10 shrink-0 items-center rounded-full p-0.5 transition-colors outline-none",
+        "peer inline-flex h-6 w-10 shrink-0 items-center rounded-[1px] p-0.5 transition-colors outline-none",
         "bg-input data-checked:bg-primary",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         "disabled:cursor-not-allowed disabled:opacity-50",
@@ -26,7 +26,7 @@ function SwitchThumb({ className, ...props }: SwitchPrimitive.Thumb.Props) {
     <SwitchPrimitive.Thumb
       data-slot="switch-thumb"
       className={cn(
-        "size-5 rounded-full bg-background shadow-sm transition-transform data-checked:translate-x-4",
+        "size-5 rounded-[1px] bg-background shadow-sm transition-transform data-checked:translate-x-4",
         className
       )}
       {...props}

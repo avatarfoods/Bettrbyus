@@ -66,7 +66,7 @@ export function UserForm({ user, isSelf }: { user: UserRow; isSelf: boolean }) {
       <div className="border-b border-border bg-card px-3 pt-3 sm:px-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary text-lg font-semibold text-primary-foreground">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-[1px] bg-primary text-lg font-semibold text-primary-foreground">
               {(user.fullName ?? user.email).trim().charAt(0).toUpperCase()}
             </span>
             <div className="min-w-0">
@@ -368,7 +368,7 @@ function Pill({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[0.6875rem] font-medium",
+        "inline-flex shrink-0 rounded-[1px] px-2 py-0.5 text-[0.6875rem] font-medium",
         styles[tone]
       )}
     >

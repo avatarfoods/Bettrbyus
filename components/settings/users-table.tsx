@@ -208,7 +208,7 @@ function StatusPill({ user }: { user: UserRow }) {
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[0.6875rem] font-medium",
+        "inline-flex shrink-0 items-center rounded-[1px] px-2 py-0.5 text-[0.6875rem] font-medium",
         tone
       )}
     >

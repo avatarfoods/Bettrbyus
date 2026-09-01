@@ -40,7 +40,7 @@ export function PurchasingOpenOrdersPage() {
     <div className="mx-auto flex w-full max-w-none flex-1 flex-col gap-4 px-3 py-4 sm:px-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-[1px] bg-primary/10 text-primary">
             <ShoppingCart className="size-4" />
           </div>
           <div>

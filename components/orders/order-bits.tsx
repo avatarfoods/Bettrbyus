@@ -18,7 +18,7 @@ export function StatusPill({ status }: { status: OrderStatus }) {
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold whitespace-nowrap",
+        "inline-flex shrink-0 rounded-[1px] px-2 py-0.5 text-[0.6875rem] font-semibold whitespace-nowrap",
         STATUS_CLASS[status]
       )}
     >
@@ -182,7 +182,7 @@ export function HintMark({
         onFocus={show}
         onBlur={hide}
         className={cn(
-          "inline-flex size-3.5 shrink-0 cursor-help items-center justify-center rounded-full text-[0.5625rem] font-bold",
+          "inline-flex size-3.5 shrink-0 cursor-help items-center justify-center rounded-[1px] text-[0.5625rem] font-bold",
           markClass
         )}
       >

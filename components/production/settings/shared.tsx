@@ -132,7 +132,7 @@ export function ActiveDot({ active }: { active: boolean }) {
     <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
       <span
         className={cn(
-          "size-1.5 rounded-full",
+          "size-1.5 rounded-[1px]",
           active ? "bg-success" : "bg-muted-foreground/40"
         )}
       />

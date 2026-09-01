@@ -104,7 +104,7 @@ export function DepartmentsSettings({ config }: { config: ProductionConfig }) {
                 <span
                   aria-hidden
                   className={cn(
-                    "block h-4 w-1.5 rounded-full",
+                    "block h-4 w-1.5 rounded-[1px]",
                     departmentColor(
                       department.color,
                       config.departments.indexOf(department)
@@ -276,7 +276,7 @@ function DepartmentEditor({
               )}
             >
               <span
-                className={cn("mx-auto block h-3.5 w-1.5 rounded-full", option.dot)}
+                className={cn("mx-auto block h-3.5 w-1.5 rounded-[1px]", option.dot)}
               />
             </button>
           ))}

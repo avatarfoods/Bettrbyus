@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Loader2, Lock, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import {
@@ -11,9 +12,9 @@ import {
 import {
   batchTotal,
   describeYield,
+  toPounds,
   displayQuantity,
   lineMath,
-  lossFactor,
   yieldPct,
   type DisplayUnit,
 } from "@/lib/recipes/yield";
@@ -87,6 +88,10 @@ export function IngredientsEditor({
   kind,
   options,
   canEdit,
+  editing: externalEditing,
+  setEditing: setExternalEditing,
+  footer,
+  railPanel,
 }: {
   recipeId: string;
   recipeUom: string | null;
@@ -103,9 +108,32 @@ export function IngredientsEditor({
   kind: "finished" | "assembly" | "kitchen";
   options: PickerOption[];
   canEdit: boolean;
+  /** Page-wide edit mode, owned by RecipeDetail. */
+  editing: boolean;
+  setEditing: (next: boolean) => void;
+  /** Rendered under the list - the allergens it inherits. */
+  footer?: React.ReactNode;
+  /**
+   * Where the batch numbers go.
+   *
+   * They belong in the rail but are saved by this form alongside the lines,
+   * so they are portalled there rather than lifted into separate state. The
+   * node arrives as a prop rather than being looked up from the document: a
+   * getElementById during render finds nothing on the server and something on
+   * the client, which is precisely a hydration mismatch.
+   */
+  railPanel?: HTMLElement | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  /**
+   * Changing how a recipe is called out is not a small edit.
+   *
+   * Batches scale every quantity to a desired batch; each and cases do not.
+   * Switching between them changes what every number in the table means, so
+   * it asks first rather than quietly re-reading the whole recipe.
+   */
+  const [pendingBasis, setPendingBasis] = useState<CallBasis | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +143,14 @@ export function IngredientsEditor({
    * everybody can nudge in passing is a formula nobody can trust - and a
    * quantity changed by accident is not visible until a batch comes out wrong.
    */
-  const [editing, setEditing] = useState(false);
+  /**
+   * Edit mode belongs to the whole recipe, not this tab.
+   *
+   * The name, the item number, the department and the quantities are all
+   * things you change in the same sitting, so one switch unlocks all of them.
+   * A pencil per field means finding four of them to make one correction.
+   */
+  const [editing, setEditing] = [externalEditing, setExternalEditing];
   const live = canEdit && editing;
 
   /**
@@ -255,92 +290,132 @@ export function IngredientsEditor({
     });
   }
 
+  const basisNote: Record<CallBasis, string> = {
+    batch:
+      "Every quantity becomes a share of the desired batch, so the amounts shown scale with the batch you ask for.",
+    unit: "Each quantity is what one unit takes, and nothing scales.",
+    case: "Each quantity is what one case takes, and nothing scales.",
+  };
+
   return (
     <div className="flex flex-col gap-3 px-3 py-3 sm:px-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          Called in
-          <select
-            value={callBasis}
-            disabled={!live}
-            onChange={(event) => setCallBasis(event.target.value as CallBasis)}
-            className={cn("h-8 px-2 text-sm", fieldClass)}
-          >
-            {CALL_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className="text-[0.6875rem] text-muted-foreground">
-          The floor is told{" "}
-          {CALL_OPTIONS.find((option) => option.value === callBasis)?.hint}.
-        </span>
-
-      </div>
-
-      {usesBatch && (
-        <>
-      {/* The four numbers, together, because they only mean anything as a set */}
-      <section className="grid gap-2 sm:grid-cols-4">
-        <Stat
-          label="Batch total"
-          hint="sum of the quantities below"
-          value={total > 0 ? total.toFixed(2) : "—"}
-          unit={recipeUom ?? "LB"}
-          derived
-        />
-        <Field label="Desired batch" hint="what you set out to make">
-          <input
-            type="number"
-            min={0}
-            step="any"
-            value={batchSize}
-            readOnly={!live}
-            onChange={(event) => setBatchSize(event.target.value)}
-            placeholder="—"
-            className={cn("h-8 w-full px-2 text-right text-sm tabular-nums", fieldClass)}
-          />
-        </Field>
-        <Field label="Batch yield" hint="what actually comes out">
-          <input
-            type="number"
-            min={0}
-            step="any"
-            value={batchYield}
-            readOnly={!live}
-            onChange={(event) => setBatchYield(event.target.value)}
-            placeholder="—"
-            className={cn("h-8 w-full px-2 text-right text-sm tabular-nums", fieldClass)}
-          />
-        </Field>
-        <div
-          className={cn(
-            "rounded-md px-2.5 py-1.5 ring-1",
-            pct === null
-              ? "bg-muted ring-foreground/10"
-              : pct > 0.05
-                ? "bg-success/10 ring-success/30"
-                : pct < -0.05
-                  ? "bg-warning-muted ring-warning-foreground/30"
-                  : "bg-muted ring-foreground/10"
-          )}
-        >
-          <span className="block text-[0.625rem] font-semibold tracking-wider text-muted-foreground uppercase">
-            Yield
-          </span>
-          <span className="block text-lg font-bold tabular-nums">
-            {pct === null ? "—" : `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%`}
-          </span>
-          <span className="block text-[0.625rem] leading-tight text-muted-foreground">
-            {describeYield(pct)}
-          </span>
+      {pendingBasis && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4">
+          <div className="w-full max-w-sm rounded-sm bg-card p-4 shadow-lg ring-2 ring-warning-foreground">
+            <h2 className="text-sm font-bold">
+              Call this recipe in{" "}
+              {CALL_OPTIONS.find((o) => o.value === pendingBasis)?.label.toLowerCase()}
+              ?
+            </h2>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              {basisNote[pendingBasis]}
+            </p>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Every amount in the table below is read a different way
+              afterwards. Nothing is lost — you can switch back.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingBasis(null)}
+                className="h-8 flex-1 rounded-sm border border-border text-sm text-muted-foreground hover:bg-muted"
+              >
+                Leave it as it is
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCallBasis(pendingBasis);
+                  setPendingBasis(null);
+                }}
+                className="h-8 flex-1 rounded-sm bg-primary text-sm font-medium text-primary-foreground"
+              >
+                Change it
+              </button>
+            </div>
+          </div>
         </div>
-      </section>
-        </>
       )}
+      {railPanel &&
+        createPortal(
+          <div className="flex flex-col gap-1.5">
+            <label className="flex items-baseline justify-between gap-2 text-xs">
+              <span className="text-muted-foreground">Called in</span>
+              <select
+                value={callBasis}
+                disabled={!live}
+                onChange={(event) =>
+                  setPendingBasis(event.target.value as CallBasis)
+                }
+                className={cn(
+                  "h-6 max-w-28 px-1 text-right text-xs font-semibold",
+                  fieldClass
+                )}
+              >
+                {CALL_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
 
+            {usesBatch && (
+              <>
+                <RailNumber
+                  label="Desired batch"
+                  hint="what you set out to make"
+                  value={batchSize}
+                  readOnly={!live}
+                  onChange={setBatchSize}
+                  unit={recipeUom ?? "LB"}
+                />
+                <RailNumber
+                  label="Batch yield"
+                  hint="what actually comes out"
+                  value={batchYield}
+                  readOnly={!live}
+                  onChange={setBatchYield}
+                  unit={recipeUom ?? "LB"}
+                />
+                <div className="flex items-baseline justify-between gap-2 border-t border-border pt-1.5 text-xs">
+                  <span className="text-muted-foreground">Ingredients total</span>
+                  <span className="font-semibold tabular-nums">
+                    {total > 0 ? total.toFixed(2) : "—"}{" "}
+                    <span className="text-[0.625rem] font-normal text-muted-foreground uppercase">
+                      {(recipeUom ?? "LB").toLowerCase()}
+                    </span>
+                  </span>
+                </div>
+                <div
+                  className={cn(
+                    "flex items-baseline justify-between gap-2 rounded-sm px-1.5 py-1",
+                    pct === null
+                      ? "bg-muted"
+                      : pct > 0.05
+                        ? "bg-success/15"
+                        : pct < -0.05
+                          ? "bg-warning-muted"
+                          : "bg-muted"
+                  )}
+                >
+                  <span className="text-xs text-muted-foreground">Yield</span>
+                  <span className="text-right">
+                    <span className="block text-sm font-bold tabular-nums">
+                      {pct === null
+                        ? "—"
+                        : `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%`}
+                    </span>
+                    <span className="block text-[0.5625rem] leading-tight text-muted-foreground">
+                      {describeYield(pct)}
+                    </span>
+                  </span>
+                </div>
+              </>
+            )}
+          </div>,
+          railPanel
+        )}
       {notice && (
         <p className="rounded-md bg-success/10 px-3 py-1.5 text-xs">{notice}</p>
       )}
@@ -358,13 +433,34 @@ export function IngredientsEditor({
       <div className="overflow-x-auto rounded-md ring-1 ring-foreground/10">
         <table className="w-full border-collapse text-sm">
           <thead>
+            {/*
+              The name gets the room it needs and the numbers sit together.
+
+              "For 100" was floating out at the far right, a screen away from
+              the ingredient it belongs to, with acres of nothing between. It
+              is the number people read off this table, so it sits next to the
+              name; the reference figures follow it.
+            */}
+            {/*
+              Fixed widths, and the same ones locked or editing.
+
+              The name took whatever was left, so switching to edit mode - one
+              more column, and inputs instead of text - re-dealt every column
+              and the table appeared to jump. Everything but the name is now
+              the width it needs and the name absorbs the rest, so the two
+              modes line up.
+            */}
             <tr className="bg-brand-muted">
-              <Th>Ingredient</Th>
-              <Th numeric className="w-32">
+              <Th className="w-[34%]">Ingredient</Th>
+              {/* The number people read off this table, so it sits beside the
+                  name it belongs to rather than a screen away from it. */}
+              <Th numeric className="w-28">
                 {usesBatch
                   ? `For ${desired ? desired.toLocaleString() : "batch"}`
                   : `Per ${perLabel}`}
               </Th>
+              {/* Slack lives here, between what you read and what you edit. */}
+              <Th />
               <Th numeric className="w-24">
                 Recipe qty
               </Th>
@@ -372,15 +468,13 @@ export function IngredientsEditor({
               <Th numeric className="w-20">
                 % of batch
               </Th>
-              {showLoss && (
-                <Th numeric className="w-20">
-                  Loss %
-                </Th>
-              )}
-              {live && <Th className="w-10" />}
+              <Th numeric className="w-20">
+                {showLoss ? "Loss %" : ""}
+              </Th>
+              <Th className="w-10" />
             </tr>
           </thead>
-          <tbody className="[&>tr:nth-child(even)]:bg-muted/40">
+          <tbody className="[&>tr]:border-b [&>tr]:border-border/50">
             {lines.map((line, index) => {
               const math = lineMath(line, total, desired);
               return (
@@ -420,11 +514,22 @@ export function IngredientsEditor({
                   </Td>
                   <Td className="text-right">
                     {(() => {
+                      /*
+                        A batch recipe scales: 5.5 of a 100 lb batch becomes
+                        whatever 5.5 is of the batch you asked for.
+
+                        A recipe called in each or cases does not. The written
+                        quantity IS the per-each amount - one bowl takes 5.5 oz
+                        of rice mix whether you make one or a thousand - so the
+                        column repeats it rather than working anything out. It
+                        was being read as pounds and converted back to ounces,
+                        which is where 5.5 oz became 92.4.
+                      */
                       const pounds = usesBatch
                         ? desired && total > 0
                           ? math.scaledWithLoss
                           : null
-                        : line.quantity * lossFactor(line.lossPct);
+                        : toPounds(line.quantity, line.uom);
 
                       const unit = (line.displayUom ??
                         line.uom ??
@@ -470,6 +575,8 @@ export function IngredientsEditor({
                       );
                     })()}
                   </Td>
+                  {/* Slack, so Per each stays next to the name. */}
+                  <Td />
                   <Td>
                     <input
                       type="number"
@@ -507,8 +614,8 @@ export function IngredientsEditor({
                   <Td className="text-right text-xs tabular-nums text-muted-foreground">
                     {total > 0 ? `${math.percent.toFixed(2)}%` : "—"}
                   </Td>
-                  {showLoss && (
-                    <Td>
+                  <Td>
+                    {showLoss && (
                       <input
                         type="number"
                         step="any"
@@ -525,14 +632,14 @@ export function IngredientsEditor({
                         placeholder="—"
                         aria-label="Loss percent"
                         className={cn(
-                        "w-full px-2 py-1 text-right text-sm tabular-nums",
-                        fieldClass
-                      )}
+                          "w-full px-2 py-1 text-right text-sm tabular-nums",
+                          fieldClass
+                        )}
                       />
-                    </Td>
-                  )}
-                  {live && (
-                    <Td>
+                    )}
+                  </Td>
+                  <Td>
+                    {live && (
                       <button
                         type="button"
                         onClick={() =>
@@ -543,8 +650,8 @@ export function IngredientsEditor({
                       >
                         <Trash2 className="size-3.5" />
                       </button>
-                    </Td>
-                  )}
+                    )}
+                  </Td>
                 </tr>
               );
             })}
@@ -566,10 +673,13 @@ export function IngredientsEditor({
               <Td className="text-[0.625rem] font-semibold uppercase">Total</Td>
               <Td className="text-right">
                 {(() => {
+                  // Same fix at the foot: the column sums what the lines
+                  // actually say, in pounds, so it agrees with Recipe qty
+                  // instead of inflating every ounce sixteen-fold.
                   const pounds = usesBatch
                     ? desired ?? 0
                     : lines.reduce(
-                        (sum, l) => sum + l.quantity * lossFactor(l.lossPct),
+                        (sum, l) => sum + toPounds(l.quantity, l.uom),
                         0
                       );
                   const shown = displayQuantity(
@@ -587,6 +697,7 @@ export function IngredientsEditor({
                   );
                 })()}
               </Td>
+              <Td />
               <Td className="text-right text-sm font-bold tabular-nums">
                 {total.toFixed(2)}
               </Td>
@@ -594,8 +705,8 @@ export function IngredientsEditor({
               <Td className="text-right text-xs tabular-nums">
                 {total > 0 ? "100%" : "—"}
               </Td>
-              {showLoss && <Td />}
-              {live && <td />}
+              <Td />
+              <Td />
             </tr>
           </tfoot>
         </table>
@@ -638,10 +749,11 @@ export function IngredientsEditor({
             <>
               <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Lock className="size-3.5" />
-                Locked. Click Edit to change quantities or the batch.
+                Locked. Edit recipe is at the top of the page.
               </span>
               <button
                 type="button"
+                hidden
                 onClick={() => {
                   setEditing(true);
                   setNotice(null);
@@ -729,6 +841,8 @@ export function IngredientsEditor({
           </p>
         </DialogContent>
       </Dialog>
+
+      {footer}
     </div>
   );
 }
@@ -745,7 +859,7 @@ function Th({
   return (
     <th
       className={cn(
-        "border-b border-border px-2 py-1.5 text-[0.625rem] font-semibold tracking-wider text-primary uppercase",
+        "border-b border-border px-3 py-2 text-[0.625rem] font-semibold tracking-wider text-primary uppercase",
         numeric ? "text-right" : "text-left",
         className
       )}
@@ -762,63 +876,56 @@ function Td({
   children?: React.ReactNode;
   className?: string;
 }) {
-  return <td className={cn("px-2 py-1 align-top", className)}>{children}</td>;
+  return <td className={cn("px-3 py-2 align-middle", className)}>{children}</td>;
 }
 
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="rounded-md bg-card px-2.5 py-1.5 ring-1 ring-foreground/10">
-      <span className="block text-[0.625rem] font-semibold tracking-wider text-muted-foreground uppercase">
-        {label}
-      </span>
-      {children}
-      <span className="mt-0.5 block text-[0.625rem] leading-tight text-muted-foreground">
-        {hint}
-      </span>
-    </label>
-  );
-}
 
-function Stat({
+
+/** A number in the rail: label on the left, the field on the right. */
+function RailNumber({
   label,
   hint,
   value,
+  readOnly,
+  onChange,
   unit,
-  derived,
 }: {
   label: string;
   hint: string;
   value: string;
+  readOnly: boolean;
+  onChange: (next: string) => void;
   unit: string;
-  derived?: boolean;
 }) {
   return (
-    <div
-      className={cn(
-        "rounded-md px-2.5 py-1.5 ring-1 ring-foreground/10",
-        derived ? "bg-muted" : "bg-card"
-      )}
-    >
-      <span className="block text-[0.625rem] font-semibold tracking-wider text-muted-foreground uppercase">
-        {label}
-      </span>
-      <span className="block text-lg font-bold tabular-nums">
-        {value}
-        <span className="ml-1 text-xs font-normal text-muted-foreground">
-          {unit}
+    <label className="flex items-baseline justify-between gap-2 text-xs">
+      <span className="min-w-0">
+        <span className="block text-muted-foreground">{label}</span>
+        <span className="block text-[0.5625rem] leading-tight text-muted-foreground/70">
+          {hint}
         </span>
       </span>
-      <span className="block text-[0.625rem] leading-tight text-muted-foreground">
-        {hint}
+      <span className="flex shrink-0 items-baseline gap-1">
+        <input
+          type="number"
+          min={0}
+          step="any"
+          value={value}
+          readOnly={readOnly}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="—"
+          aria-label={label}
+          className={cn(
+            "h-6 w-20 rounded-sm px-1 text-right text-xs font-semibold tabular-nums",
+            readOnly
+              ? "border border-transparent bg-transparent"
+              : "border border-primary/50 bg-card focus:ring-1 focus:ring-primary focus:outline-none"
+          )}
+        />
+        <span className="text-[0.625rem] text-muted-foreground uppercase">
+          {unit.toLowerCase()}
+        </span>
       </span>
-    </div>
+    </label>
   );
 }

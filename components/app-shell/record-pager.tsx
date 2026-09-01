@@ -32,7 +32,7 @@ export function RecordPager({
         label={`Previous ${label}`}
         icon={<ChevronLeft className="size-4" />}
       />
-      <span className="px-1 text-xs tabular-nums text-muted-foreground">
+      <span className="px-0.5 text-xs tabular-nums text-muted-foreground">
         <b className="text-foreground">{index + 1}</b> / {total}
       </span>
       <PagerButton
@@ -53,8 +53,9 @@ function PagerButton({
   label: string;
   icon: React.ReactNode;
 }) {
-  const base =
-    "inline-flex size-7 items-center justify-center rounded-md border border-border transition-colors";
+  // A bare arrow, the way Odoo does it: no box, no border, just the mark.
+  // Boxing a chevron makes two shapes to read where one would do.
+  const base = "inline-flex size-6 items-center justify-center transition-colors";
 
   // At either end the arrow stays in place but stops being a link, so the
   // control does not shift width as you page through.
@@ -62,7 +63,7 @@ function PagerButton({
     return (
       <span
         aria-hidden
-        className={cn(base, "cursor-not-allowed bg-muted/50 text-muted-foreground/40")}
+        className={cn(base, "cursor-not-allowed text-primary/25")}
       >
         {icon}
       </span>
@@ -74,10 +75,7 @@ function PagerButton({
       href={href}
       aria-label={label}
       title={label}
-      className={cn(
-        base,
-        "bg-card text-muted-foreground hover:bg-accent hover:text-primary"
-      )}
+      className={cn(base, "text-primary hover:text-primary/70")}
     >
       {icon}
     </Link>

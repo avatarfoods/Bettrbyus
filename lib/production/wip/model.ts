@@ -23,7 +23,10 @@ export type WipCount = {
   producedOn: string | null;
   containers: number;
   containerSize: number;
+  /** Loose amount on top of the whole containers. */
+  partialQuantity: number;
   containerLabel: string;
+  /** containers x size + partial, worked out by the database. */
   quantity: number;
   countedAt: string;
   countedByName: string | null;
@@ -157,10 +160,19 @@ export type LotOnHand = WipCount & { age: LotAge };
 export type RecipeOnHand = {
   recipeId: string;
   lots: LotOnHand[];
-  /** Everything counted, expired included. */
+  /**
+   * Everything physically there, expired included.
+   *
+   * This is the headline number. Stock that has gone out of date is still in
+   * the cooler taking up space and waiting to be thrown - reporting nothing
+   * on hand for 250 lb somebody can walk up and touch is the one answer that
+   * is certainly wrong.
+   */
   total: number;
-  /** Only what can still be used. */
+  /** Of that, what can still be used. */
   usable: number;
+  /** Of that, what is past its date. total = usable + expired. */
+  expired: number;
   /** The worst state among the lots, for the row's colour. */
   worst: Freshness;
   lastCountedAt: string | null;
@@ -185,6 +197,7 @@ const SEVERITY: Record<Freshness, number> = {
 export function onHandByRecipe(
   counts: WipCount[],
   shelfLifeByRecipe: Map<string, number | null>,
+  /** The day being asked about. Ages are worked out against this, not now. */
   today: string
 ): Map<string, RecipeOnHand> {
   // recipe -> lot -> the most recent count of it
@@ -203,14 +216,19 @@ export function onHandByRecipe(
     const shelfLife = shelfLifeByRecipe.get(recipeId) ?? null;
 
     const lots: LotOnHand[] = [...byLot.values()]
+      // A lot counted as zero has been used up. It is history, not stock.
+      .filter((count) => count.quantity > 0)
       .map((count) => ({ ...count, age: ageLot(count.lotCode, shelfLife, today) }))
       // Oldest first: what has to be used up sits at the top.
       .sort((a, b) => (a.age.producedOn ?? "").localeCompare(b.age.producedOn ?? ""));
+
+    if (lots.length === 0) continue;
 
     const total = lots.reduce((sum, lot) => sum + lot.quantity, 0);
     const usable = lots
       .filter((lot) => lot.age.freshness !== "expired")
       .reduce((sum, lot) => sum + lot.quantity, 0);
+    const expired = total - usable;
 
     let worst: Freshness = "fresh";
     for (const lot of lots) {
@@ -227,6 +245,7 @@ export function onHandByRecipe(
       lots,
       total,
       usable,
+      expired,
       worst,
       lastCountedAt: newest?.countedAt ?? null,
       lastCountedBy: newest?.countedByName ?? null,

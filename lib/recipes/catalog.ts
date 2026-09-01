@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  callBasisFor,
   isFinishedProduct,
   recipeKind,
   type RecipeKind,
@@ -93,6 +94,8 @@ export type CatalogRecipe = {
   batchSize: number | null;
   uom: string | null;
   active: boolean;
+  /** Set when it was archived: out of every list, and unpickable. */
+  archivedAt: string | null;
   lines: CatalogLine[];
   /** Problems that stop this recipe being trusted downstream. */
   issues: string[];
@@ -348,6 +351,7 @@ type RecipeRow = {
   batch_size: number | null;
   uom: string | null;
   active: boolean;
+  archived_at?: string | null;
   is_finished_product: boolean | null;
   batch_yield: number | null;
   call_basis: string | null;
@@ -440,14 +444,18 @@ export async function fetchRecipeCatalog(
           isFinishedProduct: row.is_finished_product,
         }),
         batchYield: row.batch_yield ?? null,
-        callBasis: (row.call_basis === "batch"
-          ? "batch"
-          : row.call_basis === "case"
-            ? "case"
-            : "unit") as "batch" | "unit" | "case",
+        // The department decides, unless an admin has overridden this one
+        // recipe. A stored value that matches the rule is just the rule.
+        callBasis:
+          row.call_basis === "batch" ||
+          row.call_basis === "case" ||
+          row.call_basis === "unit"
+            ? (row.call_basis as "batch" | "unit" | "case")
+            : callBasisFor(row.department),
         batchSize: row.batch_size,
         uom: row.uom,
         active: row.active,
+        archivedAt: row.archived_at ?? null,
         lines: linesByRecipe.get(row.id) ?? [],
       };
       return { ...base, issues: computeIssues(base) };
