@@ -1,4 +1,4 @@
-import type { OdooOrderLine, OdooStockLevel } from "@/lib/odoo/orders";
+import type { OdooOrderLine, OdooStockLevel, OdooStockLot } from "@/lib/odoo/orders";
 
 /**
  * Turns raw Odoo delivery lines into the view the plant actually plans from.
@@ -6,8 +6,8 @@ import type { OdooOrderLine, OdooStockLevel } from "@/lib/odoo/orders";
  * Two things happen here that Odoo will not do on its own:
  *  1. Orders are summed per product, because production runs a product, not an
  *     order - one day's run covers a 135, a 45 and a 90 all at once.
- *  2. That total is netted against what is already sitting in the two
- *     warehouses, so the list shows what must be MADE rather than what was SOLD.
+ *  2. That total is netted against stock in the warehouses the plant is
+ *     watching, so the list shows what must be MADE rather than what was SOLD.
  */
 
 export type OrderStatus =
@@ -34,6 +34,13 @@ export type OrderRow = OdooOrderLine & {
 /** Past this many days overdue, a line is treated as abandoned, not late. */
 export const STALE_AFTER_DAYS = 90;
 
+export type ProductLotExtra = {
+  lotName: string;
+  /** Quantity still sitting on this lot after covering open orders. */
+  extra: number;
+  expiration: string | null;
+};
+
 export type ProductGroup = {
   productId: number;
   itemCode: string | null;
@@ -47,6 +54,10 @@ export type ProductGroup = {
   odooOutgoing: number;
   /** What actually has to be produced. */
   toProduce: number;
+  /** On hand minus orders. Zero when we still have to make some. */
+  surplus: number;
+  /** Leftover cases by lot, after covering the orders (oldest lot first). */
+  extraLots: ProductLotExtra[];
   /** Soonest needed-by across the lines. */
   earliestNeeded: string | null;
   lateCount: number;
@@ -111,7 +122,8 @@ export function toOrderRow(line: OdooOrderLine, today: string): OrderRow {
 /** Groups rows by product and nets them against stock. */
 export function groupByProduct(
   rows: OrderRow[],
-  stock: Map<number, OdooStockLevel>
+  stock: Map<number, OdooStockLevel>,
+  lotsByProduct: Map<number, OdooStockLot[]> = new Map()
 ): ProductGroup[] {
   const groups = new Map<number, ProductGroup>();
 
@@ -130,6 +142,8 @@ export function groupByProduct(
         incoming: level?.incoming ?? 0,
         odooOutgoing: level?.outgoing ?? 0,
         toProduce: 0,
+        surplus: 0,
+        extraLots: [],
         earliestNeeded: null,
         lateCount: 0,
         unscheduledCount: 0,
@@ -154,6 +168,11 @@ export function groupByProduct(
   for (const group of groups.values()) {
     // Never negative: a surplus is not "minus 400 to produce", it is zero.
     group.toProduce = Math.max(0, group.totalNeeded - group.onHand);
+    group.surplus = Math.max(0, group.onHand - group.totalNeeded);
+    group.extraLots = leftoverLots(
+      lotsByProduct.get(group.productId) ?? [],
+      group.totalNeeded
+    );
     group.lines.sort((a, b) =>
       (a.neededBy ?? "9999").localeCompare(b.neededBy ?? "9999")
     );
@@ -187,4 +206,89 @@ export function totalsFor(groups: ProductGroup[]): LineTotals {
     }),
     { orders: 0, cases: 0, onHand: 0, toProduce: 0, late: 0, unscheduled: 0 }
   );
+}
+
+/**
+ * Walks lots oldest-first and spends them on open orders. What is left on
+ * each lot is the extra sitting in the freezer after those orders are covered.
+ */
+export function leftoverLots(
+  lots: OdooStockLot[],
+  needed: number
+): ProductLotExtra[] {
+  const ordered = [...lots].sort((a, b) => {
+    const ae = a.expiration ?? "9999-99-99";
+    const be = b.expiration ?? "9999-99-99";
+    if (ae !== be) return ae.localeCompare(be);
+    return a.lotName.localeCompare(b.lotName);
+  });
+
+  let remaining = Math.max(0, needed);
+  const extras: ProductLotExtra[] = [];
+
+  for (const lot of ordered) {
+    const used = Math.min(lot.quantity, remaining);
+    remaining -= used;
+    const extra = lot.quantity - used;
+    if (extra > 0.0001) {
+      extras.push({
+        lotName: lot.lotName,
+        extra,
+        expiration: lot.expiration,
+      });
+    }
+  }
+
+  return extras;
+}
+
+export type StockSplitLine = {
+  row: OrderRow;
+  /** Cases this order can take from freezer stock. */
+  fromStock: number;
+  /** Cases still to make after stock is applied. */
+  toMake: number;
+};
+
+/**
+ * Spends on-hand against the earliest ship dates first. What is left to make
+ * is the orders leaving last — the 914 on a 3,646/2,732 product.
+ */
+export function splitOrdersByStock(
+  lines: OrderRow[],
+  onHand: number
+): { toMake: StockSplitLine[]; covered: StockSplitLine[] } {
+  const open: OrderRow[] = [];
+  const finished: StockSplitLine[] = [];
+
+  for (const row of lines) {
+    if (row.status === "FINISHED") {
+      finished.push({ row, fromStock: row.qtyNeeded, toMake: 0 });
+    } else {
+      open.push(row);
+    }
+  }
+
+  open.sort((a, b) =>
+    (a.neededBy ?? "9999").localeCompare(b.neededBy ?? "9999")
+  );
+
+  let stock = Math.max(0, onHand);
+  const toMake: StockSplitLine[] = [];
+  const covered: StockSplitLine[] = [];
+
+  for (const row of open) {
+    const fromStock = Math.min(row.qtyNeeded, stock);
+    stock -= fromStock;
+    const remaining = row.qtyNeeded - fromStock;
+    const split = { row, fromStock, toMake: remaining };
+    if (remaining > 0.0001) toMake.push(split);
+    else covered.push(split);
+  }
+
+  toMake.sort((a, b) =>
+    (b.row.neededBy ?? "").localeCompare(a.row.neededBy ?? "")
+  );
+
+  return { toMake, covered: [...finished, ...covered] };
 }

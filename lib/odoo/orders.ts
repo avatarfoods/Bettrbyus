@@ -70,6 +70,14 @@ export type OdooStockLevel = {
   incoming: number;
 };
 
+export type OdooStockLot = {
+  productId: number;
+  lotId: number | null;
+  lotName: string;
+  quantity: number;
+  expiration: string | null;
+};
+
 type Many2One = [number, string] | false;
 
 function m2oId(value: unknown): number | null {
@@ -90,13 +98,66 @@ function dateOrNull(value: unknown): string | null {
   return value.slice(0, 10);
 }
 
+export type OdooWarehouse = {
+  id: number;
+  name: string;
+  code: string | null;
+  companyName: string | null;
+  pickingTypeId: number;
+  pickingTypeName: string | null;
+  stockLocationId: number;
+  stockLocationName: string | null;
+};
+
 /**
- * Every open delivery line out of the two warehouses that matter.
+ * Active Odoo warehouses that can ship finished goods.
+ *
+ * The order schedule only cares about the outgoing operation type and the
+ * stock location: those are what filter deliveries and on-hand counts. A
+ * warehouse with neither is skipped - it cannot contribute an order.
+ */
+export async function fetchOdooWarehouses(): Promise<OdooWarehouse[]> {
+  const { call } = await odooSession();
+
+  const rows = (await call(
+    "stock.warehouse",
+    "search_read",
+    [[["active", "=", true]]],
+    {
+      fields: ["id", "name", "code", "company_id", "out_type_id", "lot_stock_id"],
+      limit: 200,
+      order: "id",
+    }
+  )) as Record<string, unknown>[];
+
+  return rows
+    .map((row) => ({
+      id: row.id as number,
+      name: (row.name as string) ?? "",
+      code: textOrNull(row.code),
+      companyName: m2oName(row.company_id),
+      pickingTypeId: m2oId(row.out_type_id) ?? 0,
+      pickingTypeName: m2oName(row.out_type_id),
+      stockLocationId: m2oId(row.lot_stock_id) ?? 0,
+      stockLocationName: m2oName(row.lot_stock_id),
+    }))
+    .filter(
+      (warehouse) =>
+        warehouse.pickingTypeId > 0 && warehouse.stockLocationId > 0
+    );
+}
+
+/**
+ * Every open delivery line out of the warehouses the plant is watching.
  *
  * Cancelled and completed transfers are excluded: a finished order is not
  * something anyone needs to schedule.
  */
-export async function fetchOpenOrderLines(): Promise<OdooOrderLine[]> {
+export async function fetchOpenOrderLines(
+  pickingTypeIds: number[] = DELIVERY_PICKING_TYPE_IDS
+): Promise<OdooOrderLine[]> {
+  if (pickingTypeIds.length === 0) return [];
+
   const { call } = await odooSession();
 
   const pickings = (await call(
@@ -104,7 +165,7 @@ export async function fetchOpenOrderLines(): Promise<OdooOrderLine[]> {
     "search_read",
     [
       [
-        ["picking_type_id", "in", DELIVERY_PICKING_TYPE_IDS],
+        ["picking_type_id", "in", pickingTypeIds],
         ["state", "not in", ["cancel", "done"]],
       ],
     ],
@@ -195,22 +256,24 @@ export async function fetchOpenOrderLines(): Promise<OdooOrderLine[]> {
 }
 
 /**
- * On hand / outgoing / incoming for the given products, counted only in
- * WH1/Stock and AW/Stock. The location context is what scopes it - without it
- * Odoo sums all twenty warehouses and the numbers are meaningless here.
+ * On hand / outgoing / incoming for the given products, counted only in the
+ * stock locations of the warehouses the plant is watching. The location
+ * context is what scopes it - without it Odoo sums every warehouse and the
+ * numbers are meaningless here.
  */
 export async function fetchStockLevels(
-  productIds: number[]
+  productIds: number[],
+  locationIds: number[] = STOCK_LOCATION_IDS
 ): Promise<Map<number, OdooStockLevel>> {
   const levels = new Map<number, OdooStockLevel>();
-  if (productIds.length === 0) return levels;
+  if (productIds.length === 0 || locationIds.length === 0) return levels;
 
   const { call } = await odooSession();
 
   for (let i = 0; i < productIds.length; i += 200) {
     const rows = (await call("product.product", "read", [productIds.slice(i, i + 200)], {
       fields: ["id", "default_code", "qty_available", "outgoing_qty", "incoming_qty"],
-      context: { location: STOCK_LOCATION_IDS },
+      context: { location: locationIds },
     })) as Record<string, unknown>[];
 
     for (const row of rows) {
@@ -225,6 +288,104 @@ export async function fetchStockLevels(
   }
 
   return levels;
+}
+
+function locationChildDomain(locationIds: number[]): unknown[] {
+  if (locationIds.length === 0) return [];
+  if (locationIds.length === 1) {
+    return [["location_id", "child_of", locationIds[0]]];
+  }
+  const domain: unknown[] = [];
+  for (let i = 0; i < locationIds.length - 1; i++) domain.push("|");
+  for (const id of locationIds) domain.push(["location_id", "child_of", id]);
+  return domain;
+}
+
+/**
+ * On-hand broken down by lot, in the same warehouses the totals use.
+ *
+ * Covered rows need this: "how much extra" is not useful until you can see
+ * which lot that extra is sitting in.
+ */
+export async function fetchStockLots(
+  productIds: number[],
+  locationIds: number[] = STOCK_LOCATION_IDS
+): Promise<Map<number, OdooStockLot[]>> {
+  const byProduct = new Map<number, OdooStockLot[]>();
+  if (productIds.length === 0 || locationIds.length === 0) return byProduct;
+
+  const { call } = await odooSession();
+  const quants: Record<string, unknown>[] = [];
+
+  for (let i = 0; i < productIds.length; i += 200) {
+    const rows = (await call(
+      "stock.quant",
+      "search_read",
+      [
+        [
+          ["product_id", "in", productIds.slice(i, i + 200)],
+          ["quantity", ">", 0],
+          ...locationChildDomain(locationIds),
+        ],
+      ],
+      {
+        fields: ["product_id", "lot_id", "quantity", "reserved_quantity"],
+        limit: 10000,
+      }
+    )) as Record<string, unknown>[];
+    quants.push(...rows);
+  }
+
+  const lotIds = [
+    ...new Set(
+      quants
+        .map((quant) => m2oId(quant.lot_id))
+        .filter((id): id is number => id !== null)
+    ),
+  ];
+
+  const expirationByLot = new Map<number, string | null>();
+  if (lotIds.length > 0) {
+    try {
+      const lots = (await call("stock.lot", "read", [lotIds], {
+        fields: ["id", "expiration_date"],
+      })) as Record<string, unknown>[];
+      for (const lot of lots) {
+        expirationByLot.set(lot.id as number, dateOrNull(lot.expiration_date));
+      }
+    } catch {
+      // expiration_date is a product-expiry field. Missing it is not fatal.
+    }
+  }
+
+  for (const quant of quants) {
+    const productId = m2oId(quant.product_id);
+    if (productId === null) continue;
+    const available = Math.max(
+      0,
+      num(quant.quantity) - num(quant.reserved_quantity)
+    );
+    if (available <= 0) continue;
+
+    const lotId = m2oId(quant.lot_id);
+    const lotName = m2oName(quant.lot_id) ?? "No lot";
+    const list = byProduct.get(productId) ?? [];
+    const existing = list.find((lot) => lot.lotId === lotId);
+    if (existing) {
+      existing.quantity += available;
+    } else {
+      list.push({
+        productId,
+        lotId,
+        lotName,
+        quantity: available,
+        expiration: lotId !== null ? (expirationByLot.get(lotId) ?? null) : null,
+      });
+    }
+    byProduct.set(productId, list);
+  }
+
+  return byProduct;
 }
 
 export type OdooCategory = {
@@ -273,7 +434,7 @@ export async function setCompletionDate(
   ]);
 }
 
-/** Moves a transfer to "2. On Production". */
+/** Parked: the app is read-only toward Odoo until write-back is built. */
 export async function setOnProduction(pickingId: number): Promise<void> {
   const { call } = await odooSession();
   await call("stock.picking", "write", [

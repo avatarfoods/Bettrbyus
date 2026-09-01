@@ -2,6 +2,7 @@ import { PageShell } from "@/components/app-shell/page-shell";
 import { OrdersView } from "@/components/orders/orders-view";
 import { fetchOrdersData } from "@/lib/orders/fetch-orders";
 import { fetchProductionConfig } from "@/lib/production/config";
+import { fetchWarehouseSources } from "@/lib/production/warehouses";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = {
@@ -14,8 +15,11 @@ export const dynamic = "force-dynamic";
 
 export default async function OrdersPage() {
   const supabase = await createClient();
-  const config = await fetchProductionConfig(supabase);
-  const data = await fetchOrdersData(config);
+  const [config, warehouses] = await Promise.all([
+    fetchProductionConfig(supabase),
+    fetchWarehouseSources(supabase),
+  ]);
+  const data = await fetchOrdersData(config, warehouses);
 
   const totalLate = data.late.length;
 

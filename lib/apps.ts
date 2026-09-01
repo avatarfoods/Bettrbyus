@@ -20,6 +20,7 @@ import {
   SlidersHorizontal,
   UserPlus,
   Users,
+  Warehouse,
   type LucideIcon,
 } from "lucide-react";
 
@@ -133,6 +134,11 @@ export const APPS: AppDefinition[] = [
             label: "Order schedule",
             href: "/production/settings/orders",
             icon: CalendarDays,
+          },
+          {
+            label: "Warehouses",
+            href: "/production/settings/warehouses",
+            icon: Warehouse,
           },
           {
             label: "Lines",

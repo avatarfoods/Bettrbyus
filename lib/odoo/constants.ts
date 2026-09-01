@@ -6,11 +6,37 @@
  * into the browser bundle.
  */
 
-/** Delivery-order operation types: AvatarNaturalFoods (2) and Americold (110). */
+/**
+ * Fallback delivery-order operation types used before an admin saves a
+ * warehouse selection: AvatarNaturalFoods (2) and Americold (110).
+ */
 export const DELIVERY_PICKING_TYPE_IDS = [2, 110];
 
-/** Stock locations that count: WH1/Stock and AW/Stock. Everything else ignored. */
+/**
+ * Fallback stock locations used with the pair above: WH1/Stock and AW/Stock.
+ */
 export const STOCK_LOCATION_IDS = [8, 258];
+
+/**
+ * Labels for the built-in pair, so the settings page can name what Odoo is
+ * being read from even before the warehouse table is saved.
+ */
+export const FALLBACK_WAREHOUSES = [
+  {
+    name: "AvatarNaturalFoods",
+    code: "WH1",
+    location: "WH1/Stock",
+    pickingTypeId: 2,
+    stockLocationId: 8,
+  },
+  {
+    name: "Americold Warehouse",
+    code: "AW",
+    location: "AW/Stock",
+    pickingTypeId: 110,
+    stockLocationId: 258,
+  },
+] as const;
 
 /** Product categories that become tabs. */
 export const PRODUCT_LINES = [

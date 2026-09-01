@@ -1,17 +1,21 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
   RefreshCw,
-  Search,
   X,
 } from "lucide-react";
 import type { OrdersData } from "@/lib/orders/fetch-orders";
-import type { OrderRow, ProductGroup } from "@/lib/orders/model";
+import {
+  splitOrdersByStock,
+  type OrderRow,
+  type ProductGroup,
+  type StockSplitLine,
+} from "@/lib/orders/model";
 import { ButtonTabBar, type TabItem } from "@/components/ui/tab-bar";
 import {
   DataTable,
@@ -21,10 +25,12 @@ import {
   TR,
   TableEmpty,
 } from "@/components/ui/data-table";
+import { SearchPanel } from "@/components/ui/search-panel";
 import {
   CompletionDateCell,
+  CoveredHint,
+  GroupStatusHint,
   Metric,
-  OnProductionButton,
   StatusPill,
   fmt,
   shortDate,
@@ -38,10 +44,26 @@ import { cn } from "@/lib/utils";
  * needs the opposite: every open order for a product, summed, netted against
  * what is already in the freezer. That is what this view is.
  */
+type ListFilter = "unscheduled" | "to-produce" | "covered";
+
+const ORDER_FILTER_GROUPS = [
+  {
+    exclusive: true,
+    items: [
+      { id: "to-produce", label: "To produce" },
+      { id: "covered", label: "Covered by stock" },
+    ],
+  },
+  {
+    items: [{ id: "unscheduled", label: "Missing scheduled" }],
+  },
+];
+
 export function OrdersView({ data }: { data: OrdersData }) {
   const [tab, setTab] = useState<string>(data.lines[0]?.key ?? "late");
   const [byProduct, setByProduct] = useState(true);
   const [query, setQuery] = useState("");
+  const [filters, setFilters] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   /** Show only what is required on or before this date. */
   const [requiredBy, setRequiredBy] = useState("");
@@ -68,24 +90,64 @@ export function OrdersView({ data }: { data: OrdersData }) {
   const groups = useMemo(() => {
     if (!activeLine) return [];
     const needle = query.trim().toLowerCase();
-    if (!needle && !requiredBy) return activeLine.groups;
+    const wantMake = filters.includes("to-produce");
+    const wantCovered = filters.includes("covered");
+    const wantUnscheduled = filters.includes("unscheduled");
+    if (!needle && !requiredBy && filters.length === 0) return activeLine.groups;
 
     return activeLine.groups
-      .map((group) => ({
-        ...group,
-        lines: group.lines.filter((row) => {
+      .map((group) => {
+        const split =
+          wantMake || wantCovered
+            ? splitOrdersByStock(group.lines, group.onHand)
+            : null;
+        const makeIds = split
+          ? new Set(split.toMake.map((line) => line.row.id))
+          : null;
+        const coveredIds = split
+          ? new Set(split.covered.map((line) => line.row.id))
+          : null;
+
+        const lines = group.lines.filter((row) => {
           if (needle && !matches(row, needle)) return false;
-          // A row with no required date is never excluded by the date filter -
-          // it is unplanned, which is exactly what someone filtering by date
-          // is usually hunting for.
           if (requiredBy && row.neededBy && row.neededBy > requiredBy) {
             return false;
           }
+          if (wantUnscheduled && row.completionDate) return false;
+          if (wantMake && makeIds && !makeIds.has(row.id)) return false;
+          if (wantCovered && coveredIds && !coveredIds.has(row.id)) {
+            return false;
+          }
           return true;
-        }),
-      }))
+        });
+
+        return {
+          ...group,
+          lines,
+          lateCount: lines.filter((row) => row.late).length,
+          unscheduledCount: lines.filter(
+            (row) => row.status === "TO BE SCHEDULED"
+          ).length,
+        };
+      })
       .filter((group) => group.lines.length > 0);
-  }, [activeLine, query, requiredBy]);
+  }, [activeLine, query, requiredBy, filters]);
+
+  const emptyMessage = filters.includes("unscheduled")
+    ? "No orders missing a scheduled date."
+    : filters.includes("to-produce")
+      ? "Nothing left to produce."
+      : filters.includes("covered")
+        ? "No orders covered by stock."
+        : query || requiredBy
+          ? "No orders match."
+          : "Nothing open for this line.";
+
+  const coverageFilter: ListFilter | null = filters.includes("to-produce")
+    ? "to-produce"
+    : filters.includes("covered")
+      ? "covered"
+      : null;
 
   const flatRows = useMemo(
     () => groups.flatMap((group) => group.lines),
@@ -143,6 +205,36 @@ export function OrdersView({ data }: { data: OrdersData }) {
       else next.add(productId);
       return next;
     });
+  }
+
+  function applyFilters(next: string[]) {
+    setFilters(next);
+    if (!activeLine) return;
+    if (next.includes("unscheduled")) {
+      setExpanded(
+        new Set(
+          activeLine.groups
+            .filter((group) => group.unscheduledCount > 0)
+            .map((group) => group.productId)
+        )
+      );
+    } else if (next.includes("to-produce")) {
+      setExpanded(
+        new Set(
+          activeLine.groups
+            .filter((group) => group.toProduce > 0)
+            .map((group) => group.productId)
+        )
+      );
+    } else if (next.includes("covered")) {
+      setExpanded(
+        new Set(
+          activeLine.groups
+            .filter((group) => group.onHand > 0)
+            .map((group) => group.productId)
+        )
+      );
+    }
   }
 
   if (data.error) {
@@ -223,16 +315,15 @@ export function OrdersView({ data }: { data: OrdersData }) {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-0 flex-1 sm:max-w-xs">
-                <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search product, SO# or customer…"
-                  aria-label="Search orders"
-                  className="h-8 w-full rounded-md border border-border bg-card pr-2 pl-8 text-sm"
-                />
-              </div>
+              <SearchPanel
+                query={query}
+                onQueryChange={setQuery}
+                placeholder="Search product, SO# or customer…"
+                aria-label="Search orders"
+                filterGroups={ORDER_FILTER_GROUPS}
+                filters={filters}
+                onFiltersChange={applyFilters}
+              />
 
               <label className="flex shrink-0 items-center gap-1.5 text-sm">
                 <span className="text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase">
@@ -243,7 +334,7 @@ export function OrdersView({ data }: { data: OrdersData }) {
                   value={requiredBy}
                   onChange={(event) => setRequiredBy(event.target.value)}
                   aria-label="Show only orders required on or before this date"
-                  className="h-8 rounded-md border border-border bg-card px-2 text-sm tabular-nums"
+                  className="h-8 rounded-sm border border-border bg-card px-2 text-sm tabular-nums"
                 />
                 {requiredBy && (
                   <button
@@ -257,6 +348,9 @@ export function OrdersView({ data }: { data: OrdersData }) {
                 )}
               </label>
 
+              <span className="text-[0.6875rem] font-semibold tracking-wider text-primary uppercase">
+                Group
+              </span>
               <Toggle active={byProduct} onClick={() => setByProduct(true)}>
                 By product
               </Toggle>
@@ -274,7 +368,7 @@ export function OrdersView({ data }: { data: OrdersData }) {
                         : new Set(groups.map((g) => g.productId))
                     )
                   }
-                  className="h-8 rounded-md px-2.5 text-sm text-primary hover:bg-muted"
+                  className="h-8 rounded-sm px-2.5 text-sm text-primary hover:bg-brand-muted"
                 >
                   {expanded.size > 0 ? "Collapse all" : "Expand all"}
                 </button>
@@ -289,6 +383,8 @@ export function OrdersView({ data }: { data: OrdersData }) {
                 onToggle={toggle}
                 selected={selected}
                 onSelect={toggleSelected}
+                empty={emptyMessage}
+                coverage={coverageFilter === "to-produce" || coverageFilter === "covered" ? coverageFilter : null}
               />
             ) : (
               <OrderTable
@@ -296,6 +392,7 @@ export function OrdersView({ data }: { data: OrdersData }) {
                 selected={selected}
                 onSelect={toggleSelected}
                 onSelectMany={setManySelected}
+                empty={emptyMessage}
               />
             )}
           </>
@@ -361,7 +458,7 @@ function SyncButton({
       disabled={syncing}
       title="Re-read orders and stock from Odoo"
       className={cn(
-        "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-sm transition-colors",
+        "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-sm border border-border bg-card px-2.5 text-sm transition-colors",
         "hover:bg-muted disabled:opacity-60"
       )}
     >
@@ -379,6 +476,172 @@ function matches(row: OrderRow, needle: string): boolean {
     .includes(needle);
 }
 
+type SortDir = 1 | -1;
+type ProductCol =
+  | "product"
+  | "orders"
+  | "cases"
+  | "onHand"
+  | "toProduce"
+  | "required"
+  | "scheduled"
+  | "status";
+type OrderCol =
+  | "item"
+  | "product"
+  | "qty"
+  | "so"
+  | "customer"
+  | "required"
+  | "scheduled"
+  | "status"
+  | "days";
+
+function cmpText(
+  a: string | null | undefined,
+  b: string | null | undefined,
+  dir: SortDir
+): number {
+  const av = (a ?? "").trim();
+  const bv = (b ?? "").trim();
+  if (!av && !bv) return 0;
+  if (!av) return dir;
+  if (!bv) return -dir;
+  return (
+    av.localeCompare(bv, undefined, { numeric: true, sensitivity: "base" }) * dir
+  );
+}
+
+/** Empty dates sort first on A → Z so a click surfaces anything not filled in. */
+function cmpDate(
+  a: string | null | undefined,
+  b: string | null | undefined,
+  dir: SortDir
+): number {
+  const av = a ?? "";
+  const bv = b ?? "";
+  if (!av && !bv) return 0;
+  if (!av) return -dir;
+  if (!bv) return dir;
+  return av.localeCompare(bv) * dir;
+}
+
+function earliestScheduled(group: ProductGroup): string | null {
+  if (group.unscheduledCount > 0) return null;
+  let min: string | null = null;
+  for (const line of group.lines) {
+    if (
+      line.completionDate &&
+      (min === null || line.completionDate < min)
+    ) {
+      min = line.completionDate;
+    }
+  }
+  return min;
+}
+
+function compareGroup(
+  a: ProductGroup,
+  b: ProductGroup,
+  key: ProductCol,
+  dir: SortDir
+): number {
+  switch (key) {
+    case "product":
+      return (
+        cmpText(a.productName, b.productName, dir) ||
+        cmpText(a.itemCode, b.itemCode, dir)
+      );
+    case "orders":
+      return (a.lines.length - b.lines.length) * dir;
+    case "cases":
+      return (a.totalNeeded - b.totalNeeded) * dir;
+    case "onHand":
+      return (a.onHand - b.onHand) * dir;
+    case "toProduce":
+      return (a.toProduce - b.toProduce) * dir;
+    case "required":
+      return cmpDate(a.earliestNeeded, b.earliestNeeded, dir);
+    case "scheduled":
+      return cmpDate(earliestScheduled(a), earliestScheduled(b), dir);
+    case "status":
+      return (
+        (a.lateCount - b.lateCount) * dir ||
+        (a.unscheduledCount - b.unscheduledCount) * dir
+      );
+  }
+}
+
+function compareOrderRow(
+  a: OrderRow,
+  b: OrderRow,
+  key: OrderCol,
+  dir: SortDir
+): number {
+  switch (key) {
+    case "item":
+      return cmpText(a.itemCode, b.itemCode, dir);
+    case "product":
+      return cmpText(a.productName, b.productName, dir);
+    case "qty":
+      return (a.qtyNeeded - b.qtyNeeded) * dir;
+    case "so":
+      return cmpText(a.saleOrder, b.saleOrder, dir);
+    case "customer":
+      return cmpText(a.customer, b.customer, dir);
+    case "required":
+      return cmpDate(a.neededBy, b.neededBy, dir);
+    case "scheduled":
+      return cmpDate(a.completionDate, b.completionDate, dir);
+    case "status":
+      return cmpText(a.status, b.status, dir);
+    case "days":
+      return ((a.daysUntilNeeded ?? 9999) - (b.daysUntilNeeded ?? 9999)) * dir;
+  }
+}
+
+function sortHint(opts: {
+  key: string;
+  sort: string | null;
+  dir: SortDir;
+  date?: boolean;
+}): string {
+  const active = opts.sort === opts.key;
+  if (opts.date) {
+    if (active && opts.dir > 0) return "Sorted earliest first. Click for latest first";
+    if (active) return "Sorted latest first. Click for earliest first";
+    return "Sort earliest first";
+  }
+  if (active && opts.dir > 0) return "Sorted A → Z. Click for Z → A";
+  if (active) return "Sorted Z → A. Click for A → Z";
+  return "Sort A → Z";
+}
+
+function useColumnSort<K extends string>() {
+  const [sort, setSort] = useState<K | null>(null);
+  const [dir, setDir] = useState<SortDir>(1);
+
+  function toggleSort(key: K) {
+    if (sort === key) setDir((value) => (value === 1 ? -1 : 1));
+    else {
+      setSort(key);
+      setDir(1);
+    }
+  }
+
+  function col(key: K, extra?: { numeric?: boolean; date?: boolean }) {
+    return {
+      onSort: () => toggleSort(key),
+      sorted: sort === key,
+      dir,
+      numeric: extra?.numeric,
+      title: sortHint({ key, sort, dir, date: extra?.date }),
+    };
+  }
+
+  return { sort, dir, col };
+}
+
 /** The planning view: one row per product, orders folded underneath. */
 function ProductTable({
   groups,
@@ -386,29 +649,85 @@ function ProductTable({
   onToggle,
   selected,
   onSelect,
+  empty,
+  coverage,
 }: {
   groups: ProductGroup[];
   expanded: Set<number>;
   onToggle: (productId: number) => void;
   selected: Set<number>;
   onSelect: (id: number) => void;
+  empty: string;
+  coverage: "to-produce" | "covered" | null;
 }) {
+  const [closedMake, setClosedMake] = useState<Set<number>>(new Set());
+  const [openCovered, setOpenCovered] = useState<Set<number>>(new Set());
+  const { sort, dir, col } = useColumnSort<ProductCol>();
+
+  const sortedGroups = useMemo(() => {
+    if (!sort) return groups;
+    return [...groups].sort((a, b) => compareGroup(a, b, sort, dir));
+  }, [groups, sort, dir]);
+
+  const childSort: OrderCol | null =
+    sort === "required"
+      ? "required"
+      : sort === "scheduled"
+        ? "scheduled"
+        : sort === "status"
+          ? "status"
+          : sort === "cases"
+            ? "qty"
+            : null;
+
+  function toggleMake(productId: number) {
+    setClosedMake((prev) => {
+      const next = new Set(prev);
+      if (next.has(productId)) next.delete(productId);
+      else next.add(productId);
+      return next;
+    });
+  }
+
+  function toggleCovered(productId: number) {
+    setOpenCovered((prev) => {
+      const next = new Set(prev);
+      if (next.has(productId)) next.delete(productId);
+      else next.add(productId);
+      return next;
+    });
+  }
+
   return (
     <DataTable>
       <THead
         columns={[
-          { label: "Product" },
-          { label: "Orders", numeric: true },
-          { label: "Cases ordered", numeric: true },
-          { label: "On hand", numeric: true },
-          { label: "To produce", numeric: true },
-          { label: "First required" },
-          { label: "Flags" },
+          { label: "Product", ...col("product") },
+          { label: "Orders", ...col("orders", { numeric: true }) },
+          { label: "Cases ordered", ...col("cases", { numeric: true }) },
+          { label: "On hand", ...col("onHand", { numeric: true }) },
+          { label: "To produce", ...col("toProduce", { numeric: true }) },
+          { label: "First required", ...col("required", { date: true }) },
+          { label: "Scheduled", ...col("scheduled", { date: true }) },
+          { label: "Status", ...col("status") },
         ]}
       />
       <TBody>
-        {groups.map((group) => {
+        {sortedGroups.map((group) => {
           const open = expanded.has(group.productId);
+          const split = open
+            ? splitOrdersByStock(
+                group.lines,
+                coverage === "to-produce"
+                  ? 0
+                  : coverage === "covered"
+                    ? Number.POSITIVE_INFINITY
+                    : group.onHand
+              )
+            : null;
+          const makeOpen = open && !closedMake.has(group.productId);
+          const coveredOpen = open && openCovered.has(group.productId);
+
           return [
             <TR key={group.productId} onClick={() => onToggle(group.productId)}>
               <TD>
@@ -434,93 +753,191 @@ function ProductTable({
                 {fmt(group.onHand)}
               </TD>
               <TD numeric>
-                <span
-                  className={cn(
-                    "font-bold",
-                    group.toProduce > 0 ? "text-destructive" : "text-success"
-                  )}
-                >
-                  {group.toProduce > 0 ? fmt(group.toProduce) : "covered"}
-                </span>
+                {group.toProduce > 0 ? (
+                  <span className="font-bold text-destructive">
+                    {fmt(group.toProduce)}
+                  </span>
+                ) : (
+                  <CoveredHint
+                    surplus={group.surplus}
+                    uom={group.uom}
+                    lots={group.extraLots}
+                  />
+                )}
               </TD>
               <TD muted>{shortDate(group.earliestNeeded)}</TD>
+              <TD muted>—</TD>
               <TD>
-                <span className="flex flex-wrap gap-1">
-                  {group.lateCount > 0 && (
-                    <span className="rounded-full bg-destructive/12 px-2 py-0.5 text-[0.6875rem] font-semibold text-destructive">
-                      {group.lateCount} late
-                    </span>
-                  )}
-                  {group.unscheduledCount > 0 && (
-                    <span className="rounded-full bg-[oklch(0.95_0.04_300)] px-2 py-0.5 text-[0.6875rem] font-semibold text-[oklch(0.40_0.13_300)]">
-                      {group.unscheduledCount} unplanned
-                    </span>
-                  )}
-                </span>
+                <GroupStatusHint
+                  lateCount={group.lateCount}
+                  unscheduledCount={group.unscheduledCount}
+                />
               </TD>
             </TR>,
-            ...(open
-              ? group.lines.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="border-b border-border/70 bg-muted/30"
-                  >
-                    <td colSpan={7} className="px-2.5 py-0">
-                      <OrderMiniRow
-                        row={row}
-                        checked={selected.has(row.id)}
-                        onSelect={onSelect}
-                      />
-                    </td>
-                  </tr>
-                ))
+            ...(open && split
+              ? [
+                  ...orderBucketRows({
+                    key: `${group.productId}-make`,
+                    label: "To produce",
+                    hint: "Orders leaving last — stock does not cover these",
+                    lines: split.toMake,
+                    open: makeOpen,
+                    onToggle: () => toggleMake(group.productId),
+                    selected,
+                    onSelect,
+                    tone: "make",
+                    childSort,
+                    dir,
+                  }),
+                  ...orderBucketRows({
+                    key: `${group.productId}-stock`,
+                    label: "Covered by stock",
+                    hint: "Earliest orders, already filled from on hand",
+                    lines: split.covered,
+                    open: coveredOpen,
+                    onToggle: () => toggleCovered(group.productId),
+                    selected,
+                    onSelect,
+                    tone: "stock",
+                    childSort,
+                    dir,
+                  }),
+                ]
               : []),
           ];
         })}
-        {groups.length === 0 && (
-          <TableEmpty colSpan={7}>Nothing open for this line.</TableEmpty>
+        {sortedGroups.length === 0 && (
+          <TableEmpty colSpan={8}>{empty}</TableEmpty>
         )}
       </TBody>
     </DataTable>
   );
 }
 
-/** One order inside an expanded product, laid out to line up with the parent. */
-function OrderMiniRow({
-  row,
-  checked,
+function orderBucketRows({
+  key,
+  label,
+  hint,
+  lines,
+  open,
+  onToggle,
+  selected,
   onSelect,
+  tone,
+  childSort,
+  dir,
 }: {
-  row: OrderRow;
-  checked: boolean;
+  key: string;
+  label: string;
+  hint: string;
+  lines: StockSplitLine[];
+  open: boolean;
+  onToggle: () => void;
+  selected: Set<number>;
   onSelect: (id: number) => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 py-1.5 pl-6 text-xs">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={() => onSelect(row.id)}
-        aria-label={`Select ${row.saleOrder ?? row.pickingName}`}
-        className="size-3.5 shrink-0"
-      />
-      <span className="font-mono text-muted-foreground">{row.saleOrder}</span>
-      <span className="min-w-0 flex-1 truncate text-muted-foreground">
-        {row.customer}
-      </span>
-      <span className="tabular-nums">
-        <span className="text-muted-foreground">qty </span>
-        <b>{fmt(row.qtyNeeded)}</b>
-      </span>
-      <span className="tabular-nums">
-        <span className="text-muted-foreground">required </span>
-        {shortDate(row.neededBy)}
-      </span>
-      <CompletionDateCell row={row} />
-      <StatusPill status={row.status} />
-      <OnProductionButton row={row} />
-    </div>
+  tone: "make" | "stock";
+  childSort: OrderCol | null;
+  dir: SortDir;
+}): ReactNode[] {
+  if (lines.length === 0) return [];
+
+  const ordered = childSort
+    ? [...lines].sort((a, b) => compareOrderRow(a.row, b.row, childSort, dir))
+    : lines;
+
+  const cases =
+    tone === "make"
+      ? lines.reduce((sum, line) => sum + line.toMake, 0)
+      : lines.reduce((sum, line) => sum + line.fromStock, 0);
+
+  const header = (
+    <tr key={`${key}-head`} className="border-b border-zinc-100 bg-brand-muted/40">
+      <td colSpan={8} className="px-2.5 py-1">
+        <button
+          type="button"
+          title={hint}
+          onClick={onToggle}
+          className="flex w-full items-center gap-2 text-left"
+        >
+          {open ? (
+            <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+          )}
+          <span
+            className={cn(
+              "text-[0.6875rem] font-semibold tracking-wider uppercase",
+              tone === "make" ? "text-destructive" : "text-success"
+            )}
+          >
+            {label}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {lines.length} {lines.length === 1 ? "order" : "orders"} · {fmt(cases)}{" "}
+            cases
+          </span>
+        </button>
+      </td>
+    </tr>
   );
+
+  if (!open) return [header];
+
+  return [
+    header,
+    ...ordered.map((line) => (
+      <tr key={line.row.id} className="border-b border-zinc-100 bg-brand-muted/15">
+        <TD className="pl-8">
+          <span className="flex min-w-0 items-center gap-2">
+            <input
+              type="checkbox"
+              checked={selected.has(line.row.id)}
+              onChange={() => onSelect(line.row.id)}
+              aria-label={`Select ${line.row.saleOrder ?? line.row.pickingName}`}
+              className="size-3.5 shrink-0"
+            />
+            <span className="shrink-0 font-mono text-xs">
+              {line.row.saleOrder ?? line.row.pickingName}
+            </span>
+            <span className="min-w-0 truncate text-muted-foreground">
+              {line.row.customer}
+            </span>
+          </span>
+        </TD>
+        <TD numeric muted>
+          —
+        </TD>
+        <TD numeric strong>
+          {fmt(line.row.qtyNeeded)}
+        </TD>
+        <TD numeric muted>
+          {line.fromStock > 0 ? fmt(line.fromStock) : "—"}
+        </TD>
+        <TD numeric>
+          {line.toMake > 0 ? (
+            <span className="font-bold text-destructive">{fmt(line.toMake)}</span>
+          ) : (
+            <span className="text-success">—</span>
+          )}
+        </TD>
+        <TD muted>{shortDate(line.row.neededBy)}</TD>
+        <TD>
+          <CompletionDateCell row={line.row} />
+        </TD>
+        <TD>
+          <span className="flex flex-wrap items-center gap-1.5">
+            {tone === "stock" ? (
+              <span className="rounded-full bg-success-muted px-2 py-0.5 text-[0.6875rem] font-semibold text-success">
+                COVERED
+              </span>
+            ) : (
+              <StatusPill status={line.row.status} />
+            )}
+          </span>
+        </TD>
+      </tr>
+    )),
+  ];
 }
 
 /** The flat list, closest to the original spreadsheet. */
@@ -529,13 +946,20 @@ function OrderTable({
   selected,
   onSelect,
   onSelectMany,
+  empty,
 }: {
   rows: OrderRow[];
   selected: Set<number>;
   onSelect: (id: number) => void;
   onSelectMany: (ids: number[], on: boolean) => void;
+  empty: string;
 }) {
-  const ids = rows.map((row) => row.id);
+  const { sort, dir, col } = useColumnSort<OrderCol>();
+  const sorted = useMemo(() => {
+    if (!sort) return rows;
+    return [...rows].sort((a, b) => compareOrderRow(a, b, sort, dir));
+  }, [rows, sort, dir]);
+  const ids = sorted.map((row) => row.id);
   const allSelected = ids.length > 0 && ids.every((id) => selected.has(id));
 
   return (
@@ -554,19 +978,18 @@ function OrderTable({
             ),
             className: "w-8",
           },
-          { label: "Item #" },
-          { label: "Product" },
-          { label: "Qty", numeric: true },
-          { label: "SO#" },
-          { label: "Customer" },
-          { label: "Required date" },
-          { label: "Completion date" },
-          { label: "Status" },
-          { label: "" },
+          { label: "Item #", ...col("item") },
+          { label: "Product", ...col("product") },
+          { label: "Qty", ...col("qty", { numeric: true }) },
+          { label: "SO#", ...col("so") },
+          { label: "Customer", ...col("customer") },
+          { label: "Required date", ...col("required", { date: true }) },
+          { label: "Completion date", ...col("scheduled", { date: true }) },
+          { label: "Status", ...col("status") },
         ]}
       />
       <TBody>
-        {rows.map((row) => (
+        {sorted.map((row) => (
           <TR key={row.id}>
             <TD>
               <input
@@ -601,13 +1024,10 @@ function OrderTable({
             <TD>
               <StatusPill status={row.status} />
             </TD>
-            <TD>
-              <OnProductionButton row={row} />
-            </TD>
           </TR>
         ))}
-        {rows.length === 0 && (
-          <TableEmpty colSpan={10}>No orders match.</TableEmpty>
+        {sorted.length === 0 && (
+          <TableEmpty colSpan={9}>{empty}</TableEmpty>
         )}
       </TBody>
     </DataTable>
@@ -620,10 +1040,15 @@ function OrderTable({
  */
 function LatePanel({ rows }: { rows: OrderRow[] }) {
   const [showStale, setShowStale] = useState(false);
+  const { sort, dir, col } = useColumnSort<OrderCol>();
 
   const active = rows.filter((row) => !row.stale);
   const stale = rows.filter((row) => row.stale);
-  const shown = showStale ? rows : active;
+  const sorted = useMemo(() => {
+    const list = showStale ? rows : rows.filter((row) => !row.stale);
+    if (!sort) return list;
+    return [...list].sort((a, b) => compareOrderRow(a, b, sort, dir));
+  }, [rows, showStale, sort, dir]);
 
   if (rows.length === 0) {
     return (
@@ -672,19 +1097,19 @@ function LatePanel({ rows }: { rows: OrderRow[] }) {
       <DataTable>
         <THead
           columns={[
-            { label: "Item #" },
-            { label: "Product" },
-            { label: "Qty", numeric: true },
-            { label: "SO#" },
-            { label: "Customer" },
-            { label: "Required date" },
-            { label: "Days", numeric: true },
-            { label: "Completion date" },
-            { label: "Status" },
+            { label: "Item #", ...col("item") },
+            { label: "Product", ...col("product") },
+            { label: "Qty", ...col("qty", { numeric: true }) },
+            { label: "SO#", ...col("so") },
+            { label: "Customer", ...col("customer") },
+            { label: "Required date", ...col("required", { date: true }) },
+            { label: "Days", ...col("days", { numeric: true }) },
+            { label: "Completion date", ...col("scheduled", { date: true }) },
+            { label: "Status", ...col("status") },
           ]}
         />
         <TBody>
-          {shown.map((row) => (
+          {sorted.map((row) => (
             <TR key={row.id}>
               <TD mono muted>
                 {row.itemCode}
@@ -751,10 +1176,10 @@ function Toggle({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "h-8 shrink-0 rounded-md px-2.5 text-sm transition-colors",
+        "h-8 shrink-0 rounded-sm px-2.5 text-sm transition-colors",
         active
-          ? "bg-accent font-medium text-accent-foreground"
-          : "border border-border bg-card text-muted-foreground hover:bg-muted"
+          ? "bg-brand font-medium text-brand-foreground"
+          : "border border-zinc-300 bg-card text-zinc-600 hover:bg-brand-muted hover:text-primary dark:border-zinc-600 dark:text-zinc-300"
       )}
     >
       {children}

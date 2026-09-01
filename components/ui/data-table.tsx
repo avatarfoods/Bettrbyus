@@ -26,7 +26,7 @@ export function DataTable({
     <div
       data-density="compact"
       className={cn(
-        "overflow-x-auto rounded-lg border border-border bg-card",
+        "overflow-x-auto overflow-y-hidden rounded-sm border border-zinc-300 bg-card dark:border-zinc-700",
         className
       )}
     >
@@ -41,6 +41,8 @@ export type ColumnSpec = {
   onSort?: () => void;
   sorted?: boolean;
   dir?: number;
+  /** Hover hint, e.g. "Sort A → Z" on spreadsheet-style headers. */
+  title?: string;
   className?: string;
 };
 
@@ -52,11 +54,20 @@ export function THead({ columns }: { columns: ColumnSpec[] }) {
           <th
             key={index}
             scope="col"
+            title={column.title}
+            aria-sort={
+              column.onSort && column.sorted
+                ? column.dir && column.dir > 0
+                  ? "ascending"
+                  : "descending"
+                : undefined
+            }
             onClick={column.onSort}
             className={cn(
-              // Filled, and dark enough to read as a band rather than a gap.
-              "sticky top-0 z-10 border-b border-border bg-brand-muted px-2.5 py-2",
+              // Grey band with a brand-blue edge, same language as the tab strip.
+              "sticky top-0 z-10 border-b-2 border-b-brand/70 bg-brand-muted/50 px-2.5 py-2",
               "text-[0.625rem] font-semibold tracking-wider text-primary uppercase",
+              "dark:border-b-brand dark:bg-zinc-800 dark:text-zinc-200",
               column.numeric ? "text-right" : "text-left",
               column.onSort && "cursor-pointer select-none hover:text-foreground",
               column.className
@@ -69,8 +80,8 @@ export function THead({ columns }: { columns: ColumnSpec[] }) {
               )}
             >
               {column.label}
-              {column.sorted && (
-                <span aria-hidden className="text-[0.5rem]">
+              {column.onSort && column.sorted && (
+                <span aria-hidden className="text-[0.5rem] text-primary">
                   {column.dir && column.dir > 0 ? "▲" : "▼"}
                 </span>
               )}
@@ -85,7 +96,7 @@ export function THead({ columns }: { columns: ColumnSpec[] }) {
 /** Zebra striping lives here so every table stripes identically. */
 export function TBody({ children }: { children: React.ReactNode }) {
   return (
-    <tbody className="[&>tr:nth-child(even)]:bg-muted/40">{children}</tbody>
+    <tbody className="[&>tr:nth-child(even)]:bg-zinc-50/80 dark:[&>tr:nth-child(even)]:bg-zinc-900/25">{children}</tbody>
   );
 }
 
@@ -102,8 +113,8 @@ export function TR({
     <tr
       onClick={onClick}
       className={cn(
-        "border-b border-border/70 last:border-b-0",
-        "hover:bg-accent/50",
+        "border-b border-zinc-100 last:border-b-0 dark:border-zinc-800",
+        "hover:bg-brand-muted/40 dark:hover:bg-zinc-900/60",
         onClick && "cursor-pointer",
         className
       )}

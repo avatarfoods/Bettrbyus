@@ -23,7 +23,7 @@ export type TabItem = {
 };
 
 const STRIP =
-  "flex items-end gap-0 overflow-x-auto border-b border-border bg-card px-3 sm:px-4";
+  "flex items-end gap-0 overflow-x-auto overflow-y-hidden border-b border-border bg-card px-3 sm:px-4";
 
 function tabClass(active: boolean): string {
   return cn(

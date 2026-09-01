@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { AlertCircle, Check, Loader2, Search } from "lucide-react";
 import { saveProductionLine } from "@/lib/production/config-actions";
 import type { ProductionConfig, ProductionLine } from "@/lib/production/config";
@@ -92,6 +93,14 @@ export function OrdersSettings({
         <p className="min-w-0 flex-1 text-sm text-muted-foreground">
           Tick every Odoo category a line should pull from. A line can take
           more than one, so a single tab can cover two product families.
+          Which warehouses those orders come from is set under{" "}
+          <Link
+            href="/production/settings/warehouses"
+            className="font-medium text-primary hover:underline"
+          >
+            Settings → Warehouses
+          </Link>
+          .
         </p>
         {categories.length > 6 && (
           <div className="relative w-full sm:w-64">

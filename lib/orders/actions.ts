@@ -2,15 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUserProfile } from "@/lib/auth/profile";
-import { setCompletionDate, setOnProduction } from "@/lib/odoo/orders";
+import { setCompletionDate } from "@/lib/odoo/orders";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * The only two things Bettrbyus writes back to Odoo.
- *
- * Deliberately narrow. Everything else on a delivery order stays Odoo's, so
- * there is no chance of this app quietly overwriting something customer
- * service or accounting depends on.
+ * The only write back to Odoo today is the production completion date.
+ * Progress / Start stays in Odoo until that flow is built on purpose.
  */
 
 export type OdooWriteResult = { ok: true } | { ok: false; message: string };
@@ -26,7 +23,7 @@ async function requireSignedIn(): Promise<
   return { ok: true };
 }
 
-/** Sets the production Completion Date - the sheet's DATE SCHEDULED. */
+/** Sets the production Completion Date — the sheet's DATE SCHEDULED. */
 export async function saveCompletionDate(
   pickingId: number,
   date: string | null
@@ -54,26 +51,11 @@ export async function saveCompletionDate(
   return { ok: true };
 }
 
-/** Moves the transfer to "2. On Production" in Odoo. */
 export async function markOnProduction(
-  pickingId: number
+  _pickingId: number
 ): Promise<OdooWriteResult> {
-  if (!Number.isInteger(pickingId) || pickingId <= 0) {
-    return { ok: false, message: "Missing transfer" };
-  }
-
-  const gate = await requireSignedIn();
-  if (!gate.ok) return gate;
-
-  try {
-    await setOnProduction(pickingId);
-  } catch (error) {
-    return {
-      ok: false,
-      message: error instanceof Error ? error.message : "Odoo refused the write",
-    };
-  }
-
-  revalidatePath("/orders");
-  return { ok: true };
+  return {
+    ok: false,
+    message: "Progress is changed in Odoo. This app does not write it yet.",
+  };
 }

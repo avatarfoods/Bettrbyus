@@ -4,11 +4,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentUserProfile, isAdminProfile } from "@/lib/auth/profile";
 import { createClient } from "@/lib/supabase/server";
-import { isMissingColumn } from "@/lib/supabase/missing";
+import { isMissingColumn, isMissingTable } from "@/lib/supabase/missing";
 import { DEPARTMENT_COLORS } from "@/lib/production/department-colors";
 
 /**
- * Editing production lines and departments.
+ * Editing production lines, departments and warehouses.
  *
  * Admin-only, and the RLS policies on both tables enforce that independently -
  * these checks exist to produce a readable message, not to be the boundary.
@@ -56,9 +56,18 @@ async function requireAdmin(): Promise<ConfigResult> {
   return { ok: true };
 }
 
+const warehouseSchema = z.object({
+  odooId: z.number().int().positive(),
+  name: z.string().trim().min(1).max(120),
+  code: z.string().trim().max(40).nullable(),
+  pickingTypeId: z.number().int().positive(),
+  stockLocationId: z.number().int().positive(),
+});
+
 function revalidate() {
   revalidatePath("/orders");
   revalidatePath("/production/settings");
+  revalidatePath("/production/settings/warehouses");
   revalidatePath("/recipes");
 }
 
@@ -219,6 +228,64 @@ export async function importDepartmentsFromRecipes(
 
   revalidate();
   return { ok: true, added: toAdd.length };
+}
+
+/**
+ * Replaces the warehouses the order schedule reads. Presence of a row is the
+ * selection; an empty table is the fallback to Avatar + Americold, so saving
+ * nothing is refused - that would look identical to "never configured".
+ */
+export async function saveProductionWarehouses(
+  input: unknown
+): Promise<ConfigResult> {
+  const parsed = z.array(warehouseSchema).min(1, "Pick at least one warehouse").safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: parsed.error.issues[0]?.message ?? "Invalid warehouses",
+    };
+  }
+
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate;
+
+  const supabase = await createClient();
+  const rows = parsed.data.map((warehouse, index) => ({
+    odoo_id: warehouse.odooId,
+    name: warehouse.name,
+    code: warehouse.code,
+    picking_type_id: warehouse.pickingTypeId,
+    stock_location_id: warehouse.stockLocationId,
+    sort_order: index + 1,
+    updated_at: new Date().toISOString(),
+  }));
+
+  const selectedIds = parsed.data.map((warehouse) => warehouse.odooId);
+
+  const { error: upsertError } = await supabase
+    .from("production_warehouses")
+    .upsert(rows, { onConflict: "odoo_id" });
+
+  if (upsertError) {
+    if (isMissingTable(upsertError)) {
+      return {
+        ok: false,
+        message:
+          "The warehouses table does not exist yet. Run the 20260901_production_warehouses migration first.",
+      };
+    }
+    return { ok: false, message: upsertError.message };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("production_warehouses")
+    .delete()
+    .not("odoo_id", "in", `(${selectedIds.join(",")})`);
+
+  if (deleteError) return { ok: false, message: deleteError.message };
+
+  revalidate();
+  return { ok: true };
 }
 
 export async function deleteProductionDepartment(

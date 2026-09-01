@@ -1,5 +1,11 @@
-import { fetchOpenOrderLines, fetchStockLevels } from "@/lib/odoo/orders";
+import {
+  fetchOpenOrderLines,
+  fetchStockLevels,
+  fetchStockLots,
+  type OdooStockLot,
+} from "@/lib/odoo/orders";
 import { tabLines, type ProductionLine } from "@/lib/production/config";
+import type { WarehouseSources } from "@/lib/production/warehouses";
 import {
   groupByProduct,
   toOrderRow,
@@ -44,15 +50,22 @@ const EMPTY: Omit<OrdersData, "error"> = {
  * show a banner on an otherwise working page, not a crash.
  */
 export async function fetchOrdersData(
-  config: import("@/lib/production/config").ProductionConfig
+  config: import("@/lib/production/config").ProductionConfig,
+  sources: WarehouseSources
 ): Promise<OrdersData> {
   const today = todayIso();
 
   try {
-    const lines = await fetchOpenOrderLines();
-    const stock = await fetchStockLevels([
-      ...new Set(lines.map((line) => line.productId)),
-    ]);
+    const lines = await fetchOpenOrderLines(sources.pickingTypeIds);
+    const productIds = [...new Set(lines.map((line) => line.productId))];
+    const stock = await fetchStockLevels(productIds, sources.stockLocationIds);
+    let lots = new Map<number, OdooStockLot[]>();
+    try {
+      lots = await fetchStockLots(productIds, sources.stockLocationIds);
+    } catch {
+      // Lot names are extra detail on "covered". A missing field in Odoo
+      // must not take the whole order schedule down.
+    }
 
     const rows = lines.map((line) => toOrderRow(line, today));
 
@@ -68,7 +81,7 @@ export async function fetchOrdersData(
       const mine = rows.filter(
         (row) => row.categoryId !== null && categoryIds.has(row.categoryId)
       );
-      const groups = groupByProduct(mine, stock);
+      const groups = groupByProduct(mine, stock, lots);
       return {
         key: productLine.key,
         label: productLine.name,
