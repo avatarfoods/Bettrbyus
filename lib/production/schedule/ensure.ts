@@ -64,13 +64,24 @@ export async function ensureLiveSchedule(
   lineId: string | null,
   lineName?: string
 ): Promise<EnsureResult> {
+  /*
+    A line id has to be a real one.
+
+    fetchProductionConfig invents lines from code when the table cannot be
+    read, and gives them ids like "fallback-bettr-bowl". Writing that into a
+    uuid column fails, and the failure surfaced as "the planning tables do not
+    exist" - which was not true and sent the reader after the wrong problem.
+    Guarding here means no caller can make that mistake.
+  */
+  const safeLineId =
+    lineId && !lineId.startsWith("fallback-") ? lineId : null;
   const query = supabase
     .from("production_schedules")
     .select("id, period_start, period_end, line_id")
     .eq("status", "live");
 
-  const { data, error } = lineId
-    ? await query.eq("line_id", lineId).limit(1)
+  const { data, error } = safeLineId
+    ? await query.eq("line_id", safeLineId).limit(1)
     : await query.limit(1);
 
   if (error) {
@@ -111,7 +122,7 @@ export async function ensureLiveSchedule(
     .insert({
       name: lineName ? liveScheduleName(lineName) : LIVE_SCHEDULE_NAME,
       status: "live",
-      line_id: lineId,
+      line_id: safeLineId,
       period_start: period.start,
       period_end: period.end,
     })
@@ -125,8 +136,8 @@ export async function ensureLiveSchedule(
       .from("production_schedules")
       .select("id")
       .eq("status", "live");
-    const { data: raced } = lineId
-      ? await racedQuery.eq("line_id", lineId).limit(1)
+    const { data: raced } = safeLineId
+      ? await racedQuery.eq("line_id", safeLineId).limit(1)
       : await racedQuery.limit(1);
     if (raced?.[0]) {
       return { id: raced[0].id as string, missingTable: false, error: null };

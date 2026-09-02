@@ -1037,14 +1037,33 @@ export function ScheduleView({
         </p>
       )}
 
+      {/*
+        Say which problem it is, not the most likely one.
+
+        This used to assert the planning tables were missing whenever there
+        was no live plan - so a failed insert reported a missing migration,
+        and sent the reader off to run SQL that was already in. Missing tables
+        and "something else went wrong" look identical from here unless the
+        reason is carried through, so it is.
+      */}
       {readOnly && (
-        <div className="rounded-md bg-warning-muted px-3 py-2 text-xs text-warning-foreground">
-          <strong>Nothing here can be saved yet.</strong> The planning tables do
-          not exist in the database. Everything else works — type into a
-          finished product and watch it cascade down the tree — but the numbers
-          live only in this page. Run <code>PENDING_MIGRATIONS.sql</code> in the
-          Supabase SQL editor to make it stick.
-          {setupError && <span className="mt-1 block font-medium">{setupError}</span>}
+        <div className="rounded-sm bg-warning-muted px-3 py-2 text-xs text-warning-foreground">
+          <strong>Nothing here can be saved yet.</strong>{" "}
+          {setupError ? (
+            <>
+              The plan could not be opened. Everything else works — type into a
+              finished product and watch it cascade down the tree — but the
+              numbers live only in this page.
+              <span className="mt-1 block font-medium">{setupError}</span>
+            </>
+          ) : (
+            <>
+              The planning tables do not exist in the database. Everything else
+              works, but the numbers live only in this page. Run{" "}
+              <code>PENDING_MIGRATIONS.sql</code> in the Supabase SQL editor to
+              make it stick.
+            </>
+          )}
         </div>
       )}
 

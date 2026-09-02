@@ -13,7 +13,7 @@ import {
   WORKBOOK_SEED,
   WORKBOOK_SEED_START,
 } from "@/lib/production/schedule/workbook-seed";
-import { fetchProductionConfig } from "@/lib/production/config";
+import { fetchProductionConfig, isRealLine } from "@/lib/production/config";
 import { getCurrentUserProfile, isAdminProfile } from "@/lib/auth/profile";
 import { scopeFromParams } from "@/lib/date-scope";
 import { fetchWipData } from "@/lib/production/wip/fetch";
@@ -71,10 +71,17 @@ export default async function PlanningPage({
     activeLines[0] ??
     null;
 
+  /*
+    A fallback line has no database row, so it cannot own a plan.
+
+    Passing null means "find the plan that predates lines", which is the
+    honest answer while the lines table is unreadable - rather than writing
+    "fallback-bettr-bowl" into a uuid column and failing.
+  */
   const ensured = await ensureLiveSchedule(
     supabase,
     today,
-    line?.id ?? null,
+    isRealLine(line) ? (line?.id ?? null) : null,
     line?.name
   );
   const liveId = ensured.id;

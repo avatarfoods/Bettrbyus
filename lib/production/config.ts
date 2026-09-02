@@ -33,6 +33,17 @@ export type ProductionDepartment = {
   color: string | null;
 };
 
+/**
+ * True when this line is a real row and can be referenced by a foreign key.
+ *
+ * The fallback lines are built from code when the table is empty, so they
+ * have made-up ids. Writing one into a uuid column fails, and it failed in
+ * exactly the place you would least want it to: creating the live plan.
+ */
+export function isRealLine(line: ProductionLine | null | undefined): boolean {
+  return Boolean(line && !line.id.startsWith("fallback-"));
+}
+
 export type ProductionConfig = {
   lines: ProductionLine[];
   departments: ProductionDepartment[];
@@ -43,6 +54,14 @@ export type ProductionConfig = {
 /** What the code assumed before any of this was configurable. */
 function fallbackLines(): ProductionLine[] {
   return PRODUCT_LINES.map((line, index) => ({
+    /*
+      Deliberately not a uuid, and it matters.
+
+      These lines exist only in code, so they have no database row and no id
+      to give. Anything that writes a line reference has to notice that and
+      refuse - see isRealLine - rather than handing Postgres a string it will
+      reject with "invalid input syntax for type uuid".
+    */
     id: `fallback-${line.key}`,
     key: line.key,
     name: line.label,
@@ -57,10 +76,11 @@ export async function fetchProductionConfig(
 ): Promise<ProductionConfig> {
   const [linesResult, deptResult] = await Promise.all([
     supabase
+      // select("*") for the same reason the departments query uses it: naming
+      // a column PostgREST has not caught up with fails the whole query, and
+      // a failed query here silently swaps every real line for a fake one.
       .from("production_lines")
-      .select(
-        "id, key, name, odoo_category_id, odoo_category_ids, sort_order, active"
-      )
+      .select("*")
       .order("sort_order"),
     supabase
       // select("*") rather than a column list: PostgREST rejects the whole
