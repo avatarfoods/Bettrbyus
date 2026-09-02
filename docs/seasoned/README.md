@@ -12,6 +12,7 @@ Claude Code does not discover this file on its own. Each person working on Seaso
 
 - `AGENTS.md`: the instructions themselves (files to leave alone, scope, conventions). Agents read this at the start of every session.
 - `README.md`: this file. Explains the setup for humans.
+- `INSTALL.md`: how to install the project and its dependencies on a new machine, from scratch.
 
 ## Setup for your machine
 
