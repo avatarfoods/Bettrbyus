@@ -122,7 +122,7 @@ export function NewUserForm({ initialPassword }: { initialPassword: string }) {
             <button
               type="button"
               onClick={() => setPassword(suggestPassword())}
-              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm text-muted-foreground hover:bg-muted"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-sm bg-card ring-1 ring-foreground/10 px-3 text-sm text-muted-foreground hover:bg-muted"
             >
               <RefreshCw className="size-3.5" />
               New
@@ -131,7 +131,7 @@ export function NewUserForm({ initialPassword }: { initialPassword: string }) {
         </Field>
       )}
 
-      <label className="flex max-w-3xl items-center justify-between gap-4 rounded-md border border-border bg-card p-3">
+      <label className="flex max-w-3xl items-center justify-between gap-4 rounded-sm bg-card ring-1 ring-foreground/10 p-3">
         <span className="flex flex-col gap-0.5">
           <span className="text-sm font-medium">Administrator</span>
           <span className="text-xs text-muted-foreground">
@@ -157,7 +157,7 @@ export function NewUserForm({ initialPassword }: { initialPassword: string }) {
         <button
           type="button"
           onClick={() => router.push("/settings/users")}
-          className="inline-flex h-9 items-center rounded-md border border-border bg-card px-4 text-sm hover:bg-muted"
+          className="inline-flex h-9 items-center rounded-sm bg-card ring-1 ring-foreground/10 px-4 text-sm hover:bg-muted"
         >
           Cancel
         </button>
@@ -175,7 +175,7 @@ export function NewUserForm({ initialPassword }: { initialPassword: string }) {
 }
 
 const inputClass =
-  "h-9 w-full rounded-md border border-border bg-card px-2.5 text-sm focus-visible:outline-2 focus-visible:-outline-offset-1 focus-visible:outline-ring";
+  "h-9 w-full rounded-sm bg-card ring-1 ring-foreground/10 px-2.5 text-sm focus-visible:outline-2 focus-visible:-outline-offset-1 focus-visible:outline-ring";
 
 function Field({
   label,

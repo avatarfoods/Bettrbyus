@@ -52,7 +52,14 @@ export function PageShell({
 }: PageShellProps) {
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <div className="sticky top-(--app-bar-height) z-30 border-b-2 border-b-brand/25 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      {/*
+        Above the grid, below the app bar.
+
+        The planning grid freezes columns and date headers at z-40, so a
+        header at z-30 sat underneath them - and anything opening out of it,
+        like the plan picker, was drawn behind the frozen cells.
+      */}
+      <div className="sticky top-(--app-bar-height) z-45 border-b-2 border-b-brand/25 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 sm:px-4">
           {actions && (
             <div className="order-1 flex shrink-0 items-center gap-2">

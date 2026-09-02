@@ -98,7 +98,7 @@ export function MasterBom({
             inputMode="decimal"
             value={units}
             onChange={(event) => setUnits(event.target.value)}
-            className="h-8 w-24 rounded-md border border-border bg-card px-2 text-right tabular-nums"
+            className="h-8 w-24 rounded-sm bg-card ring-1 ring-foreground/10 px-2 text-right tabular-nums"
           />
           <span className="text-muted-foreground">
             {rootUom?.toLowerCase() ?? "unit"}

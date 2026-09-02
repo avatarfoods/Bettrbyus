@@ -18,6 +18,7 @@ import {
   Settings,
   ShoppingCart,
   SlidersHorizontal,
+  Trash2,
   UserPlus,
   Users,
   Warehouse,
@@ -203,6 +204,18 @@ export const APPS: AppDefinition[] = [
             label: "Departments",
             href: "/production/settings/departments",
             icon: Building2,
+          },
+          {
+            group: "Planning",
+            label: "Plans",
+            href: "/production/settings/plans",
+            icon: ClipboardList,
+          },
+          {
+            group: "Planning",
+            label: "Reset",
+            href: "/production/settings/reset",
+            icon: Trash2,
           },
           {
             group: "Recipes",

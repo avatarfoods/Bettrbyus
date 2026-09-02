@@ -29,7 +29,7 @@ export function PrintFrame({
       <div className="print:hidden sticky top-(--app-bar-height) z-30 flex flex-wrap items-center gap-2 border-b-2 border-b-brand/25 bg-background/95 px-3 py-2 backdrop-blur sm:px-4">
         <Link
           href={backHref}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-sm text-muted-foreground hover:bg-muted"
+          className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-card ring-1 ring-foreground/10 px-2.5 text-sm text-muted-foreground hover:bg-muted"
         >
           <ArrowLeft className="size-3.5" />
           Back

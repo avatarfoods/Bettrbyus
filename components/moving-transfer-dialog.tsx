@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { ArrowRight, Loader2, Package } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -60,15 +60,24 @@ export function MovingTransferDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (open && moving) {
-      setStorageType("black_container");
-      setTransferAmount(String(moving.amount));
-      setAmountError(null);
-      setError(null);
-      setIsSubmitting(false);
-    }
-  }, [open, moving]);
+  /*
+    Reset while rendering, not in an effect.
+
+    An effect runs after the browser has already painted, so the dialog
+    flashes the previous transfer's numbers for a frame before clearing. React
+    supports adjusting state during render for exactly this - a change of
+    input calling for different state - and it re-renders before anything is
+    shown.
+  */
+  const [lastOpened, setLastOpened] = useState<MovingRecord | null>(null);
+  if (open && moving && moving !== lastOpened) {
+    setLastOpened(moving);
+    setStorageType("black_container");
+    setTransferAmount(String(moving.amount));
+    setAmountError(null);
+    setError(null);
+    setIsSubmitting(false);
+  }
 
   const parsedTransferAmount = useMemo(() => {
     const value = Number(transferAmount);

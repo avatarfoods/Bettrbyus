@@ -382,9 +382,19 @@ function MatrixLineRow({
   const casesInputRef = useRef<HTMLInputElement | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
+  /*
+    Follow the saved value while rendering, not after.
+
+    An effect would show the stale figure for a frame every time a save came
+    back, which on a grid of numbers looks like the value flickering between
+    two answers. Adjusting during render is React's own pattern for state
+    that has to track a prop.
+  */
+  const [lastSaved, setLastSaved] = useState(line.cases_required);
+  if (lastSaved !== line.cases_required) {
+    setLastSaved(line.cases_required);
     setCasesRequired(String(line.cases_required));
-  }, [line.cases_required]);
+  }
 
   useEffect(() => {
     if (editingCases) {
@@ -663,11 +673,21 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
     };
   }, [initialCycleId, reloadKey]);
 
-  useEffect(() => {
+  /*
+    The saved view, read once on the client rather than in an effect.
+
+    These come from localStorage, which does not exist on the server, so the
+    first render has to use the defaults either way - but reading them during
+    the first client render means the columns never appear wrong and then
+    correct themselves.
+  */
+  const [readSaved, setReadSaved] = useState(false);
+  if (typeof window !== "undefined" && !readSaved) {
+    setReadSaved(true);
     setVisibleColumns(loadVisibleColumns());
     setOnlyToOrder(loadOnlyToOrder());
     setHideProduce(loadHideProduce());
-  }, []);
+  }
 
   useEffect(() => {
     if (!columnsOpen) return;

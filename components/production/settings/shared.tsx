@@ -14,10 +14,10 @@ import { cn } from "@/lib/utils";
  */
 
 export const inputClass =
-  "h-8 w-full rounded-md border border-border bg-card px-2 text-sm focus-visible:outline-2 focus-visible:-outline-offset-1 focus-visible:outline-ring";
+  "h-8 w-full rounded-sm bg-card ring-1 ring-foreground/10 px-2 text-sm focus-visible:outline-2 focus-visible:-outline-offset-1 focus-visible:outline-ring";
 
 export const ghostButton =
-  "inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm text-muted-foreground hover:bg-muted";
+  "inline-flex h-8 items-center gap-1.5 rounded-sm bg-card ring-1 ring-foreground/10 px-3 text-sm text-muted-foreground hover:bg-muted";
 
 export const primaryButton =
   "inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60";
@@ -110,20 +110,46 @@ export function SettingsPage({
   );
 }
 
+/**
+ * One field: label on the left, control on the right, explanation behind a
+ * "?".
+ *
+ * The same row every settings page uses, and the same one a recipe uses, so
+ * a form is a form wherever you meet it. A paragraph under an input is read
+ * once and skipped forever after; a "?" is there the first time and out of
+ * the way every time after that.
+ */
 export function Labelled({
   label,
+  hint,
   children,
 }: {
   label: string;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[0.625rem] font-semibold tracking-wider text-muted-foreground uppercase">
-        {label}
+    <label className="flex items-center gap-3 border-b border-border/50 py-1 last:border-b-0">
+      <span className="flex w-40 shrink-0 items-center gap-1 text-xs text-muted-foreground">
+        <span className="min-w-0">{label}</span>
+        {hint && <Hint text={hint} />}
       </span>
-      {children}
+      <span className="min-w-0 flex-1">{children}</span>
     </label>
+  );
+}
+
+/** The "?" beside a label. Hover or focus for the sentence behind it. */
+export function Hint({ text }: { text: string }) {
+  return (
+    <span
+      title={text}
+      aria-label={text}
+      tabIndex={0}
+      className="inline-flex size-3.5 shrink-0 cursor-help items-center justify-center rounded-sm bg-muted text-[0.5625rem] font-bold text-muted-foreground"
+    >
+      ?
+    </span>
   );
 }
 

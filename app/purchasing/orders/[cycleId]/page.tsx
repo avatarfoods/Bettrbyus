@@ -1,3 +1,4 @@
+import { PageShell } from "@/components/app-shell/page-shell";
 import { PurchasingOrderDetailPage } from "@/components/purchasing-order-detail";
 
 export const metadata = {
@@ -11,8 +12,14 @@ type Props = {
 export default async function PurchasingOrderDetailRoute({ params }: Props) {
   const { cycleId } = await params;
   return (
-    <div className="min-h-full bg-gradient-to-b from-background via-background to-muted/30">
+    <PageShell
+      breadcrumbs={[
+        { label: "Purchasing" },
+        { label: "Orders", href: "/purchasing/orders" },
+        { label: "Order" },
+      ]}
+    >
       <PurchasingOrderDetailPage cycleId={cycleId} />
-    </div>
+    </PageShell>
   );
 }

@@ -189,7 +189,7 @@ export function TimingWindowTab({
           <button
             type="button"
             onClick={() => setPicking(true)}
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs text-muted-foreground hover:bg-muted"
+            className="inline-flex h-7 items-center gap-1.5 rounded-sm bg-card ring-1 ring-foreground/10 px-2.5 text-xs text-muted-foreground hover:bg-muted"
           >
             <Plus className="size-3.5" />
             Add raw material

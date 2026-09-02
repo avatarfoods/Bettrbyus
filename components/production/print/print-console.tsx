@@ -44,7 +44,7 @@ export function PrintConsole({
             type="date"
             value={date}
             onChange={(event) => setDate(event.target.value)}
-            className="h-9 rounded-md border border-border bg-card px-2 text-sm"
+            className="h-9 rounded-sm bg-card ring-1 ring-foreground/10 px-2 text-sm"
           />
         </label>
 
@@ -56,7 +56,7 @@ export function PrintConsole({
             <select
               value={schedule}
               onChange={(event) => setSchedule(event.target.value)}
-              className="h-9 rounded-md border border-border bg-card px-2 text-sm"
+              className="h-9 rounded-sm bg-card ring-1 ring-foreground/10 px-2 text-sm"
             >
               {schedules.map((option) => (
                 <option key={option.id} value={option.id}>

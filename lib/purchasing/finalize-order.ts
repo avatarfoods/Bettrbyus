@@ -172,6 +172,33 @@ export function listFinalOrders(): FinalOrderSnapshot[] {
   );
 }
 
+/*
+  A stable snapshot of the list above.
+
+  useSyncExternalStore compares snapshots by identity, so handing it
+  listFinalOrders directly would return a fresh array on every read and never
+  stop re-rendering. The cache is keyed on the raw stored text: if the storage
+  has not changed, the same array comes back.
+*/
+let ordersRaw: string | null = null;
+let ordersSnapshot: FinalOrderSnapshot[] = [];
+
+export function finalOrdersSnapshot(): FinalOrderSnapshot[] {
+  if (typeof window === "undefined") return ordersSnapshot;
+  let raw: string | null = null;
+  try {
+    raw = window.localStorage.getItem(ORDERS_KEY);
+  } catch {
+    // Storage the browser refuses. An empty list is the honest answer.
+    return ordersSnapshot;
+  }
+  if (raw !== ordersRaw) {
+    ordersRaw = raw;
+    ordersSnapshot = listFinalOrders();
+  }
+  return ordersSnapshot;
+}
+
 export const GROUP_STATUS_OPTIONS: {
   value: LineStatus;
   label: string;

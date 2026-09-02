@@ -52,7 +52,7 @@ export function AppFrameClient({
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-40 flex h-(--app-bar-height) shrink-0 items-center gap-1 bg-sidebar px-2 text-sidebar-foreground sm:gap-2 sm:px-3">
+      <header className="sticky top-0 z-50 flex h-(--app-bar-height) shrink-0 items-center gap-1 bg-sidebar px-2 text-sidebar-foreground sm:gap-2 sm:px-3">
         <Link
           href="/"
           aria-label="All apps"

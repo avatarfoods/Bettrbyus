@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { Download, Package, Printer, ShoppingCart } from "lucide-react";
+import { Download, Package, Printer } from "lucide-react";
 import {
-  listFinalOrders,
+  finalOrdersSnapshot,
   type FinalOrderSnapshot,
 } from "@/lib/purchasing/finalize-order";
 import { downloadFinalOrderExcel } from "@/lib/purchasing/download-final-order";
@@ -29,27 +29,29 @@ function formatTabDate(value: string) {
   }
 }
 
-export function PurchasingOpenOrdersPage() {
-  const [orders, setOrders] = useState<FinalOrderSnapshot[]>([]);
+/** Nothing is stored on the server, so the list starts empty there. */
+const NO_ORDERS: FinalOrderSnapshot[] = [];
 
-  useEffect(() => {
-    setOrders(listFinalOrders());
-  }, []);
+export function PurchasingOpenOrdersPage() {
+  /*
+    The orders live in localStorage, which is an external store - so it is
+    subscribed to rather than copied into state on mount. Reading it in an
+    effect meant an empty list rendered first and was replaced a frame later.
+  */
+  const orders = useSyncExternalStore(
+    () => () => {},
+    finalOrdersSnapshot,
+    () => NO_ORDERS
+  );
 
   return (
     <div className="mx-auto flex w-full max-w-none flex-1 flex-col gap-4 px-3 py-4 sm:px-4">
+      {/* The page shell supplies the title and the breadcrumb, so this row
+          carries only what this page can do. */}
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-[1px] bg-primary/10 text-primary">
-            <ShoppingCart className="size-4" />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">Orders list</h1>
-            <p className="text-xs text-muted-foreground">
-              Final Order POs saved in this browser — open an order for full details.
-            </p>
-          </div>
-        </div>
+        <p className="text-xs text-muted-foreground">
+          Final Order POs saved in this browser — open one for the full detail.
+        </p>
         <div className="flex flex-wrap gap-1.5">
           <Link
             href="/purchasing"

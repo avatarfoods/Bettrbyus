@@ -1,3 +1,4 @@
+import { PageShell } from "@/components/app-shell/page-shell";
 import { AppearanceForm } from "@/components/settings/appearance-form";
 import { fetchAppSettings } from "@/lib/settings/wallpaper";
 import { createClient } from "@/lib/supabase/server";
@@ -11,16 +12,17 @@ export default async function AppearancePage() {
   const settings = await fetchAppSettings(supabase);
 
   return (
-    <div className="w-full px-4 py-6 sm:px-6">
-      <header className="mb-8">
-        <h1 className="text-2xl font-semibold">Appearance</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+    <PageShell breadcrumbs={[{ label: "Settings" }, { label: "Appearance" }]}>
+      <div className="w-full px-3 py-3 sm:px-4">
+        <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
           How Bettrbyus looks. The wallpaper is shared by everyone; light and
           dark mode is your own.
         </p>
-      </header>
 
-      <AppearanceForm settings={settings} />
-    </div>
+        <div className="mt-3">
+          <AppearanceForm settings={settings} />
+        </div>
+      </div>
+    </PageShell>
   );
 }

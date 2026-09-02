@@ -166,7 +166,7 @@ export function InstructionsTab({
                   type="button"
                   onClick={cancel}
                   disabled={pending}
-                  className="h-8 rounded-md border border-border bg-card px-3 text-sm text-muted-foreground hover:bg-muted disabled:opacity-60"
+                  className="h-8 rounded-sm bg-card ring-1 ring-foreground/10 px-3 text-sm text-muted-foreground hover:bg-muted disabled:opacity-60"
                 >
                   Cancel
                 </button>
@@ -402,7 +402,7 @@ function StepCard({
           className={cn(
             "w-full resize-y px-2 py-1 text-sm",
             live
-              ? "rounded-md border border-border bg-card"
+              ? "rounded-sm bg-card ring-1 ring-foreground/10"
               : "border-none bg-transparent p-0 font-medium"
           )}
         />
@@ -649,7 +649,7 @@ function Select({
         "h-7 truncate px-1.5 text-xs",
         disabled
           ? "appearance-none border-none bg-transparent text-foreground"
-          : "rounded-md border border-border bg-card",
+          : "rounded-sm bg-card ring-1 ring-foreground/10",
         className
       )}
     >
@@ -686,7 +686,7 @@ function Field({
         className={cn(
           "px-1.5 py-0.5 text-xs",
           live
-            ? "rounded-md border border-border bg-card"
+            ? "rounded-sm bg-card ring-1 ring-foreground/10"
             : "border-none bg-transparent p-0 font-medium"
         )}
       />
@@ -725,7 +725,7 @@ function NumberField({
         className={cn(
           "px-1.5 py-0.5 text-right text-xs tabular-nums",
           live
-            ? "rounded-md border border-border bg-card"
+            ? "rounded-sm bg-card ring-1 ring-foreground/10"
             : "border-none bg-transparent p-0 font-medium"
         )}
       />
@@ -769,7 +769,7 @@ function Bare({
       placeholder={placeholder}
       title={title}
       onChange={(event) => onChange(event.target.value || null)}
-      className="mt-0.5 w-full rounded-md border border-border bg-card px-1.5 py-0.5 text-xs"
+      className="mt-0.5 w-full rounded-sm bg-card ring-1 ring-foreground/10 px-1.5 py-0.5 text-xs"
     />
   );
 }

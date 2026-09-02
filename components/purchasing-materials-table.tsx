@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { format, parseISO } from "date-fns";
-import Link from "next/link";
-import { ArrowLeft, Loader2, Package, Pencil, RefreshCw, Snowflake, Upload } from "lucide-react";
+import { Loader2, Pencil, RefreshCw, Snowflake, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { syncFromOdoo, uploadInventoryFile } from "@/lib/purchasing/actions";
 import { fetchMaterialsWithOnHand } from "@/lib/purchasing/fetch-materials";
@@ -427,27 +426,14 @@ export function PurchasingMaterialsPage() {
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <header className="sticky top-0 z-10 border-b bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="mx-auto flex w-full max-w-none items-center gap-3">
-          <Link
-            href="/purchasing"
-            className="inline-flex size-10 shrink-0 items-center justify-center rounded-[1px] border border-input bg-background text-foreground transition-colors hover:bg-muted"
-            aria-label="Back to Total Orders"
-          >
-            <ArrowLeft className="size-5" />
-          </Link>
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-[1px] bg-primary/10 text-primary">
-            <Package className="size-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg font-semibold tracking-tight">
-              Purchasing materials
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Lead times, thaw buffers, and lbs/case.
-              {lastSyncLabel ? ` Last sync ${lastSyncLabel}.` : " Not synced yet."}
-            </p>
-          </div>
+      {/* Title and breadcrumb come from the page shell; the back arrow and
+          the icon were both saying what the breadcrumb already says. */}
+      <header className="border-b border-border bg-card px-3 py-2 sm:px-4">
+        <div className="flex w-full items-center gap-3">
+          <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+            Lead times, thaw buffers, and lbs per case.
+            {lastSyncLabel ? ` Last sync ${lastSyncLabel}.` : " Not synced yet."}
+          </p>
           <div className="flex shrink-0 items-center gap-2">
             <input
               ref={fileInputRef}

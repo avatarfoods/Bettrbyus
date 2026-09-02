@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Download, Printer, ShoppingCart } from "lucide-react";
 import type { LineStatus } from "@/lib/purchasing/fetch-cycles";
@@ -22,14 +22,24 @@ type Props = {
 };
 
 export function PurchasingOrderDetailPage({ cycleId }: Props) {
+  /*
+    Loaded during render, not in an effect.
+
+    The order lives in localStorage, so there is nothing to wait for: an
+    effect only meant rendering "loading" once and replacing it a frame
+    later. `undefined` still means not-yet-read on the server, where there is
+    no storage to read.
+  */
   const [snapshot, setSnapshot] = useState<FinalOrderSnapshot | null | undefined>(
     undefined
   );
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [emailGroupKey, setEmailGroupKey] = useState<string | null>(null);
 
-  useEffect(() => {
+  if (typeof window !== "undefined" && loadedFor !== cycleId) {
+    setLoadedFor(cycleId);
     setSnapshot(loadFinalOrder(cycleId));
-  }, [cycleId]);
+  }
 
   function handleGroupStatusChange(groupKey: string, status: LineStatus) {
     setSnapshot((current) => {

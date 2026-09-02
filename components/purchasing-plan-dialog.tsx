@@ -160,13 +160,23 @@ export function PurchasingPlanDialog({
     };
   }, [open, importId]);
 
-  useEffect(() => {
+  /*
+    Cleared while rendering, not in an effect.
+
+    Closing the dialog and reopening it should not show the last search for a
+    frame before it clears. React supports adjusting state during render when
+    an input change calls for different state, and it re-renders before
+    anything reaches the screen.
+  */
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
     if (!open) {
       setIsFullscreen(false);
       setDepartmentFilter(null);
       setSearch("");
     }
-  }, [open]);
+  }
 
   const filteredRows = useMemo(() => {
     if (!plan) return [];

@@ -55,7 +55,7 @@ export function DepartmentsSettings({ config }: { config: ProductionConfig }) {
       <Notice notice={notice} />
 
       {config.lines.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm bg-card ring-1 ring-foreground/10 p-3">
           <p className="min-w-0 flex-1 text-xs text-muted-foreground">
             Rather than typing them out, pull every department the recipes
             already use. Names come from the real data, so they cannot fail to
@@ -78,7 +78,7 @@ export function DepartmentsSettings({ config }: { config: ProductionConfig }) {
                 `Departments imported onto ${target.name}`
               );
             }}
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm hover:bg-muted disabled:opacity-60"
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-sm bg-card ring-1 ring-foreground/10 px-3 text-sm hover:bg-muted disabled:opacity-60"
           >
             <Download className="size-3.5" />
             Import from recipes
@@ -223,7 +223,7 @@ function DepartmentEditor({
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-primary/40 bg-card p-3">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Labelled label="Department name">
+        <Labelled label="Department name" hint="As the recipes spell it — MAIN KITCHEN AM. It has to match, or nothing files under it.">
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -231,7 +231,7 @@ function DepartmentEditor({
             className={inputClass}
           />
         </Labelled>
-        <Labelled label="Belongs to line">
+        <Labelled label="Belongs to line" hint="Which product line this room works for. The plan and the dashboard filter by line first.">
           <select
             value={lineId ?? ""}
             onChange={(event) => setLineId(event.target.value)}
@@ -245,7 +245,7 @@ function DepartmentEditor({
             ))}
           </select>
         </Labelled>
-        <Labelled label="Sort order">
+        <Labelled label="Sort order" hint="Where it sits in tree order: finished product first, then assembly, then the kitchens that feed them.">
           <input
             inputMode="numeric"
             value={sortOrder}

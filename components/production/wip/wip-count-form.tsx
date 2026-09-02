@@ -321,7 +321,7 @@ export function WipCountForm({
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Find anything to add…"
             aria-label="Search recipes"
-            className="h-9 w-full rounded-md border border-border bg-card pr-8 pl-8 text-sm"
+            className="h-9 w-full rounded-sm bg-card ring-1 ring-foreground/10 pr-8 pl-8 text-sm"
           />
           {query && (
             <button

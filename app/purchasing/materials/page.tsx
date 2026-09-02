@@ -1,3 +1,4 @@
+import { PageShell } from "@/components/app-shell/page-shell";
 import { PurchasingMaterialsPage } from "@/components/purchasing-materials-table";
 
 export const metadata = {
@@ -6,8 +7,8 @@ export const metadata = {
 
 export default function PurchasingMaterialsRoute() {
   return (
-    <div className="min-h-full bg-gradient-to-b from-background via-background to-muted/30">
+    <PageShell breadcrumbs={[{ label: "Purchasing" }, { label: "Materials" }]}>
       <PurchasingMaterialsPage />
-    </div>
+    </PageShell>
   );
 }

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchScheduleData } from "@/lib/production/schedule/fetch";
+import { allRows } from "@/lib/supabase/all-rows";
 import {
   allocateRecipe,
   deriveDemand,
@@ -133,7 +134,11 @@ export async function buildProductionDay(
       )
       .in("recipe_id", recipeIds)
       .order("step_number"),
-    supabase.from("purchasing_materials").select("id, item_code"),
+    // Paged: there are more materials than one PostgREST response returns,
+    // and a missing one prints a blank item number on a floor sheet.
+    allRows<{ id: string; item_code: string }>((from, to) =>
+      supabase.from("purchasing_materials").select("id, item_code").range(from, to)
+    ),
   ]);
 
   const stepsByRecipe = new Map<string, PrintStep[]>();
@@ -152,7 +157,7 @@ export async function buildProductionDay(
   }
 
   const codeByMaterial = new Map<string, string>();
-  for (const row of (materialsResult.data ?? []) as Record<string, unknown>[]) {
+  for (const row of (materialsResult.rows) as Record<string, unknown>[]) {
     codeByMaterial.set(row.id as string, (row.item_code as string) ?? "");
   }
 

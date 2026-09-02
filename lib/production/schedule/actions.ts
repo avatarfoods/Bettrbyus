@@ -260,9 +260,20 @@ export async function discardDraft(input: {
     .maybeSingle();
 
   if (!draft) return { ok: true };
-  if (draft.status !== "draft") return fail("That is not an open draft");
+
+  /*
+    A confirmed draft can be removed too.
+
+    It is the record of what was merged, not a plan - the numbers themselves
+    are already in the live schedule, so deleting the record changes nothing
+    the floor sees. Refusing it left rows in the list that no button could
+    shift, which is worse than losing a log entry.
+  */
+  if (draft.status !== "draft" && draft.status !== "confirmed") {
+    return fail("That is not a draft");
+  }
   if (draft.created_by !== profile.id && !isAdminProfile(profile)) {
-    return fail("Only an administrator can discard someone else's draft");
+    return fail("Only an administrator can remove someone else's draft");
   }
 
   const { error } = await supabase
@@ -530,6 +541,319 @@ export async function clearMaterialWindow(input: {
  * two apart but says nothing about what is in it. "Thanksgiving week" or
  * "if Costco confirms" is what makes one worth reopening a fortnight later.
  */
+/**
+ * Opens a draft with nothing in it.
+ *
+ * "Empty" here means empty on screen, not absent: a draft holds only the
+ * cells somebody touched, and a cell it does not mention keeps whatever the
+ * live plan says. So starting from blank means writing an explicit zero over
+ * every planned cell in the range - which is what "plan this week from
+ * scratch" actually asks for.
+ *
+ * Any draft you already have is replaced, because two of yours cannot both
+ * be the one you are typing into.
+ */
+export async function newEmptyDraft(input: {
+  scheduleId: string;
+  from: string;
+  to: string;
+  name?: string;
+}): Promise<ActionResult & { id?: string }> {
+  const { scheduleId, from, to } = input;
+  if (!scheduleId || !from || !to) return fail("Missing dates");
+
+  const supabase = await createClient();
+  const profile = await getCurrentUserProfile(supabase);
+  if (!profile) return fail("You are signed out");
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Whatever was open gets thrown away first: this is a fresh start.
+  const { data: existing } = await supabase
+    .from("production_schedules")
+    .select("id")
+    .eq("parent_schedule_id", scheduleId)
+    .eq("status", "draft")
+    .eq("created_by", profile.id);
+
+  for (const row of existing ?? []) {
+    await supabase
+      .from("production_schedules")
+      .delete()
+      .eq("id", row.id as string);
+  }
+
+  const { data: live } = await supabase
+    .from("production_schedules")
+    .select("period_start, period_end")
+    .eq("id", scheduleId)
+    .maybeSingle();
+
+  const { data: created, error } = await supabase
+    .from("production_schedules")
+    .insert({
+      name: input.name?.trim() || draftName(today, profile.full_name || profile.email || "Unknown"),
+      status: "draft",
+      parent_schedule_id: scheduleId,
+      period_start: (live?.period_start as string) ?? from,
+      period_end: (live?.period_end as string) ?? to,
+      created_by: profile.id,
+    })
+    .select("id")
+    .single();
+
+  if (error) return fail(error.message);
+
+  // Zero over everything the live plan has in this range, so the grid opens
+  // blank rather than showing the confirmed numbers back at you.
+  const { data: planned } = await supabase
+    .from("production_schedule_entries")
+    .select("recipe_id, production_date")
+    .eq("schedule_id", scheduleId)
+    .gte("production_date", from)
+    .lte("production_date", to);
+
+  const rows = (planned ?? []).map((row) => ({
+    schedule_id: created.id as string,
+    recipe_id: row.recipe_id as string,
+    production_date: row.production_date as string,
+    quantity: 0,
+    updated_by: profile.id,
+    updated_at: new Date().toISOString(),
+  }));
+
+  if (rows.length > 0) {
+    const { error: zeroError } = await supabase
+      .from("production_schedule_entries")
+      .insert(rows);
+    if (zeroError) return fail(zeroError.message);
+  }
+
+  revalidatePath(SCHEDULE_PATH);
+  return { ok: true, id: created.id as string };
+}
+
+/**
+ * Copies the confirmed plan into your draft.
+ *
+ * The way to try something: take next week as it stands, change it, and only
+ * the version you are happy with becomes what the floor sees. Starting from
+ * blank means retyping a week to change two numbers.
+ */
+export async function duplicateLiveIntoDraft(input: {
+  scheduleId: string;
+  from: string;
+  to: string;
+}): Promise<ActionResult & { copied?: number }> {
+  const { scheduleId, from, to } = input;
+  if (!scheduleId) return fail("Missing schedule");
+
+  const supabase = await createClient();
+  const profile = await getCurrentUserProfile(supabase);
+  if (!profile) return fail("You are signed out");
+
+  const today = new Date().toISOString().slice(0, 10);
+  const draft = await openDraft(supabase, scheduleId, profile, today);
+  if ("error" in draft) return fail(draft.error);
+
+  const { data: live } = await supabase
+    .from("production_schedule_entries")
+    .select("recipe_id, production_date, quantity")
+    .eq("schedule_id", scheduleId)
+    .gte("production_date", from)
+    .lte("production_date", to);
+
+  const rows = (live ?? [])
+    .filter((row) => Number(row.quantity ?? 0) > 0)
+    .map((row) => ({
+      schedule_id: draft.id,
+      recipe_id: row.recipe_id as string,
+      production_date: row.production_date as string,
+      quantity: Number(row.quantity),
+      updated_by: profile.id,
+      updated_at: new Date().toISOString(),
+    }));
+
+  if (rows.length > 0) {
+    const { error } = await supabase
+      .from("production_schedule_entries")
+      .upsert(rows, { onConflict: "schedule_id,recipe_id,production_date" });
+    if (error) return fail(error.message);
+  }
+
+  revalidatePath(SCHEDULE_PATH);
+  return { ok: true, copied: rows.length };
+}
+
+/**
+ * Clears every cell in a span of days.
+ *
+ * Wiping a day by hand is thirty cells and the one you miss is the one that
+ * runs. It writes into your draft like any other edit, so the floor keeps
+ * working from the confirmed plan until you confirm.
+ */
+export async function clearRange(input: {
+  scheduleId: string;
+  from: string;
+  to: string;
+}): Promise<ActionResult & { cleared?: number }> {
+  const { scheduleId, from, to } = input;
+  if (!scheduleId || !from || !to) return fail("Missing dates");
+
+  const supabase = await createClient();
+  const profile = await getCurrentUserProfile(supabase);
+  if (!profile) return fail("You are signed out");
+
+  const today = new Date().toISOString().slice(0, 10);
+  const draft = await openDraft(supabase, scheduleId, profile, today);
+  if ("error" in draft) return fail(draft.error);
+
+  /*
+    Cleared, not deleted.
+
+    A cell removed from a draft means "I did not touch this", which would let
+    the confirmed number stand. An explicit zero is what says "make nothing
+    that day" - and zeroes become deletions when the draft is merged.
+  */
+  const { data: live } = await supabase
+    .from("production_schedule_entries")
+    .select("recipe_id, production_date")
+    .eq("schedule_id", scheduleId)
+    .gte("production_date", from)
+    .lte("production_date", to);
+
+  const rows = (live ?? []).map((row) => ({
+    schedule_id: draft.id,
+    recipe_id: row.recipe_id as string,
+    production_date: row.production_date as string,
+    quantity: 0,
+    updated_by: profile.id,
+    updated_at: new Date().toISOString(),
+  }));
+
+  // Anything typed into the draft for those days goes too.
+  const dropped = await supabase
+    .from("production_schedule_entries")
+    .delete()
+    .eq("schedule_id", draft.id)
+    .gte("production_date", from)
+    .lte("production_date", to);
+
+  if (dropped.error) return fail(dropped.error.message);
+
+  if (rows.length > 0) {
+    const { error } = await supabase
+      .from("production_schedule_entries")
+      .upsert(rows, { onConflict: "schedule_id,recipe_id,production_date" });
+    if (error) return fail(error.message);
+  }
+
+  revalidatePath(SCHEDULE_PATH);
+  return { ok: true, cleared: rows.length };
+}
+
+/**
+ * Throws away every open draft against the live plan.
+ *
+ * For the reset before going live: the drafts are working notes, and starting
+ * a real week with somebody's half-finished experiment still open is how a
+ * wrong number gets confirmed by accident.
+ */
+export async function discardAllDrafts(
+  input: { scheduleId?: string } = {}
+): Promise<ActionResult & { discarded?: number }> {
+  const supabase = await createClient();
+  const profile = await getCurrentUserProfile(supabase);
+  if (!profile) return fail("You are signed out");
+  if (!isAdminProfile(profile)) {
+    return fail("Only an administrator can discard everyone's drafts");
+  }
+
+  // Called from Configuration there is no id to hand, and there is only ever
+  // one live plan, so finding it is not a guess.
+  let parent = input.scheduleId;
+  if (!parent) {
+    const { data: live } = await supabase
+      .from("production_schedules")
+      .select("id")
+      .eq("status", "live")
+      .maybeSingle();
+    parent = (live?.id as string) ?? undefined;
+  }
+  if (!parent) return fail("There is no confirmed plan");
+
+  /*
+    Confirmed drafts go too.
+
+    A confirmed draft is a record of what was merged, not a plan - but it
+    still sits in the list, and "discard all" that leaves rows behind is a
+    button that lies. The live plan is untouched either way; merging already
+    copied the numbers into it.
+  */
+  const { data: drafts } = await supabase
+    .from("production_schedules")
+    .select("id")
+    .eq("parent_schedule_id", parent)
+    .in("status", ["draft", "confirmed"]);
+
+  const ids = (drafts ?? []).map((row) => row.id as string);
+  if (ids.length === 0) return { ok: true, discarded: 0 };
+
+  const { error } = await supabase
+    .from("production_schedules")
+    .delete()
+    .in("id", ids);
+
+  if (error) return fail(error.message);
+
+  revalidatePath(SCHEDULE_PATH);
+  return { ok: true, discarded: ids.length };
+}
+
+/**
+ * Empties the confirmed plan.
+ *
+ * The most destructive thing in the app: everything the floor is working from,
+ * gone. Admin only, and it lives in Configuration rather than on the planning
+ * page, because it should take a decision to reach rather than a mis-click.
+ * The schedule itself survives - it is the entries that go - so nothing has to
+ * be recreated afterwards.
+ */
+export async function clearLiveSchedule(): Promise<
+  ActionResult & { cleared?: number }
+> {
+  const supabase = await createClient();
+  const profile = await getCurrentUserProfile(supabase);
+  if (!profile) return fail("You are signed out");
+  if (!isAdminProfile(profile)) {
+    return fail("Only an administrator can empty the confirmed plan");
+  }
+
+  const { data: live } = await supabase
+    .from("production_schedules")
+    .select("id")
+    .eq("status", "live")
+    .maybeSingle();
+
+  if (!live) return fail("There is no confirmed plan");
+
+  const { count } = await supabase
+    .from("production_schedule_entries")
+    .select("id", { count: "exact", head: true })
+    .eq("schedule_id", live.id as string);
+
+  const { error } = await supabase
+    .from("production_schedule_entries")
+    .delete()
+    .eq("schedule_id", live.id as string);
+
+  if (error) return fail(error.message);
+
+  revalidatePath(SCHEDULE_PATH);
+  revalidatePath("/production");
+  return { ok: true, cleared: count ?? 0 };
+}
+
 /**
  * Picks a saved draft back up.
  *

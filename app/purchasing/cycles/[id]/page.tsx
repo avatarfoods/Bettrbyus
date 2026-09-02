@@ -1,3 +1,4 @@
+import { PageShell } from "@/components/app-shell/page-shell";
 import { PurchasingMatrix } from "@/components/purchasing-matrix";
 
 export const metadata = {
@@ -11,8 +12,8 @@ export default async function PurchasingCycleRoute({
 }) {
   const { id } = await params;
   return (
-    <div className="min-h-full bg-gradient-to-b from-background via-background to-muted/30">
+    <PageShell breadcrumbs={[{ label: "Purchasing" }, { label: "Total orders" }]}>
       <PurchasingMatrix initialCycleId={id} />
-    </div>
+    </PageShell>
   );
 }

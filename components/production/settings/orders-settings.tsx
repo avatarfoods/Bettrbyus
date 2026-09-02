@@ -110,7 +110,7 @@ export function OrdersSettings({
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Filter categories…"
               aria-label="Filter categories"
-              className="h-8 w-full rounded-md border border-border bg-card pr-2 pl-8 text-sm"
+              className="h-8 w-full rounded-sm bg-card ring-1 ring-foreground/10 pr-2 pl-8 text-sm"
             />
           </div>
         )}
@@ -212,7 +212,7 @@ export function OrdersSettings({
         })}
 
         {config.lines.length === 0 && (
-          <p className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground">
+          <p className="rounded-sm bg-card ring-1 ring-foreground/10 p-6 text-center text-sm text-muted-foreground">
             No lines yet. Add one under Settings → Lines first.
           </p>
         )}

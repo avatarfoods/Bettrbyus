@@ -159,7 +159,7 @@ export function IngredientsEditor({
    * locked the chrome comes off entirely and the value reads as text.
    */
   const fieldClass = live
-    ? "rounded-md border border-border bg-card"
+    ? "rounded-sm bg-card ring-1 ring-foreground/10"
     : "rounded-md border border-transparent bg-transparent";
 
   const [lines, setLines] = useState<EditableLine[]>(initialLines);
@@ -561,7 +561,7 @@ export function IngredientsEditor({
                             className={cn(
                               "px-0.5 py-0 text-[0.6875rem] font-semibold text-primary",
                               live
-                                ? "rounded-md border border-border bg-card"
+                                ? "rounded-sm bg-card ring-1 ring-foreground/10"
                                 : "appearance-none border-none bg-transparent"
                             )}
                           >
@@ -589,7 +589,7 @@ export function IngredientsEditor({
                       }
                       aria-label="Quantity"
                       className={cn(
-                        "w-full px-2 py-1 text-right text-sm tabular-nums",
+                        "w-full px-2 py-0.5 text-right text-sm tabular-nums",
                         fieldClass
                       )}
                     />
@@ -632,7 +632,7 @@ export function IngredientsEditor({
                         placeholder="—"
                         aria-label="Loss percent"
                         className={cn(
-                          "w-full px-2 py-1 text-right text-sm tabular-nums",
+                          "w-full px-2 py-0.5 text-right text-sm tabular-nums",
                           fieldClass
                         )}
                       />
@@ -722,7 +722,7 @@ export function IngredientsEditor({
                   setPicking(picking === "add" ? null : "add");
                   setQuery("");
                 }}
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-sm text-muted-foreground hover:bg-muted"
+                className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-card ring-1 ring-foreground/10 px-2.5 text-sm text-muted-foreground hover:bg-muted"
               >
                 <Plus className="size-3.5" />
                 Add ingredient
@@ -731,7 +731,7 @@ export function IngredientsEditor({
                 type="button"
                 onClick={cancel}
                 disabled={pending}
-                className="ml-auto h-8 rounded-md border border-border bg-card px-3 text-sm text-muted-foreground hover:bg-muted disabled:opacity-60"
+                className="ml-auto h-8 rounded-sm bg-card ring-1 ring-foreground/10 px-3 text-sm text-muted-foreground hover:bg-muted disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -859,7 +859,7 @@ function Th({
   return (
     <th
       className={cn(
-        "border-b border-border px-3 py-2 text-[0.625rem] font-semibold tracking-wider text-primary uppercase",
+        "border-b border-border px-3 py-1.5 text-[0.625rem] font-semibold tracking-wider text-primary uppercase",
         numeric ? "text-right" : "text-left",
         className
       )}
@@ -876,7 +876,7 @@ function Td({
   children?: React.ReactNode;
   className?: string;
 }) {
-  return <td className={cn("px-3 py-2 align-middle", className)}>{children}</td>;
+  return <td className={cn("px-3 py-1 align-middle", className)}>{children}</td>;
 }
 
 

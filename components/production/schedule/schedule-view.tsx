@@ -3,9 +3,11 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  CalendarRange,
+  Boxes,
   CheckCircle2,
-  History,
+  ChevronLeft,
+  ChevronRight,
+  ListTree,
   Loader2,
   Save,
   Trash2,
@@ -24,10 +26,10 @@ import type { ScheduleRecipe } from "@/lib/production/schedule/fetch";
 import type { WipRecipe, WipRecipeLine } from "@/lib/production/wip-explode";
 import {
   applySuggestions,
+  clearRange,
   confirmDraft,
   discardDraft,
   renameDraft,
-  reopenDraft,
 } from "@/lib/production/schedule/actions";
 import type { DraftSummary } from "@/lib/production/schedule/ensure";
 import {
@@ -35,7 +37,6 @@ import {
   type GridRow,
 } from "@/components/production/schedule/schedule-grid";
 import { RecipePanel } from "@/components/production/schedule/recipe-panel";
-import { DateScopePicker } from "@/components/ui/date-scope";
 import type { DateScope } from "@/lib/date-scope";
 import { SearchPanel } from "@/components/ui/search-panel";
 import { departmentColor } from "@/lib/production/department-colors";
@@ -57,7 +58,20 @@ import { cn } from "@/lib/utils";
 
 type Props = {
   scheduleId: string | null;
+  /** What the confirmed plan is called. */
+  liveName: string;
   myDraftId: string | null;
+  /** The draft laid over the live plan right now, or null for live alone. */
+  viewingId: string | null;
+  /**
+   * Whether the plan is open for typing.
+   *
+   * Carried in the URL rather than in state here, because the switch belongs
+   * up in the page header with the page's own title and the grid is down
+   * here - one of them has to be the owner, and the address bar is the only
+   * thing both can see.
+   */
+  editing: boolean;
   drafts: DraftSummary[];
   readOnly: boolean;
   setupError: string | null;
@@ -67,15 +81,15 @@ type Props = {
   from: string;
   to: string;
   recipes: ScheduleRecipe[];
-  lineNames: string[];
   entries: ScheduleEntry[];
   windows: [string, TimingWindow][];
   recipes4Explode: [string, WipRecipe][];
   recipeLines: [string, WipRecipeLine[]][];
-  isAdmin: boolean;
   /** Filters restored from the URL, so a link back lands where you left. */
   initialDept?: string;
   initialQuery?: string;
+  /** The line this plan belongs to. Rows outside it are not shown at all. */
+  planLine?: string | null;
   /** Department name to the colour key chosen in Settings. */
   departmentColors: [string, string | null][];
   /** The day, or span of days, the WIP column reads. */
@@ -111,7 +125,10 @@ function unitFor(department: string | null, uom: string | null): "lb" | "ea" | "
 
 export function ScheduleView({
   scheduleId,
+  liveName,
   myDraftId,
+  viewingId,
+  editing,
   drafts,
   readOnly,
   setupError,
@@ -120,14 +137,13 @@ export function ScheduleView({
   from,
   to,
   recipes,
-  lineNames,
   entries: serverEntries,
   windows,
   recipes4Explode,
   recipeLines,
-  isAdmin,
   initialDept,
   initialQuery,
+  planLine,
   departmentColors: departmentColorList,
   wipScope,
   wipDate,
@@ -136,7 +152,14 @@ export function ScheduleView({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [showDrafts, setShowDrafts] = useState(false);
+  /**
+   * The confirmed plan is read-only until somebody says otherwise.
+   *
+   * This grid is what the floor works from. Every cell being live meant a
+   * stray click could change tomorrow's production, and the only sign was a
+   * number moving. Editing is now something you turn on, and turning it on
+   * is what opens your draft.
+   */
   /** Non-null once the name box has been touched, so typing is not clobbered. */
   const [draftName, setDraftName] = useState<string | null>(null);
   const [savedName, setSavedName] = useState(false);
@@ -160,11 +183,30 @@ export function ScheduleView({
     `view:${initialDept ?? "__finished__"}`,
   ]);
 
-  const line = filters.find((id) => id.startsWith("line:"))?.slice(5) ?? "";
-  const dept =
-    filters.find((id) => id.startsWith("view:"))?.slice(5) ?? "__finished__";
+  /**
+   * The line whose plan this is.
+   *
+   * Given by the page rather than chosen here: it decides which live plan and
+   * which drafts are on screen, so it cannot be a filter the grid owns.
+   */
+  const line = planLine ?? "";
+  /**
+   * Which area is shown.
+   *
+   * Read from the URL rather than held here: the control that sets it is up
+   * in the page header beside the line, and the two have to agree. It also
+   * makes a link carry the view somebody was looking at.
+   */
+  const dept = initialDept ?? "__finished__";
   const hideEmpty = filters.includes("hide-empty");
   const expandAll = filters.includes("expand-all");
+  /**
+   * Both switches on: the work list.
+   *
+   * Every tree open, nothing without numbers, and each recipe once - a list
+   * of what to make, rather than a tree read eleven times over.
+   */
+  const working = hideEmpty && expandAll;
   const [selection, setSelection] = useState<{ from: string; to: string } | null>(
     null
   );
@@ -174,6 +216,13 @@ export function ScheduleView({
 
   const changed = useMemo(() => new Set(draftChanges), [draftChanges]);
   const myDraft = drafts.find((draft) => draft.id === myDraftId);
+  /** True when what is on screen is yours to change. */
+  const mine = viewingId === null || viewingId === myDraftId;
+  const viewed = drafts.find((draft) => draft.id === viewingId) ?? null;
+  const viewingLabel = viewed
+    ? `${viewed.name} — ${viewed.createdByName}`
+    : liveName;
+
   const departmentColors = useMemo(
     () => new Map(departmentColorList),
     [departmentColorList]
@@ -436,6 +485,10 @@ export function ScheduleView({
               `Planned on ${rejected.map((e) => e.productionDate).join(", ")}, which falls outside the window.`),
         neededTotal: recipeDemand?.total ?? 0,
         scheduledTotal: own.reduce((sum, e) => sum + e.quantity, 0),
+        // Only what is planned INSIDE the range counts towards "is this row
+        // doing anything". A run last month is not a reason to show a row
+        // when you are looking at next week.
+        scheduledInRange: inRangeRuns.reduce((sum, e) => sum + e.quantity, 0),
       };
     }
 
@@ -510,10 +563,16 @@ export function ScheduleView({
       })
       .filter((row) => {
         if (!hideEmpty) return true;
-        if (isExpandedChild(row.path)) return true;
+        /*
+          Opening one row by hand means "show me what is under this", so its
+          children come through. Opening EVERYTHING does not - with expand-all
+          on, every row is an expanded child, and the exemption swallowed the
+          filter whole. That is why "What is running" still showed blanks.
+        */
+        if (!expandAll && isExpandedChild(row.path)) return true;
         // Excel's "exclude zero": a row earns its place by having something
         // planned or something needed in the range being looked at.
-        if (row.scheduledTotal > 0.01) return true;
+        if (row.scheduledInRange > 0.01) return true;
         if (row.openBalance > 0.01) return true;
         return (row.demand?.days ?? []).some(
           (day) => day.date >= from && day.date <= to && day.quantity > 0.01
@@ -527,6 +586,7 @@ export function ScheduleView({
     wipDate,
     line,
     dept,
+    expandAll,
     query,
     entriesByRecipe,
     demand,
@@ -552,7 +612,7 @@ export function ScheduleView({
    */
   const shown = useMemo(() => {
     const depthById = new Map<string, number>();
-    return rows.map((row) => {
+    const withDepth = rows.map((row) => {
       const parentDepth =
         row.parentPath !== null && depthById.has(row.parentPath)
           ? depthById.get(row.parentPath)! + 1
@@ -560,7 +620,28 @@ export function ScheduleView({
       depthById.set(row.path, parentDepth);
       return { ...row, depth: parentDepth };
     });
-  }, [rows]);
+
+    /*
+      With the whole tree open, "what is running" is a work list, not a tree.
+
+      A step feeds every bowl that uses it, so PRODUCE items were appearing
+      once per bowl - the same 90 lb of cilantro on eleven lines. The tree is
+      right to show it that way when you are reading one bowl; a list of what
+      to make today is wrong to. So this view is flat and each recipe appears
+      once. Nothing is lost: the cells are per recipe, so eleven rows were
+      showing the same number eleven times.
+    */
+    if (!working) return withDepth;
+
+    const seen = new Set<string>();
+    return withDepth
+      .filter((row) => {
+        if (seen.has(row.recipe.id)) return false;
+        seen.add(row.recipe.id);
+        return true;
+      })
+      .map((row) => ({ ...row, depth: 0, hasChildren: false }));
+  }, [rows, working]);
 
   const styles = useMemo(() => {
     const map = new Map<
@@ -585,14 +666,6 @@ export function ScheduleView({
     return map;
   }, [shown, departmentColors]);
 
-  const departmentOptions = useMemo(() => {
-    const names = new Set<string>();
-    for (const recipe of recipes) {
-      if (line && recipe.lineName !== line) continue;
-      if (recipe.department) names.add(recipe.department);
-    }
-    return [...names].sort();
-  }, [recipes, line]);
 
   /**
    * Totals for the selected days, split by department and each in its own
@@ -658,6 +731,28 @@ export function ScheduleView({
     router.push(`/production/schedule?${search}`);
   }
 
+  /** Clears the selected day, or the selected span. */
+  function clearDay() {
+    if (!scheduleId || !selection) return;
+    const span =
+      selection.from === selection.to
+        ? selection.from
+        : `${selection.from} to ${selection.to}`;
+    if (!confirm(`Clear everything planned on ${span}? It goes into your draft, so the floor keeps working from the confirmed plan until you confirm.`)) {
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const result = await clearRange({
+        scheduleId,
+        from: selection.from,
+        to: selection.to,
+      });
+      if (result.ok) router.refresh();
+      else setError(result.message);
+    });
+  }
+
   function acceptAll() {
     if (!scheduleId) return;
     setError(null);
@@ -684,117 +779,240 @@ export function ScheduleView({
 
   return (
     <div className="flex flex-col gap-2.5 px-3 py-3 sm:px-4">
-      <div className="flex flex-wrap items-end gap-3">
-        {/* The range you are looking at. */}
-        <div className="flex items-end gap-1.5">
-          <CalendarRange className="mb-1.5 size-4 text-muted-foreground" />
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
-              From
-            </span>
-            <input
-              type="date"
-              value={from}
-              onChange={(event) => goRange(event.target.value, to)}
-              aria-label="Range start"
-              className="h-8 rounded-md border border-border bg-card px-2 text-sm"
-            />
-          </label>
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
-              To
-            </span>
-            <input
-              type="date"
-              value={to}
-              min={from}
-              onChange={(event) => goRange(from, event.target.value)}
-              aria-label="Range end"
-              className="h-8 rounded-md border border-border bg-card px-2 text-sm"
-            />
-          </label>
-          <span className="mb-1.5 text-[0.6875rem] text-muted-foreground">
-            {dates.length} {dates.length === 1 ? "day" : "days"}
-          </span>
-        </div>
+      {/*
+        One bar, the way the dashboard does it.
+
+        Three groups in the order the question is asked - when you are
+        planning for, what against, and what to show - separated by hairlines
+        rather than boxed. Every control is the same height, so the row reads
+        as one object instead of six.
+      */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-sm bg-card px-2 py-1.5 ring-1 ring-foreground/10">
+        <button
+          type="button"
+          onClick={() => goRange(shiftDay(from, -dates.length), shiftDay(to, -dates.length))}
+          aria-label="Earlier"
+          className={STEP}
+        >
+          <ChevronLeft className="size-4" />
+        </button>
+        <input
+          type="date"
+          value={from}
+          max={to}
+          aria-label="Plan from"
+          onChange={(event) =>
+            event.target.value && goRange(event.target.value, to)
+          }
+          className={DATE_FIELD}
+        />
+        <span className="text-xs text-muted-foreground">&rarr;</span>
+        <input
+          type="date"
+          value={to}
+          min={from}
+          aria-label="Plan to"
+          onChange={(event) =>
+            event.target.value && goRange(from, event.target.value)
+          }
+          className={DATE_FIELD}
+        />
+        <button
+          type="button"
+          onClick={() => goRange(shiftDay(from, dates.length), shiftDay(to, dates.length))}
+          aria-label="Later"
+          className={STEP}
+        >
+          <ChevronRight className="size-4" />
+        </button>
+        <span className="text-[0.625rem] tabular-nums text-muted-foreground">
+          {dates.length}d
+        </span>
+
+        <Hairline />
 
         {/*
-          One field, everything else behind Filter.
-
-          Six controls across the top is six things to read before you can
-          type. The live filters show as pills inside the field, which is
-          where you were already looking.
+          What is in the cooler. Usually one morning, but a span when a count
+          was taken over more than one day - which happens, so it is offered.
         */}
-        {/* Which day's cooler the WIP column is showing. Separate from the
-            plan's own range: you plan next week against what is in the
-            cooler this morning. */}
-        <DateScopePicker
-          label="WIP as of"
-          scope={wipScope}
-          onChange={goWip}
-          max={today}
-          className="mb-0.5"
-        />
+        <span className="flex items-center gap-1">
+          <Boxes className="size-3.5 shrink-0 text-success" />
+          <span className="text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+            WIP
+          </span>
+          {wipScope.kind === "range" && (
+            <>
+              <input
+                type="date"
+                value={wipScope.from}
+                max={wipScope.to}
+                aria-label="WIP from"
+                onChange={(event) =>
+                  event.target.value &&
+                  goWip({ ...wipScope, from: event.target.value })
+                }
+                className={DATE_FIELD}
+              />
+              <span className="text-xs text-muted-foreground">&rarr;</span>
+            </>
+          )}
+          <input
+            type="date"
+            value={wipScope.kind === "day" ? wipScope.date : wipScope.to}
+            max={today}
+            aria-label="WIP as of"
+            onChange={(event) => {
+              if (!event.target.value) return;
+              goWip(
+                wipScope.kind === "day"
+                  ? { kind: "day", date: event.target.value }
+                  : { ...wipScope, to: event.target.value }
+              );
+            }}
+            className={DATE_FIELD}
+          />
+          <button
+            type="button"
+            onClick={() =>
+              goWip(
+                wipScope.kind === "day"
+                  ? {
+                      kind: "range",
+                      from: shiftDay(wipScope.date, -6),
+                      to: wipScope.date,
+                    }
+                  : { kind: "day", date: wipScope.to }
+              )
+            }
+            aria-pressed={wipScope.kind === "range"}
+            title={
+              wipScope.kind === "day"
+                ? "Count across a span of days instead"
+                : "Back to a single day"
+            }
+            className={cn(
+              "h-7 rounded-sm px-1.5 text-[0.5625rem] font-semibold tracking-wide uppercase transition-colors",
+              wipScope.kind === "range"
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-muted"
+            )}
+          >
+            {wipScope.kind === "range" ? "Range" : "Day"}
+          </button>
+        </span>
+
+        <Hairline />
+
+        <Hairline />
 
         <SearchPanel
           query={query}
           onQueryChange={setQuery}
           placeholder="Find a recipe…"
           aria-label="Search recipes"
-          filters={filters}
-          onFiltersChange={setFilters}
+          filters={filters.filter(
+            (id) => !id.startsWith("line:") && !id.startsWith("view:")
+          )}
+          onFiltersChange={(next) =>
+            setFilters([
+              ...filters.filter(
+                (id) => id.startsWith("line:") || id.startsWith("view:")
+              ),
+              ...next,
+            ])
+          }
           filterGroups={[
-            {
-              exclusive: true,
-              items: [
-                { id: "view:__finished__", label: "Finished products" },
-                { id: "view:__all__", label: "All departments" },
-                ...departmentOptions.map((name) => ({
-                  id: `view:${name}`,
-                  label: name,
-                })),
-              ],
-            },
-            {
-              exclusive: true,
-              items: lineNames.map((name) => ({
-                id: `line:${name}`,
-                label: name,
-              })),
-            },
             {
               items: [
                 { id: "hide-empty", label: "Hide empty rows" },
                 { id: "expand-all", label: "Open the whole tree" },
               ],
             },
-          ].filter((group) => group.items.length > 0)}
-          className="mb-0.5 sm:max-w-lg"
+          ]}
+          className="min-w-48 flex-1"
         />
 
-        <span className="mb-1.5 text-[0.6875rem] text-muted-foreground">
-          {shown.length} of {recipes.length} recipes
+        {/*
+          The view people actually want: everything that has a number, open,
+          and nothing else. Two separate switches meant setting both every
+          time, and forgetting one showed either an empty tree or a wall of
+          blanks.
+        */}
+        <button
+          type="button"
+          onClick={() =>
+            setFilters(
+              working
+                ? filters.filter(
+                    (id) => id !== "hide-empty" && id !== "expand-all"
+                  )
+                : [
+                    ...filters.filter(
+                      (id) => id !== "hide-empty" && id !== "expand-all"
+                    ),
+                    "hide-empty",
+                    "expand-all",
+                  ]
+            )
+          }
+          aria-pressed={working}
+          title="Open every tree and hide anything with no numbers in this range"
+          className={cn(
+            "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-sm px-2.5 text-[0.6875rem] font-semibold tracking-wide uppercase transition-colors",
+            working
+              ? "bg-foreground text-background"
+              : "bg-card text-muted-foreground ring-1 ring-foreground/15 hover:bg-muted"
+          )}
+        >
+          <ListTree className="size-3.5" />
+          What is running
+        </button>
+
+        <span
+          title={
+            viewed
+              ? mine
+                ? "Your draft, laid over the confirmed plan"
+                : `${viewed.createdByName}'s draft — you can look, not change it`
+              : "The confirmed plan"
+          }
+          className={cn(
+            "truncate rounded-sm px-1.5 py-0.5 text-[0.625rem] font-semibold",
+            viewed
+              ? mine
+                ? "bg-warning-muted text-warning-foreground"
+                : "bg-muted text-muted-foreground"
+              : "bg-success/15 text-success"
+          )}
+        >
+          {viewingLabel}
         </span>
 
-        <div className="mb-0.5 ml-auto flex items-center gap-2">
-          {!readOnly && (
+        <span className="text-[0.625rem] tabular-nums text-muted-foreground">
+          {shown.length}/{recipes.length}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="ml-auto flex items-center gap-2">
+          {editing && !readOnly && (
             <button
               type="button"
-              onClick={() => setShowDrafts((v) => !v)}
-              aria-pressed={showDrafts}
-              className={cn(
-                "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors",
-                showDrafts
-                  ? "bg-accent font-medium text-accent-foreground"
-                  : "border border-border bg-card text-muted-foreground hover:bg-muted"
-              )}
+              onClick={clearDay}
+              disabled={pending || !selection}
+              title={
+                selection
+                  ? `Clear everything planned between ${selection.from} and ${selection.to}`
+                  : "Click a date header first, then clear that day"
+              }
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-destructive/40 bg-card px-2.5 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-40"
             >
-              <History className="size-3.5" />
-              Drafts{drafts.length > 0 && ` (${drafts.length})`}
+              <Trash2 className="size-3.5" />
+              Clear day
             </button>
           )}
 
-          {suggestionCount > 0 && !readOnly && (
+          {suggestionCount > 0 && !readOnly && editing && (
             <button
               type="button"
               onClick={acceptAll}
@@ -849,7 +1067,7 @@ export function ScheduleView({
               }}
               placeholder="Name this draft"
               aria-label="Draft name"
-              className="h-7 w-40 rounded-md border border-border bg-card px-2 text-xs placeholder:text-muted-foreground/60 focus:ring-1 focus:ring-primary focus:outline-none"
+              className="h-7 w-40 rounded-sm bg-card ring-1 ring-foreground/10 px-2 text-xs placeholder:text-muted-foreground/60 focus:ring-1 focus:ring-primary focus:outline-none"
             />
             <button
               type="button"
@@ -868,7 +1086,6 @@ export function ScheduleView({
                     setSavedName(true);
                     setDraftName(null);
                     setLocalEntries([]);
-                    setShowDrafts(true);
                     router.refresh();
                   } else setError(r.message);
                 });
@@ -890,7 +1107,7 @@ export function ScheduleView({
                 })
               }
               disabled={pending}
-              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs text-muted-foreground hover:bg-muted disabled:opacity-60"
+              className="inline-flex h-7 items-center gap-1.5 rounded-sm bg-card ring-1 ring-foreground/10 px-2.5 text-xs text-muted-foreground hover:bg-muted disabled:opacity-60"
             >
               <Trash2 className="size-3" />
               Discard
@@ -916,108 +1133,6 @@ export function ScheduleView({
               Confirm to the plan
             </button>
           </div>
-        </div>
-      )}
-
-      {!readOnly && showDrafts && (
-        <div className="rounded-md ring-1 ring-foreground/10">
-          <h3 className="border-b border-border bg-brand-muted px-3 py-1.5 text-[0.625rem] font-semibold tracking-wider text-primary uppercase">
-            Open drafts
-          </h3>
-          {drafts.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-muted-foreground">
-              Nothing unconfirmed. The plan below is what the floor has.
-            </p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {drafts.map((draft) => (
-                <li
-                  key={draft.id}
-                  className="flex flex-wrap items-center gap-2 px-3 py-1.5 text-xs"
-                >
-                  <span className="font-medium">{draft.name}</span>
-                  <span className="text-muted-foreground">
-                    {draft.entryCount}{" "}
-                    {draft.entryCount === 1 ? "change" : "changes"}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {draft.createdByName} ·{" "}
-                    {new Date(draft.updatedAt ?? draft.createdAt).toLocaleString(
-                      undefined,
-                      {
-                        month: "2-digit",
-                        day: "2-digit",
-                        hour: "numeric",
-                        minute: "2-digit",
-                      }
-                    )}
-                  </span>
-                  {draft.id === myDraftId ? (
-                    <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[0.625rem] font-semibold text-primary">
-                      open now
-                    </span>
-                  ) : (
-                    !draft.isWorking && (
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-[0.625rem] font-semibold text-muted-foreground">
-                        saved
-                      </span>
-                    )
-                  )}
-                  {(draft.id === myDraftId || isAdmin) && (
-                    <span className="ml-auto flex gap-2">
-                      {/* A saved draft that could not be picked back up would
-                          be a dead end - the point of saving it is coming
-                          back to it. */}
-                      {!draft.isWorking && draft.status === "draft" && (
-                        <button
-                          type="button"
-                          disabled={pending}
-                          onClick={() =>
-                            startTransition(async () => {
-                              const r = await reopenDraft({ draftId: draft.id });
-                              if (r.ok) router.refresh();
-                              else setError(r.message);
-                            })
-                          }
-                          className="font-medium text-muted-foreground hover:text-primary disabled:opacity-60"
-                        >
-                          Reopen
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() =>
-                          startTransition(async () => {
-                            const r = await discardDraft({ draftId: draft.id });
-                            if (r.ok) router.refresh();
-                            else setError(r.message);
-                          })
-                        }
-                        className="text-muted-foreground hover:text-destructive disabled:opacity-60"
-                      >
-                        Discard
-                      </button>
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() =>
-                          startTransition(async () => {
-                            const r = await confirmDraft({ draftId: draft.id });
-                            if (r.ok) router.refresh();
-                            else setError(r.message);
-                          })
-                        }
-                        className="font-medium text-primary hover:underline disabled:opacity-60"
-                      >
-                        Confirm
-                      </button>
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       )}
 
@@ -1064,6 +1179,7 @@ export function ScheduleView({
       <ScheduleGrid
         scheduleId={scheduleId ?? "preview"}
         readOnly={readOnly}
+        locked={!editing || !mine}
         onLocalChange={(recipeId, date, quantity) =>
           setLocalEntries((prev) => [
             ...prev.filter(
@@ -1138,4 +1254,22 @@ export function ScheduleView({
       </p>
     </div>
   );
+}
+
+
+function Hairline() {
+  return <span aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-border" />;
+}
+
+const STEP =
+  "inline-flex size-7 shrink-0 items-center justify-center rounded-sm text-primary transition-colors hover:bg-muted";
+
+
+const DATE_FIELD =
+  "h-7 rounded-sm border border-border bg-card px-1.5 text-xs tabular-nums focus:ring-1 focus:ring-primary focus:outline-none";
+
+function shiftDay(iso: string, days: number): string {
+  const date = new Date(`${iso}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }

@@ -112,13 +112,24 @@ export function PurchasingEmailCategoryDialog({
     );
   }, [profiles, query]);
 
+  /*
+    Clearing the last search happens while rendering; fetching stays in the
+    effect where it belongs. Doing both in the effect meant the dialog opened
+    showing the previous recipient list for a frame before it emptied.
+  */
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (open) {
+      setSelectedIds(new Set());
+      setQuery("");
+      setError(null);
+      setLoading(true);
+    }
+  }
+
   useEffect(() => {
     if (!open) return;
-
-    setSelectedIds(new Set());
-    setQuery("");
-    setError(null);
-    setLoading(true);
 
     let cancelled = false;
     const supabase = createClient();

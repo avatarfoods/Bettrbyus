@@ -126,7 +126,7 @@ export function MovingHistoryTable() {
             onChange={(event) => setSearch(event.target.value)}
             placeholder="PO, lot, item, user…"
             aria-label="Search history"
-            className="h-8 w-full rounded-md border border-border bg-card pr-2 pl-8 text-sm"
+            className="h-8 w-full rounded-sm bg-card ring-1 ring-foreground/10 pr-2 pl-8 text-sm"
           />
         </div>
 
@@ -135,7 +135,7 @@ export function MovingHistoryTable() {
           value={itemFilter}
           onChange={(event) => setItemFilter(event.target.value)}
           aria-label="Filter by item"
-          className="h-8 max-w-56 rounded-md border border-border bg-card px-2 text-sm"
+          className="h-8 max-w-56 rounded-sm bg-card ring-1 ring-foreground/10 px-2 text-sm"
         >
           <option value="all">All items</option>
           {itemOptions.map(([id, label]) => (
@@ -150,7 +150,7 @@ export function MovingHistoryTable() {
           value={removedByFilter}
           onChange={(event) => setRemovedByFilter(event.target.value)}
           aria-label="Filter by who removed it"
-          className="h-8 max-w-56 rounded-md border border-border bg-card px-2 text-sm"
+          className="h-8 max-w-56 rounded-sm bg-card ring-1 ring-foreground/10 px-2 text-sm"
         >
           <option value="all">All users</option>
           {removedByOptions.map(([id, label]) => (

@@ -16,6 +16,11 @@ import { isMissingTable } from "@/lib/supabase/missing";
 
 export const LIVE_SCHEDULE_NAME = "Production schedule";
 
+/** What a line's plan is called when it is created. */
+export function liveScheduleName(lineName: string): string {
+  return `${lineName} production`;
+}
+
 /** A year forward and a month back - past any horizon anyone plans to. */
 function rollingPeriod(today: string): { start: string; end: string } {
   const base = new Date(`${today}T00:00:00Z`);
@@ -47,13 +52,26 @@ export type EnsureResult = {
  */
 export async function ensureLiveSchedule(
   supabase: SupabaseClient,
-  today: string
+  today: string,
+  /**
+   * The line this plan belongs to.
+   *
+   * Each line runs its own week - planning Bettr Bowl says nothing about
+   * Pizza Cupcake - so there is one live plan per line rather than one for
+   * the plant. Null finds the plan that predates lines, so an old link still
+   * lands somewhere rather than silently creating a second one.
+   */
+  lineId: string | null,
+  lineName?: string
 ): Promise<EnsureResult> {
-  const { data, error } = await supabase
+  const query = supabase
     .from("production_schedules")
-    .select("id, period_start, period_end")
-    .eq("status", "live")
-    .limit(1);
+    .select("id, period_start, period_end, line_id")
+    .eq("status", "live");
+
+  const { data, error } = lineId
+    ? await query.eq("line_id", lineId).limit(1)
+    : await query.limit(1);
 
   if (error) {
     return {
@@ -91,8 +109,9 @@ export async function ensureLiveSchedule(
   const { data: created, error: createError } = await supabase
     .from("production_schedules")
     .insert({
-      name: LIVE_SCHEDULE_NAME,
+      name: lineName ? liveScheduleName(lineName) : LIVE_SCHEDULE_NAME,
       status: "live",
+      line_id: lineId,
       period_start: period.start,
       period_end: period.end,
     })
@@ -102,11 +121,13 @@ export async function ensureLiveSchedule(
   if (createError) {
     // Another request may have created it in the gap; read it back rather
     // than reporting a failure the user cannot act on.
-    const { data: raced } = await supabase
+    const racedQuery = supabase
       .from("production_schedules")
       .select("id")
-      .eq("status", "live")
-      .limit(1);
+      .eq("status", "live");
+    const { data: raced } = lineId
+      ? await racedQuery.eq("line_id", lineId).limit(1)
+      : await racedQuery.limit(1);
     if (raced?.[0]) {
       return { id: raced[0].id as string, missingTable: false, error: null };
     }

@@ -166,7 +166,7 @@ function LineEditor({
             className={inputClass}
           />
         </Labelled>
-        <Labelled label="Key">
+        <Labelled label="Key" hint="Used in links and saved views. Renaming the label must not break a bookmark, which is why this is separate.">
           <input
             value={key}
             onChange={(event) => setKey(slugify(event.target.value))}

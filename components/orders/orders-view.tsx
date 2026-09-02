@@ -399,7 +399,7 @@ export function OrdersView({ data }: { data: OrdersData }) {
         ) : null}
 
         {selection.count > 0 && (
-          <div className="sticky bottom-3 z-30 ml-auto flex w-fit items-center gap-4 rounded-lg border border-border bg-card px-4 py-2 text-sm shadow-lg">
+          <div className="sticky bottom-3 z-30 ml-auto flex w-fit items-center gap-4 rounded-sm bg-card ring-1 ring-foreground/10 px-4 py-2 text-sm shadow-lg">
             <span className="text-muted-foreground">
               <b className="text-foreground tabular-nums">{selection.count}</b>{" "}
               selected

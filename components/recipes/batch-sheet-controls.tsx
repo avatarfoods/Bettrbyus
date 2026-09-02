@@ -55,7 +55,7 @@ export function BatchSheetControls({
             }}
             placeholder="quantity"
             aria-label="Scheduled quantity"
-            className="h-8 w-28 rounded-md border border-border bg-card px-2 text-right text-sm tabular-nums"
+            className="h-8 w-28 rounded-sm bg-card ring-1 ring-foreground/10 px-2 text-right text-sm tabular-nums"
           />
           <span className="text-xs text-muted-foreground">{uom}</span>
         </span>
@@ -73,7 +73,7 @@ export function BatchSheetControls({
             apply(qty, event.target.value);
           }}
           aria-label="Production date"
-          className="h-8 rounded-md border border-border bg-card px-2 text-sm"
+          className="h-8 rounded-sm bg-card ring-1 ring-foreground/10 px-2 text-sm"
         />
       </label>
 

@@ -1203,6 +1203,7 @@ comment on column public.wip_counts.partial_quantity is
 drop table if exists public.inventory_check_entries;
 drop table if exists public.inventory_checks;
 drop table if exists public.inventory_check_items;
+drop table if exists public.wip_inventory;
 drop table if exists public.departments;
 
 -- 20260901_recipe_archive
@@ -1231,3 +1232,24 @@ alter table public.finished_products
   add column if not exists guaranteed_shelf_life_days integer,
   add column if not exists pallet_weight_lb numeric,
   add column if not exists case_weight_lb numeric;
+
+-- 20260901_schedule_per_line
+-- One live plan per production line, not one for the whole plant.
+alter table public.production_schedules
+  add column if not exists line_id uuid
+    references public.production_lines (id) on delete cascade;
+
+update public.production_schedules s
+set line_id = (
+  select l.id from public.production_lines l where l.key = 'bettr-bowl' limit 1
+)
+where s.line_id is null;
+
+drop index if exists production_schedules_one_live_idx;
+
+create unique index if not exists production_schedules_one_live_per_line_idx
+  on public.production_schedules (line_id)
+  where status = 'live';
+
+create index if not exists production_schedules_line_idx
+  on public.production_schedules (line_id, status);

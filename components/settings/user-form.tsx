@@ -99,7 +99,7 @@ export function UserForm({ user, isSelf }: { user: UserRow; isSelf: boolean }) {
                 user.archived ? "User restored" : "User archived"
               )
             }
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm transition-colors hover:bg-muted disabled:opacity-50"
+            className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-card ring-1 ring-foreground/10 px-3 text-sm transition-colors hover:bg-muted disabled:opacity-50"
           >
             {user.archived ? (
               <>
@@ -180,7 +180,7 @@ export function UserForm({ user, isSelf }: { user: UserRow; isSelf: boolean }) {
 
             </div>
 
-            <label className="flex max-w-3xl items-center justify-between gap-4 rounded-md border border-border bg-card p-3">
+            <label className="flex max-w-3xl items-center justify-between gap-4 rounded-sm bg-card ring-1 ring-foreground/10 p-3">
               <span className="flex flex-col gap-0.5">
                 <span className="text-sm font-medium">Administrator</span>
                 <span className="text-xs text-muted-foreground">
@@ -243,7 +243,7 @@ export function UserForm({ user, isSelf }: { user: UserRow; isSelf: boolean }) {
                       return result;
                     }, "Password changed")
                   }
-                  className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm hover:bg-muted disabled:opacity-50"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-sm bg-card ring-1 ring-foreground/10 px-3 text-sm hover:bg-muted disabled:opacity-50"
                 >
                   <KeyRound className="size-3.5" />
                   Change password
@@ -265,7 +265,7 @@ export function UserForm({ user, isSelf }: { user: UserRow; isSelf: boolean }) {
                     `Reset link sent to ${user.email}`
                   )
                 }
-                className="inline-flex h-9 w-fit items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm hover:bg-muted disabled:opacity-50"
+                className="inline-flex h-9 w-fit items-center gap-1.5 rounded-sm bg-card ring-1 ring-foreground/10 px-3 text-sm hover:bg-muted disabled:opacity-50"
               >
                 <Mail className="size-3.5" />
                 Send reset email
@@ -299,7 +299,7 @@ export function UserForm({ user, isSelf }: { user: UserRow; isSelf: boolean }) {
 }
 
 const inputClass =
-  "h-9 w-full rounded-md border border-border bg-card px-2.5 text-sm focus-visible:outline-2 focus-visible:-outline-offset-1 focus-visible:outline-ring";
+  "h-9 w-full rounded-sm bg-card ring-1 ring-foreground/10 px-2.5 text-sm focus-visible:outline-2 focus-visible:-outline-offset-1 focus-visible:outline-ring";
 
 function Field({
   label,

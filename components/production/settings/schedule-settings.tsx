@@ -112,7 +112,7 @@ export function ScheduleSettings({
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search recipe or item…"
               aria-label="Search recipes"
-              className="h-7 w-full rounded-md border border-border bg-card pr-2 pl-7 text-xs placeholder:text-muted-foreground/60 focus:ring-1 focus:ring-primary focus:outline-none"
+              className="h-7 w-full rounded-sm bg-card ring-1 ring-foreground/10 pr-2 pl-7 text-xs placeholder:text-muted-foreground/60 focus:ring-1 focus:ring-primary focus:outline-none"
             />
           </div>
 
@@ -120,7 +120,7 @@ export function ScheduleSettings({
             value={department}
             onChange={(event) => setDepartment(event.target.value)}
             aria-label="Department"
-            className="h-7 rounded-md border border-border bg-card px-1.5 text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+            className="h-7 rounded-sm bg-card ring-1 ring-foreground/10 px-1.5 text-xs focus:ring-1 focus:ring-primary focus:outline-none"
           >
             <option value="">All departments</option>
             {departments.map((name) => (

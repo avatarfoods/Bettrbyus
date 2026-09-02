@@ -5,7 +5,6 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import type { CellAllocation, RecipeDemand } from "@/lib/production/schedule/model";
 import type { ScheduleRecipe } from "@/lib/production/schedule/fetch";
 import { saveScheduleCell } from "@/lib/production/schedule/actions";
-import { FinishedStar } from "@/components/recipes/finished-star";
 import { cn } from "@/lib/utils";
 
 /**
@@ -35,6 +34,8 @@ export type GridRow = {
   /** Planned, but on days the window does not allow, so it does not count. */
   rejectedQuantity: number;
   rejectedReason: string | null;
+  /** What is planned inside the range being looked at. */
+  scheduledInRange: number;
   /** Counted stock, as of the WIP date. Null means never counted. */
   wipOnHand: number | null;
   wipNote: string | null;
@@ -70,6 +71,15 @@ export type DepartmentStyle = {
 type Props = {
   scheduleId: string;
   readOnly?: boolean;
+  /**
+   * Nothing can be typed at all.
+   *
+   * Different from readOnly, which means "there is nowhere to save this yet,
+   * so hold it in memory" - the workbook preview before the migration ran.
+   * Folding the two together meant the confirmed plan accepted typing and
+   * showed the result, which looked exactly like editing it.
+   */
+  locked?: boolean;
   onLocalChange?: (recipeId: string, date: string, quantity: number | null) => void;
   today: string;
   dates: string[];
@@ -103,6 +113,7 @@ function fmt(value: number): string {
 export function ScheduleGrid({
   scheduleId,
   readOnly = false,
+  locked = false,
   onLocalChange,
   today,
   dates,
@@ -289,6 +300,7 @@ export function ScheduleGrid({
               key={row.path}
               scheduleId={scheduleId}
               readOnly={readOnly}
+              locked={locked}
               onLocalChange={onLocalChange}
               dates={dates}
               row={row}
@@ -356,6 +368,7 @@ function Th({
 function Row({
   scheduleId,
   readOnly,
+  locked,
   onLocalChange,
   dates,
   row,
@@ -369,6 +382,7 @@ function Row({
 }: {
   scheduleId: string;
   readOnly?: boolean;
+  locked?: boolean;
   onLocalChange?: (recipeId: string, date: string, quantity: number | null) => void;
   dates: string[];
   row: GridRow;
@@ -424,8 +438,6 @@ function Row({
             ) : (
               <span className="w-3.5 shrink-0" />
             )}
-
-            {finished && <FinishedStar className="size-3" />}
 
             <button
               type="button"
@@ -553,6 +565,7 @@ function Row({
           date={date}
           cell={row.cells.get(date)}
           readOnly={readOnly}
+          locked={locked}
           onLocalChange={onLocalChange}
           needed={
             // What this day is on the hook for. A run made early carries the
@@ -585,6 +598,7 @@ function Cell({
   date,
   cell,
   readOnly,
+  locked,
   onLocalChange,
   needed,
   anyOpen,
@@ -600,6 +614,7 @@ function Cell({
   date: string;
   cell: GridCell | undefined;
   readOnly?: boolean;
+  locked?: boolean;
   onLocalChange?: (recipeId: string, date: string, quantity: number | null) => void;
   needed: number;
   /** Whether this recipe still has demand nothing covers, anywhere in range. */
@@ -677,6 +692,10 @@ function Cell({
     }
     setError(null);
 
+    // The plan is not open for editing, so nothing is written and nothing is
+    // remembered - the number in the box goes back to what it was.
+    if (locked) return;
+
     if (readOnly) {
       lastSaved.current = trimmed;
       onLocalChange?.(recipeId, date, quantity);
@@ -732,6 +751,24 @@ function Cell({
         {/* What the tree needs, tucked left and faint. It used to sit in the
             placeholder - right-aligned, exactly where the typed number goes -
             which read as a value rather than a target. */}
+        {/* The suggestion, offered rather than applied. Clicking it is how
+            it becomes a number; nothing else writes into the cell. */}
+        {suggest && !problem && (
+          <button
+            type="button"
+            tabIndex={-1}
+            title={`The tree needs ${fmt(suggested)} ${unit} here — click to take it`}
+            onClick={() => {
+              if (!inputRef.current) return;
+              inputRef.current.value = String(Math.round(suggested));
+              commit(inputRef.current.value);
+            }}
+            className="absolute right-1.5 z-10 text-[0.6875rem] text-primary/45 tabular-nums hover:text-primary"
+          >
+            {fmt(suggested)}
+          </button>
+        )}
+
         {problem ? (
           <span
             title={problem}
@@ -762,15 +799,30 @@ function Cell({
           inputMode="decimal"
           defaultValue={initial}
           aria-label={date}
-          onFocus={(e) => {
-            if (suggest && e.target.value === "") {
-              e.target.value = String(Math.round(suggested));
-              e.target.select();
+          /*
+            Focus does NOT fill the cell in.
+
+            It used to write the suggested number into the input and select
+            it, so clicking a cell and clicking away committed a number
+            nobody typed. Nothing reaches the plan without somebody putting
+            it there: the suggestion is offered as a ghost, and taking it is
+            a deliberate act - click the ghost, or press Tab on an empty
+            cell.
+          */
+          readOnly={locked}
+          onBlur={(e) => {
+            if (locked) {
+              e.target.value = lastSaved.current;
+              return;
             }
+            commit(e.target.value);
           }}
-          onBlur={(e) => commit(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") e.currentTarget.blur();
+            if (e.key === "Tab" && suggest && e.currentTarget.value === "") {
+              e.currentTarget.value = String(Math.round(suggested));
+              commit(e.currentTarget.value);
+            }
             if (e.key === "Escape") {
               e.currentTarget.value = lastSaved.current;
               e.currentTarget.blur();
@@ -786,7 +838,9 @@ function Cell({
           }}
           className={cn(
             "h-6 w-full min-w-0 border-0 bg-transparent py-0 pr-1.5 pl-7 text-right text-[0.8125rem] tabular-nums",
-            "focus:relative focus:z-10 focus:bg-card focus:ring-1 focus:ring-primary focus:outline-none",
+            locked
+              ? "cursor-default focus:outline-none"
+              : "focus:relative focus:z-10 focus:bg-card focus:ring-1 focus:ring-primary focus:outline-none",
             pending && "opacity-40",
             has
               ? wrong

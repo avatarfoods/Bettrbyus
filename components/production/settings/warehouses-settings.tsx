@@ -167,7 +167,7 @@ export function WarehousesSettings({
 
       <Notice notice={notice} />
 
-      <section className="rounded-lg border border-border bg-card">
+      <section className="rounded-sm bg-card ring-1 ring-foreground/10">
         <header className="flex items-center gap-2 border-b border-border px-3 py-2">
           <span className="size-1.5 rounded-[1px] bg-success" />
           <h2 className="text-[0.6875rem] font-semibold tracking-wider text-primary uppercase">
@@ -203,7 +203,7 @@ export function WarehousesSettings({
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search warehouses…"
             aria-label="Search warehouses"
-            className="h-8 w-full rounded-md border border-border bg-card pr-2 pl-8 text-sm"
+            className="h-8 w-full rounded-sm bg-card ring-1 ring-foreground/10 pr-2 pl-8 text-sm"
           />
         </div>
         {dirty && (

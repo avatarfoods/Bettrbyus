@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Material, MaterialWithOnHand } from "@/lib/purchasing/types";
+import { allRows } from "@/lib/supabase/all-rows";
 
 type CurrentInventoryRow = {
   material_id: string;
@@ -11,13 +12,19 @@ type CurrentInventoryRow = {
 export async function fetchMaterialsWithOnHand(
   supabase: SupabaseClient
 ): Promise<{ data: MaterialWithOnHand[]; error: string | null }> {
+  const COLUMNS =
+    "id, item_code, name, odoo_product_id, odoo_category, storage_type, lbs_per_case, is_protein, thaw_buffer_days, lead_time_days, price, active, last_synced_at";
+
   const [materialsResult, inventoryResult] = await Promise.all([
-    supabase
-      .from("purchasing_materials")
-      .select(
-        "id, item_code, name, odoo_product_id, odoo_category, storage_type, lbs_per_case, is_protein, thaw_buffer_days, lead_time_days, price, active, last_synced_at"
-      )
-      .order("item_code", { ascending: true }),
+    // Paged: there are more materials than PostgREST returns in one response,
+    // and it does not say so. See lib/supabase/all-rows.
+    allRows<Material>((from: number, to: number) =>
+      supabase
+        .from("purchasing_materials")
+        .select(COLUMNS)
+        .order("item_code", { ascending: true })
+        .range(from, to)
+    ),
     supabase
       .from("purchasing_current_inventory")
       .select("material_id, qty_on_hand, source, fetched_at"),
@@ -25,7 +32,7 @@ export async function fetchMaterialsWithOnHand(
 
   if (materialsResult.error) {
     console.error("Failed to fetch purchasing materials:", materialsResult.error);
-    return { data: [], error: materialsResult.error.message };
+    return { data: [], error: materialsResult.error };
   }
   if (inventoryResult.error) {
     console.error("Failed to fetch current inventory:", inventoryResult.error);
@@ -39,7 +46,7 @@ export async function fetchMaterialsWithOnHand(
     ])
   );
 
-  const data = ((materialsResult.data ?? []) as Material[]).map((material) => {
+  const data = materialsResult.rows.map((material) => {
     const inventory = inventoryByMaterial.get(material.id);
     return {
       ...material,

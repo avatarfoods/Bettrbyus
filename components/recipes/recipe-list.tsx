@@ -15,6 +15,7 @@ import {
   TableEmpty,
 } from "@/components/ui/data-table";
 import { NewRecipeDialog } from "@/components/recipes/new-recipe-dialog";
+import type { OdooFinishedOption } from "@/lib/finished-products/fetch";
 import { FinishedStar } from "@/components/recipes/finished-star";
 import { SearchPanel } from "@/components/ui/search-panel";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,8 @@ export function RecipeList({
   departmentLines = {},
   initialFinishedOnly,
   canCreate = false,
+  odooOptions = [],
+  odooError = null,
 }: {
   recipes: CatalogRecipe[];
   departments: string[];
@@ -39,6 +42,9 @@ export function RecipeList({
   /** Set by /recipes?kind=finished, which is where the nav points. */
   initialFinishedOnly?: boolean;
   canCreate?: boolean;
+  /** Finished goods from Odoo, so a new one is picked rather than typed. */
+  odooOptions?: OdooFinishedOption[];
+  odooError?: string | null;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -225,7 +231,11 @@ export function RecipeList({
           {rows.length} / {recipes.length}
         </span>
 
-        <NewRecipeDialog departments={departments} canCreate={canCreate} />
+        <NewRecipeDialog
+          canCreate={canCreate}
+          odooOptions={odooOptions}
+          odooError={odooError}
+        />
       </div>
 
       {/* Desktop / iPad */}
@@ -277,7 +287,7 @@ export function RecipeList({
           <li key={recipe.id}>
             <Link
               href={`/recipes/${recipe.id}`}
-              className="flex flex-col gap-1.5 rounded-lg border border-border bg-card p-3"
+              className="flex flex-col gap-1.5 rounded-sm bg-card ring-1 ring-foreground/10 p-3"
             >
               <div className="flex items-start justify-between gap-2">
                 <span className="min-w-0">

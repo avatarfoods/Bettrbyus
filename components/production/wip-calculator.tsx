@@ -122,7 +122,7 @@ export function WipCalculator({ data }: { data: WipData }) {
             value={quickSubId}
             onChange={(event) => setQuickSubId(event.target.value)}
             aria-label="Choose a subrecipe"
-            className="h-8 min-w-0 flex-1 rounded-md border border-border bg-card px-2 text-sm sm:max-w-md sm:flex-none"
+            className="h-8 min-w-0 flex-1 rounded-sm bg-card ring-1 ring-foreground/10 px-2 text-sm sm:max-w-md sm:flex-none"
           >
             <option value="">Choose a subrecipe…</option>
             {subrecipes.map((sub) => (
@@ -138,7 +138,7 @@ export function WipCalculator({ data }: { data: WipData }) {
             onChange={(event) => setQuickQty(event.target.value)}
             placeholder="quantity"
             aria-label="Quantity produced"
-            className="h-8 w-28 rounded-md border border-border bg-card px-2 text-right tabular-nums"
+            className="h-8 w-28 rounded-sm bg-card ring-1 ring-foreground/10 px-2 text-right tabular-nums"
           />
           <span className="text-sm text-muted-foreground">
             {quickSub?.uom?.toLowerCase() ?? "unit"}
@@ -224,7 +224,7 @@ export function WipCalculator({ data }: { data: WipData }) {
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Find a subrecipe to count…"
                 aria-label="Find a subrecipe"
-                className="h-8 w-full rounded-md border border-border bg-card pr-2 pl-8 text-sm"
+                className="h-8 w-full rounded-sm bg-card ring-1 ring-foreground/10 pr-2 pl-8 text-sm"
               />
             </div>
             <Toggle
@@ -242,7 +242,7 @@ export function WipCalculator({ data }: { data: WipData }) {
                   await clearWipCounts();
                 });
               }}
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-sm bg-card ring-1 ring-foreground/10 px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
             >
               <RotateCcw className="size-3.5" />
               Clear

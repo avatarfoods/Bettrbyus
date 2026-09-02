@@ -6,6 +6,7 @@ import {
   fetchProductionConfig,
 } from "@/lib/production/config";
 import { getCurrentUserProfile, isAdminProfile } from "@/lib/auth/profile";
+import { fetchOdooFinishedOptions } from "@/lib/finished-products/fetch";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = {
@@ -24,6 +25,22 @@ export default async function RecipesPage({
     fetchProductionConfig(supabase),
     getCurrentUserProfile(supabase),
   ]);
+
+  /*
+    Finished goods from Odoo, so creating one is a choice rather than typing.
+    Anything that already has a recipe is marked taken and left out of the
+    list - two recipes for one product is the thing to prevent.
+  */
+  const taken = new Set(
+    catalog.recipes
+      .filter((entry) => entry.isFinished)
+      .map((entry) => entry.wipCode)
+  );
+  const odoo = await fetchOdooFinishedOptions(productionConfig);
+  const odooOptions = odoo.options.map((option) => ({
+    ...option,
+    taken: option.taken || taken.has(option.itemCode),
+  }));
 
   const needsReview = catalog.recipes.filter(
     (recipe) => recipe.issues.length > 0
@@ -47,6 +64,8 @@ export default async function RecipesPage({
         )}
         initialFinishedOnly={kind === "finished"}
         canCreate={isAdminProfile(profile)}
+        odooOptions={odooOptions}
+        odooError={odoo.error}
       />
     </PageShell>
   );

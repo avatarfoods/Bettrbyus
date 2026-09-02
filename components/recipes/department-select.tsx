@@ -119,7 +119,7 @@ export function LineDepartmentSelect({
           disabled={pending}
           onChange={(event) => changeLine(event.target.value)}
           aria-label="Production line"
-          className="h-7 rounded-md border border-border bg-card px-1.5 text-sm disabled:opacity-60"
+          className="h-7 rounded-sm bg-card ring-1 ring-foreground/10 px-1.5 text-sm disabled:opacity-60"
         >
           {lines.map((name) => (
             <option key={name} value={name}>
@@ -135,7 +135,7 @@ export function LineDepartmentSelect({
           disabled={pending}
           onChange={(event) => save(event.target.value)}
           aria-label="Department"
-          className="h-7 rounded-md border border-border bg-card px-1.5 text-sm disabled:opacity-60"
+          className="h-7 rounded-sm bg-card ring-1 ring-foreground/10 px-1.5 text-sm disabled:opacity-60"
         >
           <option value="">Choose a department…</option>
           {departmentsForLine.map((name) => (

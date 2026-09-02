@@ -6,6 +6,7 @@ import {
   type RecipeKind,
 } from "@/lib/production/wip-explode";
 import { fetchAllergens, rollUpAllergens } from "@/lib/recipes/allergens";
+import { allRows } from "@/lib/supabase/all-rows";
 
 /**
  * The real recipe catalogue: the 199 recipes imported from the master
@@ -381,7 +382,7 @@ type MaterialRow = {
 export async function fetchRecipeCatalog(
   supabase: SupabaseClient
 ): Promise<RecipeCatalog> {
-  const [recipesResult, linesResult, materialsResult] = await Promise.all([
+  const [recipesResult, linesResult] = await Promise.all([
     supabase
       .from("purchasing_recipes")
       // Deliberately "*": is_finished_product only exists once the recipe-flag
@@ -396,13 +397,24 @@ export async function fetchRecipeCatalog(
         "*"
       )
       .order("sort_order"),
-    supabase
-      .from("purchasing_materials")
-      .select("id, item_code, name, odoo_category, odoo_product_id"),
   ]);
 
+  /*
+    Every material, not the first thousand.
+
+    PostgREST caps a response at max-rows and says nothing about it, so this
+    used to return 1,000 of the 1,311 and the ingredient picker simply could
+    not see the rest. See lib/supabase/all-rows.
+  */
+  const materials = await allRows<MaterialRow>((from, to) =>
+    supabase
+      .from("purchasing_materials")
+      .select("id, item_code, name, odoo_category, odoo_product_id")
+      .range(from, to)
+  );
+
   const materialsById = new Map<string, MaterialRow>(
-    ((materialsResult.data ?? []) as MaterialRow[]).map((row) => [row.id, row])
+    materials.rows.map((row) => [row.id, row])
   );
 
   const linesByRecipe = new Map<string, CatalogLine[]>();

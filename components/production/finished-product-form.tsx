@@ -602,7 +602,7 @@ export function FinishedProductForm({
             <button
               type="button"
               onClick={() => router.push("/production/finished-products")}
-              className="inline-flex h-9 items-center rounded-md border border-border bg-card px-4 text-sm hover:bg-muted"
+              className="inline-flex h-9 items-center rounded-sm bg-card ring-1 ring-foreground/10 px-4 text-sm hover:bg-muted"
             >
               Cancel
             </button>

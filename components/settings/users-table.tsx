@@ -68,7 +68,7 @@ export function UsersTable({ users }: { users: UserRow[] }) {
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search name or email…"
             aria-label="Search users"
-            className="h-8 w-full rounded-md border border-border bg-card pr-7 pl-8 text-sm"
+            className="h-8 w-full rounded-sm bg-card ring-1 ring-foreground/10 pr-7 pl-8 text-sm"
           />
           {query && (
             <button
@@ -86,7 +86,7 @@ export function UsersTable({ users }: { users: UserRow[] }) {
           value={filter}
           onChange={(event) => setFilter(event.target.value as Filter)}
           aria-label="Filter users"
-          className="h-8 rounded-md border border-border bg-card px-2 text-sm"
+          className="h-8 rounded-sm bg-card ring-1 ring-foreground/10 px-2 text-sm"
         >
           {FILTERS.map((option) => (
             <option key={option.id} value={option.id}>
@@ -162,7 +162,7 @@ export function UsersTable({ users }: { users: UserRow[] }) {
           <li key={user.id}>
             <Link
               href={`/settings/users/${user.id}`}
-              className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3"
+              className="flex flex-col gap-2 rounded-sm bg-card ring-1 ring-foreground/10 p-3"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">

@@ -89,7 +89,7 @@ export function FinishedProductsTable({
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search item or name…"
             aria-label="Search finished products"
-            className="h-8 w-full rounded-md border border-border bg-card pr-2 pl-8 text-sm"
+            className="h-8 w-full rounded-sm bg-card ring-1 ring-foreground/10 pr-2 pl-8 text-sm"
           />
         </div>
 
