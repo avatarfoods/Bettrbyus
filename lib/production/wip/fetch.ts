@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isMissingTable } from "@/lib/supabase/missing";
+import { isMissingColumn, isMissingTable } from "@/lib/supabase/missing";
 import { isFinishedProduct, recipeKind } from "@/lib/production/wip-explode";
+import {
+  isContainerLabel,
+  type ContainerLabel,
+} from "@/lib/production/wip/containers";
 import type { WipCount } from "@/lib/production/wip/model";
 
 /**
@@ -21,7 +25,31 @@ export type WipRecipeRow = {
   isFinished: boolean;
   /** From the timing window. Null means nothing expires. */
   shelfLife: number | null;
+  /** Usual amount in one container. Null until someone sets it. */
+  defaultContainerSize: number | null;
+  defaultContainerLabel: ContainerLabel;
 };
+
+export type ContainerDefaultRow = {
+  id: string;
+  wipCode: string;
+  name: string;
+  department: string | null;
+  uom: string | null;
+  defaultContainerSize: number | null;
+  defaultContainerLabel: ContainerLabel;
+};
+
+function positiveNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function containerLabelOf(value: unknown): ContainerLabel {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return isContainerLabel(raw) ? raw : "bucket";
+}
 
 export type WipData = {
   recipes: WipRecipeRow[];
@@ -97,6 +125,8 @@ export async function fetchWipData(
         isFinishedProduct: row.is_finished_product as boolean | null,
       }),
       shelfLife: shelfLife.get(row.id as string) ?? null,
+      defaultContainerSize: positiveNumber(row.default_container_size),
+      defaultContainerLabel: containerLabelOf(row.default_container_label),
     };
   });
 
@@ -229,4 +259,62 @@ export async function fetchPlanned(
     );
   }
   return planned;
+}
+
+/**
+ * Every recipe the floor counts as WIP, with the default container size
+ * Configuration edits. Same filter as the count screen: kitchen and assembly,
+ * not finished product.
+ */
+export async function fetchContainerDefaults(
+  supabase: SupabaseClient
+): Promise<{ recipes: ContainerDefaultRow[]; missingColumns: boolean }> {
+  const withDefaults =
+    "id, wip_code, name, department, uom, default_container_size, default_container_label";
+  const withoutDefaults = "id, wip_code, name, department, uom";
+
+  let missingColumns = false;
+  let rows: Record<string, unknown>[] = [];
+
+  const first = await supabase
+    .from("purchasing_recipes")
+    .select(withDefaults)
+    .eq("active", true)
+    .order("name");
+
+  if (first.error && isMissingColumn(first.error)) {
+    missingColumns = true;
+    const fallback = await supabase
+      .from("purchasing_recipes")
+      .select(withoutDefaults)
+      .eq("active", true)
+      .order("name");
+    if (fallback.error) {
+      return { recipes: [], missingColumns: true };
+    }
+    rows = (fallback.data ?? []) as Record<string, unknown>[];
+  } else if (first.error) {
+    return { recipes: [], missingColumns: isMissingColumn(first.error) };
+  } else {
+    rows = (first.data ?? []) as Record<string, unknown>[];
+  }
+
+  const recipes = rows
+    .filter((row) => recipeKind((row.department as string | null) ?? null) !== "finished")
+    .map((row) => ({
+      id: row.id as string,
+      wipCode: (row.wip_code as string) ?? "",
+      name: (row.name as string) ?? "",
+      department: (row.department as string | null) ?? null,
+      uom: (row.uom as string | null) ?? null,
+      defaultContainerSize: positiveNumber(row.default_container_size),
+      defaultContainerLabel: containerLabelOf(row.default_container_label),
+    }))
+    .sort((a, b) => {
+      const dept = (a.department ?? "").localeCompare(b.department ?? "");
+      if (dept !== 0) return dept;
+      return a.name.localeCompare(b.name);
+    });
+
+  return { recipes, missingColumns };
 }

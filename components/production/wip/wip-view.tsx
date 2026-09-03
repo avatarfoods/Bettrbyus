@@ -22,6 +22,7 @@ import { scopeToQuery, type DateScope } from "@/lib/date-scope";
 import { deleteWipCount } from "@/lib/production/wip/actions";
 import { departmentColor } from "@/lib/production/department-colors";
 import { SearchPanel } from "@/components/ui/search-panel";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 
 /**
@@ -96,6 +97,7 @@ export function WipView({
   windowsMissing: boolean;
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [query, setQuery] = useState("");
   /** Line and department as pills inside the search field. */
   const [filters, setFilters] = useState<string[]>([]);
@@ -110,24 +112,36 @@ export function WipView({
   const [show, setShow] = useState<"held" | "attention" | "all">("held");
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [removeError, setRemoveError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
-  function removeCount(lot: { id: string; lotCode: string; quantity: number }) {
-    if (
-      !confirm(
-        `Remove the ${fmt(lot.quantity)} counted on lot ${lot.lotCode}? It stops counting towards on hand.`
-      )
-    ) {
-      return;
-    }
-    setRemoveError(null);
+  async function removeCount(lot: {
+    id: string;
+    lotCode: string;
+    quantity: number;
+  }) {
+    const ok = await confirm({
+      title: `Remove the ${fmt(lot.quantity)} counted on lot ${lot.lotCode}?`,
+      description: "It stops counting towards on hand.",
+      confirmLabel: "OK",
+      cancelLabel: "Cancel",
+      tone: "danger",
+    });
+    if (!ok) return;
     setRemovingId(lot.id);
     startTransition(async () => {
       const result = await deleteWipCount({ id: lot.id });
       setRemovingId(null);
-      if (result.ok) router.refresh();
-      else setRemoveError(result.message);
+      if (result.ok) {
+        router.refresh();
+        return;
+      }
+      await confirm({
+        title: "Could not remove the count",
+        description: result.message,
+        confirmLabel: "OK",
+        cancelLabel: false,
+        tone: "danger",
+      });
     });
   }
 
@@ -315,12 +329,6 @@ export function WipView({
         </div>
       )}
 
-      {removeError && (
-        <p className="rounded-md bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
-          {removeError}
-        </p>
-      )}
-
       {windowsMissing && !missingTable && (
         <p className="rounded-md bg-muted px-3 py-1.5 text-xs text-muted-foreground">
           No timing windows are set, so nothing has a shelf life and nothing
@@ -435,10 +443,9 @@ export function WipView({
       <p className="text-[0.6875rem] text-muted-foreground">
         Showing {rows.length} of {recipes.length}.{" "}
         {scope.kind === "day"
-          ? `What was in the cooler on ${asOf}: the latest count of each lot taken on or before that day.`
+          ? `What was in the cooler on ${asOf}: every count taken on or before that day.`
           : `Lots counted between ${scope.from} and ${scope.to}, aged against ${scope.to}. Lots nobody touched in that span are left out — switch to Day to see everything still on hand.`}{" "}
-        A lot counted again replaces the earlier number for that lot, and a lot
-        counted to zero has been used up.
+        Two counts of the same lot both stay on the list and add to on hand.
       </p>
     </div>
   );

@@ -1,0 +1,26 @@
+---
+description: Use the shared OK/Cancel confirm dialog — never window.confirm or alert
+alwaysApply: true
+---
+
+# Confirm and error windows
+
+Never use `window.confirm`, `window.alert`, or a one-off modal for OK/Cancel.
+
+Use `useConfirm()` from `@/components/ui/confirm-dialog`. `ConfirmProvider` already wraps the app.
+
+```tsx
+const confirm = useConfirm();
+
+const ok = await confirm({
+  title: "Remove the 500 counted on lot 08302026?",
+  description: "It stops counting towards on hand.",
+  confirmLabel: "OK",
+  cancelLabel: "Cancel",
+  tone: "danger",
+});
+if (!ok) return;
+```
+
+- `tone: "danger"` for irreversible actions (remove, delete).
+- Errors that only need acknowledgement: `cancelLabel: false`.

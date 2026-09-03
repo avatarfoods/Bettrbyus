@@ -12,8 +12,9 @@
  * shelf life is the timing window's earliest offset: something that may be
  * made five days ahead keeps five days.
  *
- * A count is an observation, not a running total. Counting a lot again
- * supersedes the earlier number for that lot rather than adding to it.
+ * A count is one pile found in the cooler. Two counts of the same lot stay
+ * as two rows and add together on hand — 40×80 and 5×20 of lot 09012026 is
+ * 3,300, not whichever was typed last.
  */
 
 export type WipCount = {
@@ -188,11 +189,10 @@ const SEVERITY: Record<Freshness, number> = {
 };
 
 /**
- * On-hand per recipe, from the latest count of each lot.
+ * On-hand per recipe: every count that still has quantity, summed.
  *
- * Counting a lot again supersedes the earlier number rather than adding to
- * it: it is an observation of what is physically there, so the most recent
- * one is the truth and the older ones are history.
+ * Same item and same lot number still show as separate rows (two walks, two
+ * piles). The recipe total is the sum of those rows.
  */
 export function onHandByRecipe(
   counts: WipCount[],
@@ -200,27 +200,29 @@ export function onHandByRecipe(
   /** The day being asked about. Ages are worked out against this, not now. */
   today: string
 ): Map<string, RecipeOnHand> {
-  // recipe -> lot -> the most recent count of it
-  const latest = new Map<string, Map<string, WipCount>>();
+  const byRecipe = new Map<string, WipCount[]>();
 
   for (const count of counts) {
-    const byLot = latest.get(count.recipeId) ?? new Map<string, WipCount>();
-    const seen = byLot.get(count.lotCode);
-    if (!seen || count.countedAt > seen.countedAt) byLot.set(count.lotCode, count);
-    latest.set(count.recipeId, byLot);
+    if (count.quantity <= 0) continue;
+    const list = byRecipe.get(count.recipeId) ?? [];
+    list.push(count);
+    byRecipe.set(count.recipeId, list);
   }
 
   const result = new Map<string, RecipeOnHand>();
 
-  for (const [recipeId, byLot] of latest) {
+  for (const [recipeId, rows] of byRecipe) {
     const shelfLife = shelfLifeByRecipe.get(recipeId) ?? null;
 
-    const lots: LotOnHand[] = [...byLot.values()]
-      // A lot counted as zero has been used up. It is history, not stock.
-      .filter((count) => count.quantity > 0)
+    const lots: LotOnHand[] = rows
       .map((count) => ({ ...count, age: ageLot(count.lotCode, shelfLife, today) }))
-      // Oldest first: what has to be used up sits at the top.
-      .sort((a, b) => (a.age.producedOn ?? "").localeCompare(b.age.producedOn ?? ""));
+      .sort((a, b) => {
+        const byDate = (a.age.producedOn ?? "").localeCompare(b.age.producedOn ?? "");
+        if (byDate !== 0) return byDate;
+        const byLot = a.lotCode.localeCompare(b.lotCode);
+        if (byLot !== 0) return byLot;
+        return a.countedAt.localeCompare(b.countedAt);
+      });
 
     if (lots.length === 0) continue;
 

@@ -223,6 +223,12 @@ export const APPS: AppDefinition[] = [
             href: "/production/settings/groups",
             icon: Layers,
           },
+          {
+            group: "WIP",
+            label: "Container sizes",
+            href: "/production/settings/container-sizes",
+            icon: Boxes,
+          },
         ],
       },
     ],

@@ -16,6 +16,11 @@ import {
 import { saveWipCount } from "@/lib/production/wip/actions";
 import { ageLot, dateToLot, lotToDate } from "@/lib/production/wip/model";
 import type { WipRecipeRow } from "@/lib/production/wip/fetch";
+import {
+  COMMON_CONTAINER_SIZES,
+  CONTAINER_LABELS,
+} from "@/lib/production/wip/containers";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 
 /**
@@ -53,20 +58,25 @@ type Draft = {
   note: string;
 };
 
-const CONTAINERS = ["bucket", "cart", "pan", "bin", "case", "bag"];
-
-/** The sizes actually used, offered as taps before anyone types. */
-const SIZES = [50, 40, 25, 20, 10, 5];
-
-function newLot(defaultLot: string, size = ""): Draft {
+function newLot(defaultLot: string, size = "", label = "bucket"): Draft {
   return {
     key: Math.random().toString(36).slice(2),
     lotCode: defaultLot,
     containers: "",
     containerSize: size,
     partial: "",
-    containerLabel: "bucket",
+    containerLabel: label,
     note: "",
+  };
+}
+
+function recipeContainer(recipe: WipRecipeRow): { size: string; label: string } {
+  return {
+    size:
+      recipe.defaultContainerSize != null
+        ? String(recipe.defaultContainerSize)
+        : "",
+    label: recipe.defaultContainerLabel || "bucket",
   };
 }
 
@@ -188,11 +198,13 @@ export function WipCountForm({
   }
 
   function open(recipeId: string) {
+    const recipe = recipes.find((row) => row.id === recipeId);
+    const preset = recipe ? recipeContainer(recipe) : { size: "", label: "bucket" };
     setOpenId((current) => (current === recipeId ? null : recipeId));
     setLots((prev) =>
       prev[recipeId]?.length
         ? prev
-        : { ...prev, [recipeId]: [newLot(defaultLot)] }
+        : { ...prev, [recipeId]: [newLot(defaultLot, preset.size, preset.label)] }
     );
     // Opening something found by search keeps it in the list once the search
     // is cleared, so an unscheduled batch does not vanish mid-count.
@@ -442,6 +454,8 @@ export function WipCountForm({
                       unit={unit}
                       shelfLife={recipe.shelfLife}
                       today={today}
+                      defaultSize={recipe.defaultContainerSize}
+                      defaultLabel={recipe.defaultContainerLabel}
                       canRemove={(lots[recipe.id] ?? []).length > 1}
                       onChange={(patch) => setLot(recipe.id, lot.key, patch)}
                       onRemove={() =>
@@ -468,7 +482,10 @@ export function WipCountForm({
                             // making someone pick it again.
                             newLot(
                               defaultLot,
-                              prev[recipe.id]?.at(-1)?.containerSize ?? ""
+                              prev[recipe.id]?.at(-1)?.containerSize ||
+                                recipeContainer(recipe).size,
+                              prev[recipe.id]?.at(-1)?.containerLabel ||
+                                recipeContainer(recipe).label
                             ),
                           ],
                         }))
@@ -578,6 +595,8 @@ function LotEntry({
   unit,
   shelfLife,
   today,
+  defaultSize,
+  defaultLabel,
   canRemove,
   onChange,
   onRemove,
@@ -587,16 +606,69 @@ function LotEntry({
   unit: string;
   shelfLife: number | null;
   today: string;
+  defaultSize: number | null;
+  defaultLabel: string;
   canRemove: boolean;
   onChange: (patch: Partial<Draft>) => void;
   onRemove: () => void;
 }) {
+  const confirm = useConfirm();
   const containers = Number(lot.containers) || 0;
   const size = Number(lot.containerSize) || 0;
   const partial = Number(lot.partial) || 0;
   const total = containers * size + partial;
   const madeOn = lotToDate(lot.lotCode);
   const age = madeOn ? ageLot(lot.lotCode, shelfLife, today) : null;
+  const [other, setOther] = useState("");
+
+  const sizes = useMemo(() => {
+    const set = new Set(COMMON_CONTAINER_SIZES);
+    if (defaultSize != null) set.add(defaultSize);
+    return [...set].sort((a, b) => b - a);
+  }, [defaultSize]);
+
+  const chipSelected = sizes.includes(size);
+
+  async function applySize(value: string) {
+    if (value === lot.containerSize) return false;
+    const leavingDefault =
+      defaultSize != null &&
+      Number(lot.containerSize) === defaultSize &&
+      Number(value) !== defaultSize;
+    if (leavingDefault) {
+      const ok = await confirm({
+        title: `Count this lot as ${value} ${unit} instead of the usual ${defaultSize} ${unit}?`,
+        description:
+          "This is for this count only. The default on the recipe stays the same.",
+        confirmLabel: "OK",
+        cancelLabel: "Cancel",
+      });
+      if (!ok) return false;
+    }
+    onChange({ containerSize: value });
+    return true;
+  }
+
+  async function applyLabel(value: string) {
+    if (value === lot.containerLabel) return;
+    const stillOnDefaultSize =
+      defaultSize == null || Number(lot.containerSize) === defaultSize;
+    const leavingDefault =
+      stillOnDefaultSize &&
+      lot.containerLabel === defaultLabel &&
+      value !== defaultLabel;
+    if (leavingDefault) {
+      const ok = await confirm({
+        title: `Count this lot in ${value}s instead of ${defaultLabel}s?`,
+        description:
+          "This is for this count only. The default on the recipe stays the same.",
+        confirmLabel: "OK",
+        cancelLabel: "Cancel",
+      });
+      if (!ok) return;
+    }
+    onChange({ containerLabel: value });
+  }
 
   return (
     <div className="flex flex-col gap-2 rounded-md bg-card p-2.5 ring-1 ring-foreground/10">
@@ -682,11 +754,13 @@ function LotEntry({
         </button>
         <select
           value={lot.containerLabel}
-          onChange={(event) => onChange({ containerLabel: event.target.value })}
+          onChange={(event) => {
+            void applyLabel(event.target.value);
+          }}
           aria-label="What kind of container"
           className="h-9 shrink-0 rounded border border-border bg-card px-1.5 text-xs"
         >
-          {CONTAINERS.map((name) => (
+          {CONTAINER_LABELS.map((name) => (
             <option key={name} value={name}>
               {name}s
             </option>
@@ -697,11 +771,14 @@ function LotEntry({
       {/* How big. Tapped, not typed, until the size is an odd one. */}
       <div className="flex flex-wrap items-center gap-1">
         <Caption>each holds</Caption>
-        {SIZES.map((value) => (
+        {sizes.map((value) => (
           <button
             key={value}
             type="button"
-            onClick={() => onChange({ containerSize: String(value) })}
+            onClick={() => {
+              setOther("");
+              void applySize(String(value));
+            }}
             aria-pressed={size === value}
             className={cn(
               "h-7 rounded px-2 text-xs font-medium tabular-nums transition",
@@ -714,10 +791,20 @@ function LotEntry({
           </button>
         ))}
         <input
-          value={SIZES.includes(size) ? "" : lot.containerSize}
-          onChange={(event) =>
-            onChange({ containerSize: event.target.value.replace(/[^\d.]/g, "") })
-          }
+          value={chipSelected ? other : other || lot.containerSize}
+          onChange={(event) => {
+            const cleaned = event.target.value.replace(/[^\d.]/g, "");
+            setOther(cleaned);
+            if (!chipSelected) {
+              void applySize(cleaned);
+            }
+          }}
+          onBlur={() => {
+            if (!chipSelected || !other) return;
+            void applySize(other).then((ok) => {
+              if (ok) setOther("");
+            });
+          }}
           inputMode="decimal"
           placeholder="other"
           aria-label="Other container size"

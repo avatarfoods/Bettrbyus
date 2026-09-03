@@ -5,6 +5,10 @@ import { getCurrentUserProfile, isAdminProfile } from "@/lib/auth/profile";
 import { createClient } from "@/lib/supabase/server";
 import { isMissingColumn, isMissingTable } from "@/lib/supabase/missing";
 import { lotToDate } from "@/lib/production/wip/model";
+import {
+  isContainerLabel,
+  type ContainerLabel,
+} from "@/lib/production/wip/containers";
 
 /**
  * Recording a count.
@@ -37,9 +41,8 @@ export type CountLotInput = {
 /**
  * Saves the lots found for one recipe.
  *
- * Every lot is a new row rather than an update, so the history stays intact:
- * "what did we count Tuesday morning" has to remain answerable. The latest
- * row for a lot is what counts as on-hand.
+ * Every lot is a new row rather than an update, so two counts of the same
+ * lot both stay on hand and add together.
  */
 export async function saveWipCount(input: {
   lots: CountLotInput[];
@@ -162,5 +165,62 @@ export async function deleteWipCount(input: {
 
   revalidatePath(WIP_PATH);
   revalidatePath("/production/schedule");
+  return { ok: true };
+}
+
+/**
+ * Sets the usual container for one recipe.
+ *
+ * This is the default the count screen pre-selects. Changing size on a
+ * single count does not come through here.
+ */
+export async function saveWipContainerDefault(input: {
+  recipeId: string;
+  size: number | null;
+  label: string;
+}): Promise<ActionResult> {
+  if (!input.recipeId) return fail("Missing recipe");
+
+  if (input.size != null) {
+    if (!Number.isFinite(input.size) || input.size <= 0) {
+      return fail("A container has to hold more than nothing");
+    }
+    if (input.size > 10_000) {
+      return fail("That is larger than any real container — check the number");
+    }
+  }
+
+  const label = (input.label ?? "").trim().toLowerCase();
+  const containerLabel: ContainerLabel = isContainerLabel(label)
+    ? label
+    : "bucket";
+
+  const supabase = await createClient();
+  const profile = await getCurrentUserProfile(supabase);
+  if (!profile) return fail("You are signed out");
+  if (!isAdminProfile(profile)) {
+    return fail("Only an administrator can change container defaults");
+  }
+
+  const { error } = await supabase
+    .from("purchasing_recipes")
+    .update({
+      default_container_size: input.size,
+      default_container_label: containerLabel,
+    })
+    .eq("id", input.recipeId);
+
+  if (error) {
+    if (isMissingColumn(error)) {
+      return fail(
+        "Container defaults need the 20260902_recipe_container_defaults migration."
+      );
+    }
+    return fail(error.message);
+  }
+
+  revalidatePath("/production/settings/container-sizes");
+  revalidatePath("/production/wip/count");
+  revalidatePath(WIP_PATH);
   return { ok: true };
 }
