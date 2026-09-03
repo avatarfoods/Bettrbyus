@@ -140,6 +140,8 @@ The app expects a database that holds the base tables (`profiles`, `items`, `mov
 
 This runs Postgres, Auth, PostgREST and Studio in Docker on your machine, so nothing you do can touch production data. It needs Docker Desktop running and the Supabase CLI.
 
+If you are running this guide from Claude (Claude Code or a similar agent), do not let the agent install or start Docker Desktop. Ask the user to run the two Docker commands below themselves in a terminal, then continue once they confirm Docker is running. The cask install asks for an administrator password and Docker Desktop shows first-run dialogs that only a person can accept.
+
 ```bash
 brew install --cask docker         # skip if Docker Desktop is already installed
 open -a Docker                     # wait until the whale icon settles
