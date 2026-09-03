@@ -37,6 +37,7 @@ import {
   type GridRow,
 } from "@/components/production/schedule/schedule-grid";
 import { RecipePanel } from "@/components/production/schedule/recipe-panel";
+import { EditPlanButton } from "@/components/production/schedule/edit-plan-button";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import type { DateScope } from "@/lib/date-scope";
 import { SearchPanel } from "@/components/ui/search-panel";
@@ -348,30 +349,83 @@ export function ScheduleView({
     };
   }, [nodeByPath, openPaths]);
 
-  /** Suggestions from the tree, for recipes nobody has planned by hand. */
+  /**
+   * Suggestions from the tree, for recipes nobody has planned by hand.
+   *
+   * Net of what is already on hand and good by the day it is needed - stock
+   * that has gone stale by then still counts toward nothing, same as the Open
+   * column, but stock that reaches the need date is a reason not to suggest
+   * making more of it.
+   */
   const suggestions = useMemo(() => {
     const byRecipe = new Map<string, Map<string, number>>();
     for (const [recipeId, recipeDemand] of demand) {
       const own = entriesByRecipe.get(recipeId) ?? [];
       if (own.reduce((s, e) => s + e.quantity, 0) > 0.0001) continue;
 
+      const lots = wip.get(recipeId) ?? [];
+      // No runs to allocate - nothing is scheduled yet, that is exactly why
+      // there is a suggestion - so what is left after stock is the whole
+      // answer, day by day.
+      const { unmetByNeed } = allocateRecipe([], recipeDemand, undefined, lots);
+
       const perDate = new Map<string, number>();
-      for (const day of recipeDemand.days) {
-        if (day.quantity <= 0.0001) continue;
-        // Demand already lands on the day it is needed, so the suggestion
-        // goes there too.
-        perDate.set(day.date, (perDate.get(day.date) ?? 0) + day.quantity);
+      for (const [date, quantity] of unmetByNeed) {
+        if (quantity <= 0.0001) continue;
+        perDate.set(date, quantity);
       }
       if (perDate.size > 0) byRecipe.set(recipeId, perDate);
     }
     return byRecipe;
-  }, [demand, entriesByRecipe]);
+  }, [demand, entriesByRecipe, wip]);
 
-  const rows: GridRow[] = useMemo(() => {
+    const rows: GridRow[] = useMemo(() => {
     const rangeFrom = selection?.from ?? from;
     const rangeTo = selection?.to ?? to;
     const needle = query.trim().toLowerCase();
     const recipeById = new Map(recipes.map((r) => [r.id, r]));
+
+    const pendingIds = new Set<string>();
+    for (const [recipeId, perDate] of suggestions) {
+      for (const date of perDate.keys()) {
+        if (date >= rangeFrom && date <= rangeTo) {
+          pendingIds.add(recipeId);
+          break;
+        }
+      }
+    }
+
+    // Which finished products actually drove each pending step's demand.
+    // A step shared by several bowls - Chipotle Chicken under four different
+    // rice bowls - sits in the tree once per bowl, but only the bowl someone
+    // actually typed a number into has real demand on it right now. Without
+    // this, marking every occurrence of the recipe lit the dot on siblings
+    // that were never touched.
+    const drivingRoots = new Map<string, Set<string>>();
+    for (const recipeId of pendingIds) {
+      const roots = new Set<string>();
+      for (const day of demand.get(recipeId)?.days ?? []) {
+        if (day.date < rangeFrom || day.date > rangeTo) continue;
+        for (const driver of day.drivers) roots.add(driver.recipeId);
+      }
+      drivingRoots.set(recipeId, roots);
+    }
+
+    // Mark every ancestor of a step that still needs a number, so a bowl
+    // shows the red dot even when its kitchen rows are folded away.
+    const missingByPath = new Set<string>();
+    if (pendingIds.size > 0) {
+      for (const node of tree) {
+        if (!pendingIds.has(node.recipeId)) continue;
+        if (!drivingRoots.get(node.recipeId)?.has(node.rootId)) continue;
+        let ancestor = node.parentPath;
+        let guard = 0;
+        while (ancestor && guard++ < 12) {
+          missingByPath.add(ancestor);
+          ancestor = nodeByPath.get(ancestor)?.parentPath ?? null;
+        }
+      }
+    }
 
     /** Everything a row needs that comes from the recipe, not its position. */
     function build(recipe: ScheduleRecipe, position: {
@@ -454,6 +508,15 @@ export function ScheduleView({
         return verdict === "too-early" || verdict === "too-late";
       });
 
+      // Overrun in range, the same runs the green +N badge counts in each
+      // cell - Open showing a flat "0" gave no hint that ceiling a fractional
+      // suggestion (0.3 -> 1) left a bit of slack sitting on the day itself.
+      const surplusInRange = inRangeRuns.reduce((sum, e) => {
+        const alloc = allocation.byRun.get(e.productionDate);
+        if (!alloc || (alloc.served ?? 0) <= 0.01) return sum;
+        return sum + alloc.surplus;
+      }, 0);
+
       return {
         ...position,
         recipe,
@@ -463,6 +526,7 @@ export function ScheduleView({
         unmet: allocation.unmetByNeed,
         wasNeeded: neededInRange > 0.01,
         openBalance,
+        surplusInRange,
         wipOnHand: lots.length === 0 ? null : lots.reduce((sum, l) => sum + l.quantity, 0),
         wipNote: (() => {
           if (lots.length === 0) return null;
@@ -491,6 +555,7 @@ export function ScheduleView({
         // doing anything". A run last month is not a reason to show a row
         // when you are looking at next week.
         scheduledInRange: inRangeRuns.reduce((sum, e) => sum + e.quantity, 0),
+        missingDownstream: missingByPath.has(position.path),
       };
     }
 
@@ -600,6 +665,7 @@ export function ScheduleView({
     to,
     hideEmpty,
     isExpandedChild,
+    nodeByPath,
   ]);
 
   /**
@@ -750,14 +816,25 @@ export function ScheduleView({
     });
     if (!ok) return;
     setError(null);
+    const { from: clearFrom, to: clearTo } = selection;
     startTransition(async () => {
       const result = await clearRange({
         scheduleId,
-        from: selection.from,
-        to: selection.to,
+        from: clearFrom,
+        to: clearTo,
       });
-      if (result.ok) router.refresh();
-      else setError(result.message);
+      if (result.ok) {
+        // Whatever was typed client-side for these dates would otherwise
+        // still win the merge in `entries` and paper right back over the
+        // clear the server just did - Clear day would look like it did
+        // nothing.
+        setLocalEntries((prev) =>
+          prev.filter(
+            (e) => e.productionDate < clearFrom || e.productionDate > clearTo
+          )
+        );
+        router.refresh();
+      } else setError(result.message);
     });
   }
 
@@ -772,21 +849,50 @@ export function ScheduleView({
     for (const [recipeId, perDate] of suggestions) {
       for (const [date, quantity] of perDate) {
         if (date < from || date > to) continue;
-        payload.push({ recipeId, productionDate: date, quantity });
+        payload.push({
+          recipeId,
+          productionDate: date,
+          // Ceil, not round: rounding a 0.2 or 0.3 lb need down to 0 writes
+          // nothing, so the suggestion never clears and Accept looks like it
+          // silently skipped the row every time.
+          quantity: Math.ceil(quantity),
+        });
       }
     }
     if (payload.length === 0) return;
+    const snapshot = localEntries;
+    setLocalEntries((prev) => {
+      const merged = new Map(
+        prev.map((entry) => [
+          `${entry.recipeId}|${entry.productionDate}`,
+          entry,
+        ])
+      );
+      for (const entry of payload) {
+        merged.set(`${entry.recipeId}|${entry.productionDate}`, entry);
+      }
+      return [...merged.values()];
+    });
     startTransition(async () => {
       const result = await applySuggestions({ scheduleId, entries: payload });
       if (result.ok) router.refresh();
-      else setError(result.message);
+      else {
+        setLocalEntries(snapshot);
+        setError(result.message);
+      }
     });
   }
 
-  const myChangeCount = changed.size;
+  const myChangeCount = useMemo(() => {
+    const keys = new Set(changed);
+    for (const entry of localEntries) {
+      if (entry.quantity) keys.add(`${entry.recipeId}|${entry.productionDate}`);
+    }
+    return keys.size;
+  }, [changed, localEntries]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2.5 overflow-hidden px-3 py-3 sm:px-4">
+    <div className="flex flex-col gap-2.5 px-3 py-3 sm:px-4">
       {/*
         One bar, the way the dashboard does it.
 
@@ -1036,6 +1142,31 @@ export function ScheduleView({
               Accept {suggestionCount}
             </button>
           )}
+
+          {!readOnly && <EditPlanButton editing={editing} />}
+
+          {!readOnly && myChangeCount > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                myDraftId &&
+                startTransition(async () => {
+                  const r = await confirmDraft({ draftId: myDraftId });
+                  if (r.ok) router.refresh();
+                  else setError(r.message);
+                })
+              }
+              disabled={pending || !myDraftId}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
+            >
+              {pending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="size-3.5" />
+              )}
+              Confirm to the plan
+            </button>
+          )}
         </div>
       </div>
 
@@ -1139,26 +1270,6 @@ export function ScheduleView({
               <Trash2 className="size-3" />
               Discard
             </button>
-            <button
-              type="button"
-              onClick={() =>
-                myDraftId &&
-                startTransition(async () => {
-                  const r = await confirmDraft({ draftId: myDraftId });
-                  if (r.ok) router.refresh();
-                  else setError(r.message);
-                })
-              }
-              disabled={pending}
-              className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
-            >
-              {pending ? (
-                <Loader2 className="size-3 animate-spin" />
-              ) : (
-                <CheckCircle2 className="size-3" />
-              )}
-              Confirm to the plan
-            </button>
           </div>
         </div>
       )}
@@ -1201,8 +1312,8 @@ export function ScheduleView({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 gap-2.5">
-      <div className="min-h-0 min-w-0 flex-1">
+      <div className="flex min-h-0 gap-2.5">
+      <div className="min-w-0 flex-1">
       <ScheduleGrid
         scheduleId={scheduleId ?? "preview"}
         readOnly={readOnly}
@@ -1276,8 +1387,8 @@ export function ScheduleView({
       <p className="text-[0.6875rem] text-muted-foreground">
         Type into a finished product and everything below it fills in. Greyed
         numbers are what the recipe tree suggests — click a cell to take it, or
-        type your own. Use ↑ ↓ or the + − buttons to step. Click a date to
-        select it, shift-click a second for a range.
+        type your own. Arrow keys move between cells. Click a date to select
+        it, shift-click a second for a range.
       </p>
     </div>
   );

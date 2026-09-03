@@ -9,7 +9,7 @@ import { isMissingTable } from "@/lib/supabase/missing";
  * would be a step that serves the database rather than the person.
  *
  * Editing it opens a draft belonging to whoever is editing, named for the day
- * they started and the person who started it. A draft holds only the cells
+ * and time they started and the person who started it. A draft holds only the cells
  * that were touched, so two people planning different lines cannot overwrite
  * each other, and confirming merges those cells into the live schedule.
  */
@@ -238,7 +238,21 @@ export async function fetchDrafts(
   }));
 }
 
-/** What a draft is called: the day it was started and who started it. */
-export function draftName(today: string, who: string): string {
-  return `${today} · ${who}`;
+/**
+ * What a draft is called: the day and time it was started, and who started it.
+ *
+ * Time is Pacific, same as the plant. Two drafts on the same morning then
+ * read as different things in the list instead of two identical dates.
+ */
+export function draftName(who: string, at = new Date()): string {
+  const date = at.toLocaleDateString("en-CA", {
+    timeZone: "America/Los_Angeles",
+  });
+  const time = at.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "America/Los_Angeles",
+  });
+  return `${date} ${time} · ${who}`;
 }

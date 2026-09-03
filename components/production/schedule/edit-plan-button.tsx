@@ -7,15 +7,9 @@ import { cn } from "@/lib/utils";
 /**
  * The switch that opens the plan for typing.
  *
- * It sits on the far left of the page header, beside the word Planning,
- * because it is the page's own mode rather than one control among the
- * filters - and because "am I able to change this" is the first thing anyone
- * needs to know, not something to find halfway across a toolbar.
- *
- * The mode lives in the URL. The button is up here and the grid it unlocks is
- * further down the page, so one of them has to own the state, and the address
- * bar is the only thing both can see. It also survives a refresh, which
- * matters when a save has just reloaded the page under you.
+ * It sits with Confirm, because those two are the start and end of the same
+ * job: open the plan, change it, put it live. The mode lives in the URL so a
+ * refresh does not lock the grid again under you.
  */
 export function EditPlanButton({ editing }: { editing: boolean }) {
   const router = useRouter();

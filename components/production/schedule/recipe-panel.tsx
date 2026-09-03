@@ -51,7 +51,13 @@ export function RecipePanel({
   );
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-y-auto rounded-md bg-card p-3 ring-1 ring-foreground/10">
+    // Sticky, and above the grid's own frozen bits: the date headers sit at
+    // z-40, so a plain, unpositioned aside rendered behind them - its own
+    // top clipped under the header row, and clicks in its blank space falling
+    // through to whatever grid cell happened to be underneath.
+    <aside
+      className="sticky top-[calc(var(--app-bar-height)+var(--page-shell-height,0px)+2.75rem)] z-50 flex max-h-[calc(100dvh-var(--app-bar-height)-var(--page-shell-height,0px)-3.5rem)] w-80 shrink-0 flex-col gap-3 overflow-y-auto rounded-md bg-card p-3 shadow-lg ring-1 ring-foreground/10"
+    >
       <header className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-mono text-[0.625rem] text-muted-foreground">

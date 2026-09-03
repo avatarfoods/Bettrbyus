@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { CellAllocation, RecipeDemand } from "@/lib/production/schedule/model";
 import type { ScheduleRecipe } from "@/lib/production/schedule/fetch";
@@ -58,8 +58,15 @@ export type GridRow = {
   /** Per demand date, how much of it nothing covers. See allocateRecipe. */
   unmet: Map<string, number>;
   openBalance: number;
+  /** Overrun in range - what the row is making beyond what is needed. */
+  surplusInRange: number;
   neededTotal: number;
   scheduledTotal: number;
+  /**
+   * Something under this recipe still has a grey number waiting to be
+   * taken — another department has not been planned yet.
+   */
+  missingDownstream: boolean;
 };
 
 export type DepartmentStyle = {
@@ -162,7 +169,7 @@ export function ScheduleGrid({
   const LEAD = 7; // item, recipe, dept, allergen, wip, open, u/m
 
   return (
-    <div className="h-full overflow-auto rounded-md ring-1 ring-foreground/10">
+    <div className="rounded-md ring-1 ring-foreground/10">
       <table className="w-max min-w-full border-separate border-spacing-0 text-sm">
         <thead>
           <tr>
@@ -194,7 +201,7 @@ export function ScheduleGrid({
                   onClick={(e) => pickDate(date, e.shiftKey)}
                   title="Click to select · shift-click for a range"
                   className={cn(
-                    "sticky top-0 z-30 w-[4rem] min-w-[4rem] cursor-pointer border-b px-0.5 py-1 text-center leading-tight select-none",
+                    "sticky top-[calc(var(--app-bar-height)+var(--page-shell-height,0px))] z-30 w-[4rem] min-w-[4rem] cursor-pointer border-b px-0.5 py-1 text-center leading-tight select-none",
                     // Only Mondays keep a divider; every column having one
                     // turned a fortnight into a wall of lines.
                     wd === 1 ? "border-l border-l-border" : "border-l border-l-border/30",
@@ -353,7 +360,7 @@ function Th({
     <th
       scope="col"
       className={cn(
-        "sticky top-0 z-30 border-b border-border bg-brand-muted px-2 py-1.5 text-[0.5625rem] font-semibold tracking-wider text-primary uppercase",
+        "sticky top-[calc(var(--app-bar-height)+var(--page-shell-height,0px))] z-30 border-b border-border bg-brand-muted px-2 py-1.5 text-[0.5625rem] font-semibold tracking-wider text-primary uppercase",
         numeric ? "text-right" : "text-left",
         sticky && "z-40",
         !sticky && "border-l",
@@ -395,13 +402,25 @@ function Row({
   inspected: boolean;
 }) {
   const finished = row.recipe.isFinished;
+  const openParent = isExpanded && row.hasChildren;
+  const freezeBg = inspected
+    ? "bg-primary/15"
+    : openParent
+      ? "bg-muted/80"
+      : "bg-background group-even:bg-muted/25";
 
   return (
-    <tr className={cn("group hover:bg-accent/25", inspected && "bg-primary/10")}>
+    <tr
+      className={cn(
+        "group hover:bg-accent/25",
+        inspected && "bg-primary/10",
+        openParent && !inspected && "bg-muted/50"
+      )}
+    >
       <td
         className={cn(
           "sticky left-0 z-10 border-b border-border/60 px-2 py-0.5 text-left font-mono text-[0.625rem] text-muted-foreground",
-          inspected ? "bg-primary/15" : "bg-background group-even:bg-muted/25"
+          freezeBg
         )}
       >
         {row.recipe.wipCode}
@@ -411,7 +430,7 @@ function Row({
         scope="row"
         className={cn(
           "sticky left-[4.5rem] z-10 border-b border-border/60 px-2 py-0.5 text-left font-normal",
-          inspected ? "bg-primary/15" : "bg-background group-even:bg-muted/25"
+          freezeBg
         )}
       >
         <span className="flex min-w-0 items-center gap-1">
@@ -444,7 +463,7 @@ function Row({
               onClick={() => onInspect?.(row.recipe.id)}
               title={`${row.recipe.wipCode} — ${row.recipe.name}`}
               className={cn(
-                "truncate text-left text-[0.8125rem] hover:underline",
+                "min-w-0 truncate text-left text-[0.8125rem] hover:underline",
                 finished
                   ? "font-semibold text-primary"
                   : row.depth > 1
@@ -454,6 +473,13 @@ function Row({
             >
               {row.recipe.name}
             </button>
+            {row.missingDownstream && (
+              <span
+                title="Other departments still need their numbers for this plan"
+                aria-label="Other departments still need numbers"
+                className="size-1.5 shrink-0 rounded-full bg-destructive"
+              />
+            )}
           </span>
         </span>
       </th>
@@ -530,8 +556,31 @@ function Row({
               : "text-muted-foreground/40"
         )}
       >
-        <span className="flex items-center justify-end gap-1">
-          {row.openBalance > 0.01 ? fmt(row.openBalance) : row.wasNeeded ? "0" : ""}
+        {(() => {
+          // fmt rounds to one decimal, so a surplus under 0.05 reads as "0" -
+          // showing "+0" would say "over" about a row that, to a glance, is
+          // exactly covered.
+          const surplusLabel = fmt(row.surplusInRange);
+          const showSurplus =
+            row.openBalance <= 0.01 &&
+            row.surplusInRange > 0.01 &&
+            surplusLabel !== "0";
+          return (
+            <span
+              className="flex items-center justify-end gap-1"
+              title={
+                showSurplus
+                  ? `Covered, with ${surplusLabel} ${style.unit} over what is needed`
+                  : undefined
+              }
+            >
+              {row.openBalance > 0.01
+                ? fmt(row.openBalance)
+                : showSurplus
+                  ? `+${surplusLabel}`
+                  : row.wasNeeded
+                    ? "0"
+                    : ""}
 
           {/* The mark appears only where the number is surprising: work has
               been planned, and Open still will not close because the day it
@@ -550,7 +599,9 @@ function Row({
               ?
             </span>
           )}
-        </span>
+            </span>
+          );
+        })()}
       </td>
 
       <td className="border-b border-border/60 border-l border-l-border/40 border-r-2 border-r-border px-1 py-0.5 text-center text-[0.5625rem] uppercase text-muted-foreground">
@@ -630,13 +681,30 @@ function Cell({
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [tookSuggest, setTookSuggest] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const initial = cell?.quantity ? String(cell.quantity) : "";
+  const initial =
+    cell?.quantity != null && cell.quantity > 0 ? String(cell.quantity) : "";
   const lastSaved = useRef<string>(initial);
 
+  /*
+    The input is uncontrolled so typing is not fighting a prop. Accept, a
+    refresh, or another cell's save still have to land the new number in the
+    box — defaultValue is ignored after mount, which is why Accept kept
+    looking like it did nothing.
+  */
+  useEffect(() => {
+    const next =
+      cell?.quantity != null && cell.quantity > 0 ? String(cell.quantity) : "";
+    lastSaved.current = next;
+    const input = inputRef.current;
+    if (!input || document.activeElement === input) return;
+    if (input.value !== next) input.value = next;
+  }, [cell?.quantity]);
+
   const verdict = cell?.allocation?.verdict ?? "unknown";
-  const has = (cell?.quantity ?? 0) > 0;
+  const has = (cell?.quantity ?? 0) > 0 || tookSuggest;
   const suggest = !has && suggested > 0.0001;
 
   /**
@@ -684,6 +752,7 @@ function Cell({
 
   function commit(raw: string) {
     const trimmed = raw.trim();
+    if (trimmed === "") setTookSuggest(false);
     if (trimmed === lastSaved.current) return;
     const quantity = trimmed === "" ? null : Number(trimmed);
     if (quantity !== null && !Number.isFinite(quantity)) {
@@ -696,11 +765,13 @@ function Cell({
     // remembered - the number in the box goes back to what it was.
     if (locked) return;
 
+    onLocalChange?.(recipeId, date, quantity);
+
     if (readOnly) {
       lastSaved.current = trimmed;
-      onLocalChange?.(recipeId, date, quantity);
       return;
     }
+
     startTransition(async () => {
       const result = await saveScheduleCell({
         scheduleId,
@@ -709,18 +780,48 @@ function Cell({
         quantity,
       });
       if (result.ok) lastSaved.current = trimmed;
-      else setError(result.message);
+      else {
+        setTookSuggest(false);
+        setError(result.message);
+      }
     });
   }
 
-  function step(by: number) {
+  /** Put the grey number into the cell and save it. Click, Tab, or Accept. */
+  function takeSuggestion() {
     const input = inputRef.current;
-    if (!input) return;
-    const current = Number(input.value || 0);
-    const size = Math.max(Math.abs(current), suggested, 1) >= 1000 ? 100 : 10;
-    const next = Math.max(0, current + by * size);
-    input.value = next === 0 ? "" : String(next);
-    commit(input.value);
+    if (!input || locked) return;
+    // Ceil, not round: a need of 0.2 lb rounding down to 0 would write
+    // nothing, the suggestion would never clear, and the cell would stay
+    // short forever no matter how many times Accept is clicked.
+    const value = String(Math.ceil(suggested));
+    input.value = value;
+    setTookSuggest(true);
+    commit(value);
+  }
+
+  /**
+   * Moves to the neighbouring cell, the way Excel's arrow keys do - up and
+   * down the same date column, left and right along the same row. Blurring
+   * the input on the way out commits it, same as Tab does.
+   */
+  function moveFocus(direction: "up" | "down" | "left" | "right") {
+    const input = inputRef.current;
+    const td = input?.closest("td");
+    const tr = td?.closest("tr");
+    if (!input || !td || !tr) return;
+
+    let targetCell: Element | null | undefined;
+    if (direction === "left") targetCell = td.previousElementSibling;
+    else if (direction === "right") targetCell = td.nextElementSibling;
+    else {
+      const cellIndex = Array.prototype.indexOf.call(tr.children, td);
+      const targetRow =
+        direction === "up" ? tr.previousElementSibling : tr.nextElementSibling;
+      targetCell = targetRow?.children[cellIndex];
+    }
+
+    targetCell?.querySelector<HTMLInputElement>("input")?.focus();
   }
 
   return (
@@ -751,22 +852,15 @@ function Cell({
         {/* What the tree needs, tucked left and faint. It used to sit in the
             placeholder - right-aligned, exactly where the typed number goes -
             which read as a value rather than a target. */}
-        {/* The suggestion, offered rather than applied. Clicking it is how
-            it becomes a number; nothing else writes into the cell. */}
+        {/* Grey until taken. Click anywhere in the cell — the overlay does
+            not steal the click; focus on the input is what fills it. */}
         {suggest && !problem && (
-          <button
-            type="button"
-            tabIndex={-1}
-            title={`The tree needs ${fmt(suggested)} ${unit} here — click to take it`}
-            onClick={() => {
-              if (!inputRef.current) return;
-              inputRef.current.value = String(Math.round(suggested));
-              commit(inputRef.current.value);
-            }}
-            className="absolute right-1.5 z-10 text-[0.6875rem] text-primary/45 tabular-nums hover:text-primary"
+          <span
+            aria-hidden
+            className="pointer-events-none absolute right-1.5 text-[0.6875rem] text-primary/45 tabular-nums"
           >
             {fmt(suggested)}
-          </button>
+          </span>
         )}
 
         {problem ? (
@@ -780,7 +874,9 @@ function Cell({
             ?
           </span>
         ) : (
-          needed > 0.01 && (
+          needed > 0.01 &&
+          !suggest &&
+          !has && (
             <span
               aria-hidden
               className={cn(
@@ -799,17 +895,12 @@ function Cell({
           inputMode="decimal"
           defaultValue={initial}
           aria-label={date}
-          /*
-            Focus does NOT fill the cell in.
-
-            It used to write the suggested number into the input and select
-            it, so clicking a cell and clicking away committed a number
-            nobody typed. Nothing reaches the plan without somebody putting
-            it there: the suggestion is offered as a ghost, and taking it is
-            a deliberate act - click the ghost, or press Tab on an empty
-            cell.
-          */
           readOnly={locked}
+          onFocus={(e) => {
+            if (locked || !suggest || e.currentTarget.value !== "") return;
+            takeSuggestion();
+            e.currentTarget.select();
+          }}
           onBlur={(e) => {
             if (locked) {
               e.target.value = lastSaved.current;
@@ -820,20 +911,34 @@ function Cell({
           onKeyDown={(e) => {
             if (e.key === "Enter") e.currentTarget.blur();
             if (e.key === "Tab" && suggest && e.currentTarget.value === "") {
-              e.currentTarget.value = String(Math.round(suggested));
-              commit(e.currentTarget.value);
+              takeSuggestion();
             }
             if (e.key === "Escape") {
               e.currentTarget.value = lastSaved.current;
               e.currentTarget.blur();
             }
+            // Excel clears the whole cell on Delete regardless of where the
+            // caret sits or what is selected - it is not "delete one digit".
+            if (e.key === "Delete") {
+              e.preventDefault();
+              e.currentTarget.value = "";
+              commit("");
+            }
             if (e.key === "ArrowUp") {
               e.preventDefault();
-              step(1);
+              moveFocus("up");
             }
             if (e.key === "ArrowDown") {
               e.preventDefault();
-              step(-1);
+              moveFocus("down");
+            }
+            if (e.key === "ArrowLeft") {
+              e.preventDefault();
+              moveFocus("left");
+            }
+            if (e.key === "ArrowRight") {
+              e.preventDefault();
+              moveFocus("right");
             }
           }}
           className={cn(

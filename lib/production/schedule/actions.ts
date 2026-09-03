@@ -78,7 +78,7 @@ async function openDraft(
   const { data: created, error } = await supabase
     .from("production_schedules")
     .insert({
-      name: draftName(today, profile.full_name || profile.email || "Unknown"),
+      name: draftName(profile.full_name || profile.email || "Unknown"),
       status: "draft",
       parent_schedule_id: liveId,
       period_start: (live?.period_start as string) ?? today,
@@ -289,9 +289,10 @@ export async function discardDraft(input: {
 /**
  * Writes a batch of suggested quantities into the caller's draft.
  *
- * This is "accept all" behind the domino. It only fills cells that are empty
- * once the draft is laid over the live schedule, so pressing it twice, or
- * pressing it after hand-editing, cannot overwrite a decision someone made.
+ * This is Accept behind the button. It only skips a cell the draft already
+ * has a number in, so pressing it twice, or pressing it after hand-editing,
+ * cannot overwrite a decision someone made. Live rows are not a veto — a
+ * leftover zero on the confirmed plan is not a number anyone typed.
  */
 export async function applySuggestions(input: {
   scheduleId: string;
@@ -317,22 +318,31 @@ export async function applySuggestions(input: {
   const draft = await openDraft(supabase, input.scheduleId, profile, today);
   if ("error" in draft) return fail(draft.error);
 
+  /*
+    Only skip a cell the draft has already decided. Treating live rows as
+    "taken" meant Accept did nothing whenever the confirmed plan had a leftover
+    zero (or any row) for that date — the grey number stayed grey.
+  */
   const { data: existing } = await supabase
     .from("production_schedule_entries")
-    .select("schedule_id, recipe_id, production_date")
-    .in("schedule_id", [input.scheduleId, draft.id]);
+    .select("recipe_id, production_date, quantity")
+    .eq("schedule_id", draft.id);
 
   const taken = new Set(
-    (existing ?? []).map((row) => `${row.recipe_id}|${row.production_date}`)
+    (existing ?? [])
+      .filter((row) => Number(row.quantity ?? 0) > 0)
+      .map((row) => `${row.recipe_id}|${row.production_date}`)
   );
 
+  const now = new Date().toISOString();
   const rows = valid
     .filter((entry) => !taken.has(`${entry.recipeId}|${entry.productionDate}`))
     .map((entry) => ({
       schedule_id: draft.id,
       recipe_id: entry.recipeId,
       production_date: entry.productionDate,
-      quantity: entry.quantity,
+      quantity: Math.round(entry.quantity),
+      updated_at: now,
       updated_by: profile.id,
     }));
 
@@ -340,7 +350,7 @@ export async function applySuggestions(input: {
 
   const { error } = await supabase
     .from("production_schedule_entries")
-    .insert(rows);
+    .upsert(rows, { onConflict: "schedule_id,recipe_id,production_date" });
 
   if (error) return fail(error.message);
 
@@ -592,7 +602,7 @@ export async function newEmptyDraft(input: {
   const { data: created, error } = await supabase
     .from("production_schedules")
     .insert({
-      name: input.name?.trim() || draftName(today, profile.full_name || profile.email || "Unknown"),
+      name: input.name?.trim() || draftName(profile.full_name || profile.email || "Unknown"),
       status: "draft",
       parent_schedule_id: scheduleId,
       period_start: (live?.period_start as string) ?? from,

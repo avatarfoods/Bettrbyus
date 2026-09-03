@@ -150,6 +150,8 @@
   /* Height of the sticky app bar. Pages that need a full-viewport region
      subtract this instead of hard-coding a number. */
   --app-bar-height: 3.5rem;
+  /* Control panel under the app bar. Overridden at runtime from its real height. */
+  --page-shell-height: 3.25rem;
 
   --sidebar: oklch(0.375 0.017 248);            /* #3a424a */
   --sidebar-foreground: oklch(0.857 0.014 248); /* #c9d1d9 */

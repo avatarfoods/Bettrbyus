@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { NavTrail } from "@/components/app-shell/nav-trail";
+import { PageShellBar } from "@/components/app-shell/page-shell-bar";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -73,7 +74,7 @@ export function PageShell({
         header at z-30 sat underneath them - and anything opening out of it,
         like the plan picker, was drawn behind the frozen cells.
       */}
-      <div className="sticky top-(--app-bar-height) z-45 border-b-2 border-b-brand/25 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <PageShellBar className="sticky top-(--app-bar-height) z-45 border-b-2 border-b-brand/25 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 sm:px-4">
           {actions && (
             <div className="order-1 flex shrink-0 items-center gap-2">
@@ -108,7 +109,7 @@ export function PageShell({
             </div>
           )}
         </div>
-      </div>
+      </PageShellBar>
 
       <div
         className={cn(

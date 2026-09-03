@@ -1,5 +1,4 @@
 import { PageShell } from "@/components/app-shell/page-shell";
-import { EditPlanButton } from "@/components/production/schedule/edit-plan-button";
 import { LineSwitch } from "@/components/production/schedule/line-switch";
 import { PlanPicker } from "@/components/production/schedule/plan-picker";
 import { ScheduleView } from "@/components/production/schedule/schedule-view";
@@ -153,12 +152,10 @@ export default async function PlanningPage({
 
   return (
     <PageShell
-      fillViewport
       breadcrumbs={[
         { label: "Production" },
         { label: line ? `Planning · ${line.name}` : "Planning" },
       ]}
-      actions={!readOnly && <EditPlanButton editing={editing} />}
       meta={
         readOnly ? (
           <span>{entries.length} from the workbook</span>
