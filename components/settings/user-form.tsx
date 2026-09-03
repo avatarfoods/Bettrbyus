@@ -19,27 +19,42 @@ import {
   type ActionResult,
 } from "@/lib/users/actions";
 import type { UserRow } from "@/lib/users/fetch-users";
+import { setHrAccess } from "@/lib/hr/actions";
+import type { HrLevel } from "@/lib/hr/model";
 import { ButtonTabBar, TabBody, type TabItem } from "@/components/ui/tab-bar";
-import { Switch, SwitchThumb } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 const TABS: TabItem[] = [
   { id: "details", label: "Details" },
+  { id: "access", label: "Access rights" },
   { id: "security", label: "Security" },
 ];
 
 /**
- * One user, Odoo-shaped: identity at the top, then Access Rights and Account
- * Security as tabs. Access rights are just admin/user today, but the tab is
- * where per-app permissions go when they arrive.
+ * One user, Odoo-shaped: identity at the top, then Details, Access Rights and
+ * Security as tabs.
+ *
+ * Access rights are per app, the way Odoo lists them: System is
+ * Administrator or User, and decides Settings; HR is None, User or
+ * Administrator. A System administrator is an administrator of every app.
  */
-export function UserForm({ user, isSelf }: { user: UserRow; isSelf: boolean }) {
+export function UserForm({
+  user,
+  isSelf,
+  hrLevel,
+}: {
+  user: UserRow;
+  isSelf: boolean;
+  /** This login's HR level, from hr_user_access; "user" when there is no row. */
+  hrLevel: HrLevel;
+}) {
   const router = useRouter();
   const [tab, setTab] = useState("details");
 
   const [fullName, setFullName] = useState(user.fullName ?? "");
   const [email, setEmail] = useState(user.email);
   const [isAdmin, setIsAdmin] = useState(user.isAdmin);
+  const [hr, setHr] = useState<HrLevel>(hrLevel);
   const [password, setPassword] = useState("");
 
   const [notice, setNotice] = useState<
@@ -180,31 +195,91 @@ export function UserForm({ user, isSelf }: { user: UserRow; isSelf: boolean }) {
 
             </div>
 
-            <label className="flex max-w-3xl items-center justify-between gap-4 rounded-sm bg-card ring-1 ring-foreground/10 p-3">
-              <span className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium">Administrator</span>
-                <span className="text-xs text-muted-foreground">
-                  Can open Settings, manage users and change the wallpaper.
-                </span>
-              </span>
-              <Switch
-                checked={isAdmin}
-                onCheckedChange={setIsAdmin}
-                disabled={isSelf}
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={pending}
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60"
               >
-                <SwitchThumb />
-              </Switch>
-            </label>
+                {pending && <Loader2 className="size-4 animate-spin" />}
+                Save
+              </button>
+            </div>
+          </form>
+        )}
+
+        {tab === "access" && (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              run(async () => {
+                const system = await updateUser({ userId: user.id, fullName, email, isAdmin });
+                if (!system.ok) return system;
+                // A System administrator is an HR administrator whatever the
+                // HR row says, so only record HR for everyone else.
+                if (!isAdmin) {
+                  const result = await setHrAccess({ profileId: user.id, level: hr });
+                  if (!result.ok) return result;
+                }
+                return { ok: true } as const;
+              }, "Access rights saved");
+            }}
+            className="flex max-w-3xl flex-col gap-4"
+          >
+            <SectionHead
+              title="Access rights"
+              hint="Per app, like Odoo. System decides Settings itself. A System administrator is an administrator of every app."
+            />
+
+            <div className="overflow-hidden rounded-sm bg-card ring-1 ring-foreground/10">
+              <AccessRow
+                app="System"
+                description="Settings: users, access rights, appearance."
+                value={isAdmin ? "admin" : "user"}
+                disabled={isSelf}
+                options={[
+                  ["user", "User"],
+                  ["admin", "Administrator"],
+                ]}
+                onChange={(value) => setIsAdmin(value === "admin")}
+              />
+              <AccessRow
+                app="HR"
+                description="Schedules and people. Users see their departments, no money. Administrators see every department and the cost, import from Paychex, set staffing - required people, usual hours, supervisor - and arrange the dashboard and the schedules."
+                value={isAdmin ? "admin" : hr}
+                disabled={isSelf || isAdmin}
+                options={[
+                  ["none", "None"],
+                  ["user", "User"],
+                  ["admin", "Administrator"],
+                ]}
+                onChange={(value) => setHr(value as HrLevel)}
+              />
+              <AccessRow
+                app="Production"
+                description="Planning, recipes, WIP. Open to every login today."
+                value="user"
+                disabled
+                options={[["user", "User"]]}
+                onChange={() => undefined}
+              />
+              <AccessRow
+                app="Purchasing"
+                description="Orders and materials. Open to every login today."
+                value="user"
+                disabled
+                options={[["user", "User"]]}
+                onChange={() => undefined}
+              />
+            </div>
             {isSelf && (
-              <p className="-mt-2 text-xs text-muted-foreground">
-                You cannot change your own admin access.
-              </p>
+              <p className="text-xs text-muted-foreground">You cannot change your own access.</p>
             )}
 
             <div className="flex justify-end">
               <button
                 type="submit"
-                disabled={pending}
+                disabled={pending || isSelf}
                 className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60"
               >
                 {pending && <Loader2 className="size-4 animate-spin" />}
@@ -222,8 +297,9 @@ export function UserForm({ user, isSelf }: { user: UserRow; isSelf: boolean }) {
                 hint="Use this for someone who cannot receive email. Tell them the password yourself."
               />
               <div className="flex flex-wrap items-center gap-2">
+                {/* Hidden as typed. Nobody looking over a shoulder reads it. */}
                 <input
-                  type="text"
+                  type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="New password"
@@ -323,6 +399,48 @@ function Field({
       {children}
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
+  );
+}
+
+/** One app, one dropdown: the Odoo access-rights row. */
+function AccessRow({
+  app,
+  description,
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  app: string;
+  description: string;
+  value: string;
+  options: [string, string][];
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="flex items-center gap-4 border-b border-border/60 px-3 py-2 last:border-b-0">
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="text-sm font-medium">{app}</span>
+        <span className="text-xs text-muted-foreground">{description}</span>
+      </span>
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        className={cn(
+          "h-8 w-40 shrink-0 rounded-sm bg-card px-2 text-sm ring-1 ring-foreground/10 disabled:opacity-60",
+          value === "admin" && "font-semibold text-primary",
+          value === "none" && "text-muted-foreground"
+        )}
+      >
+        {options.map(([id, label]) => (
+          <option key={id} value={id}>
+            {label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

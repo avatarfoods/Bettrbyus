@@ -35,7 +35,7 @@ import {
  * a shell change and nothing breaks underneath it.
  */
 
-export type AppId = "production" | "purchasing" | "settings";
+export type AppId = "production" | "purchasing" | "hr" | "settings";
 
 /** Tile colour. Maps to a token pair, never a raw hex. */
 export type AppTint = "brand" | "warning" | "success" | "slate";
@@ -274,6 +274,50 @@ export const APPS: AppDefinition[] = [
             href: "/purchasing/imports",
             icon: FileInput,
           },
+        ],
+      },
+    ],
+  },
+  {
+    // People and their week: who is in, where, and what it costs. Fed from
+    // Paychex, scheduled by supervisors, approved once, then printed.
+    id: "hr",
+    name: "HR",
+    href: "/hr",
+    icon: Users,
+    tint: "success",
+    description: "People, schedules and labour cost",
+    routes: ["/hr"],
+    menus: [
+      {
+        label: "Dashboard",
+        href: "/hr",
+        items: [{ label: "This week", href: "/hr", icon: LayoutDashboard }],
+      },
+      {
+        // Printing and emailing live on the schedule itself, beside the
+        // approved week they act on, not here.
+        label: "Schedule",
+        href: "/hr/schedule",
+        items: [{ label: "This week", href: "/hr/schedule", icon: CalendarRange }],
+      },
+      {
+        // Import is a button on the People page, top right, where the list is.
+        label: "People",
+        href: "/hr/people",
+        items: [{ label: "All people", href: "/hr/people", icon: Users }],
+      },
+      {
+        // Every rule in one place, so anyone with access can change it.
+        label: "Configuration",
+        href: "/hr/settings/departments",
+        items: [
+          { group: "People", label: "Departments", href: "/hr/settings/departments", icon: Building2 },
+          { group: "People", label: "Groups", href: "/hr/settings/groups", icon: Users },
+          { group: "Approval", label: "Approval chain", href: "/hr/settings/approval", icon: ListChecks },
+          { group: "Schedule", label: "Off because", href: "/hr/settings/absences", icon: CalendarDays },
+          { group: "Cost", label: "Pay rules", href: "/hr/settings/pay", icon: Calculator },
+          // Who may open HR lives with every other access right, in Settings > Users.
         ],
       },
     ],
