@@ -8,6 +8,7 @@ import { setShowOnSchedule } from "@/lib/hr/actions";
 import { displayName, money, sendTo, type Department, type Employee } from "@/lib/hr/model";
 import { departmentColor } from "@/lib/hr/colors";
 import { Switch, SwitchThumb } from "@/components/ui/switch";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { ActiveDot, Hint } from "@/components/production/settings/shared";
 import { cn } from "@/lib/utils";
 
@@ -23,12 +24,16 @@ export function PeopleList({
   employees,
   departments,
   canEdit,
+  seesCost,
 }: {
   employees: Employee[];
   departments: Department[];
   canEdit: boolean;
+  /** Pay rates are money: administrators only. */
+  seesCost: boolean;
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [query, setQuery] = useState("");
   const [line, setLine] = useState("");
   const [dept, setDept] = useState("");
@@ -46,9 +51,11 @@ export function PeopleList({
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
+    // "Switched off" and "Contractors" are inactive by definition, so they win over the status filter.
+    const statusMatters = more !== "off" && more !== "contractors";
     return employees.filter((e) => {
-      if (status === "active" && isInactive(e)) return false;
-      if (status === "inactive" && !isInactive(e)) return false;
+      if (statusMatters && status === "active" && isInactive(e)) return false;
+      if (statusMatters && status === "inactive" && !isInactive(e)) return false;
       if (pay !== "all" && e.payType !== pay) return false;
       if (more === "supervisors" && !e.isSupervisor) return false;
       if (more === "no-email" && sendTo(e)) return false;
@@ -104,7 +111,7 @@ export function PeopleList({
           <span className="flex items-center gap-1.5">
             {dept && (() => {
               const d = deptById.get(dept);
-              return d ? <span className={cn("block h-3.5 w-1 shrink-0", departmentColor(d.color, departments.indexOf(d)).dot)} /> : null;
+              return d ? <span className={cn("block h-3.5 w-1 shrink-0", departmentColor(d.color, d.colorIndex).dot)} /> : null;
             })()}
             <select value={dept} onChange={(event) => setDept(event.target.value)} aria-label="Department" className={cn(SELECT, dept && "font-semibold text-foreground")}>
               <option value="">All departments</option>
@@ -132,7 +139,7 @@ export function PeopleList({
             <option value="any">Anyone</option>
             <option value="supervisors">Supervisors</option>
             <option value="no-email">No email</option>
-            <option value="no-rate">No pay rate</option>
+            {seesCost && <option value="no-rate">No pay rate</option>}
             <option value="off">Switched off</option>
             <option value="contractors">Contractors</option>
           </select>
@@ -144,13 +151,13 @@ export function PeopleList({
       <div className="max-h-[calc(100dvh-14rem)] overflow-auto rounded-sm bg-card ring-1 ring-foreground/10">
         <table className="w-full min-w-[64rem] border-collapse text-xs">
           <thead className="sticky top-0 z-20">
-            <tr className="bg-surface-sunk">
+            <tr className="bg-brand-muted">
               {/* ID and person stay put everywhere; department joins them from tablet width up. */}
-              <Th className="sticky left-0 z-30 w-16 bg-surface-sunk">ID</Th>
-              <Th className="sticky left-16 z-30 w-48 bg-surface-sunk">Person</Th>
-              <Th className="w-44 border-r border-border bg-surface-sunk md:sticky md:left-64 md:z-30">Department</Th>
+              <Th className="sticky left-0 z-30 w-16 bg-brand-muted">ID</Th>
+              <Th className="sticky left-16 z-30 w-48 bg-brand-muted">Person</Th>
+              <Th className="w-44 border-r border-border bg-brand-muted md:sticky md:left-64 md:z-30">Department</Th>
               <Th>Pay</Th>
-              <Th right>Rate</Th>
+              {seesCost && <Th right>Rate</Th>}
               <Th>Email</Th>
               <Th>Phone</Th>
               <Th>Status</Th>
@@ -166,7 +173,7 @@ export function PeopleList({
           <tbody>
             {shown.map((e) => {
               const d = e.departmentId ? deptById.get(e.departmentId) : undefined;
-              const look = d ? departmentColor(d.color, departments.indexOf(d)) : null;
+              const look = d ? departmentColor(d.color, d.colorIndex) : null;
               const onSchedule = e.showOnSchedule && e.employeeType !== "contractor";
               const inactive = isInactive(e);
               return (
@@ -195,15 +202,17 @@ export function PeopleList({
                       {e.payType === "salary" ? "Salary" : "Hourly"}
                     </span>
                   </Td>
-                  <Td right>
-                    {e.payRate === null ? (
-                      <span className="text-warning-foreground" title="No rate from Paychex. Counted as costing nothing.">— ?</span>
-                    ) : e.payType === "salary" ? (
-                      `${money(e.payRate)}/wk`
-                    ) : (
-                      `$${e.payRate.toFixed(2)}/h`
-                    )}
-                  </Td>
+                  {seesCost && (
+                    <Td right>
+                      {e.payRate === null ? (
+                        <span className="text-warning-foreground" title="No rate from Paychex. Counted as costing nothing.">— ?</span>
+                      ) : e.payType === "salary" ? (
+                        `${money(e.payRate)}/wk`
+                      ) : (
+                        `$${e.payRate.toFixed(2)}/h`
+                      )}
+                    </Td>
+                  )}
                   <Td>
                     {sendTo(e) ? (
                       <span className="block max-w-48 truncate">{sendTo(e)}</span>
@@ -225,7 +234,8 @@ export function PeopleList({
                         aria-label={`${displayName(e)} on the schedule`}
                         onCheckedChange={(show) =>
                           startSwitch(async () => {
-                            await setShowOnSchedule({ id: e.id, show });
+                            const result = await setShowOnSchedule({ id: e.id, show });
+                            if (!result.ok) await confirm({ title: result.message, cancelLabel: false });
                             router.refresh();
                           })
                         }
@@ -239,7 +249,7 @@ export function PeopleList({
                   <Td>
                     <Link
                       href={`/hr/people/${e.id}`}
-                      className="inline-flex h-6 items-center gap-1 rounded-sm px-1.5 text-[0.6875rem] text-primary hover:bg-primary/10"
+                      className="inline-flex h-6 items-center gap-1 rounded border border-border bg-card px-1.5 text-[0.6875rem] text-foreground transition-colors hover:bg-muted"
                     >
                       <Pencil className="size-3" />
                       {canEdit ? "Edit" : "Open"}
@@ -250,7 +260,7 @@ export function PeopleList({
             })}
             {shown.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-3 py-10 text-center text-sm text-muted-foreground">
+                <td colSpan={seesCost ? 10 : 9} className="px-3 py-10 text-center text-sm text-muted-foreground">
                   {employees.length === 0 ? "Nobody yet. Import the Paychex export to bring everyone in." : "Nobody matches."}
                 </td>
               </tr>
@@ -264,7 +274,7 @@ export function PeopleList({
 
 function Th({ children, right, className }: { children?: React.ReactNode; right?: boolean; className?: string }) {
   return (
-    <th className={cn("border-b border-border px-2 py-1.5 text-left text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase", right && "text-right", className)}>
+    <th className={cn("border-b border-primary/15 px-2 py-1.5 text-left text-[0.5625rem] font-semibold tracking-wider text-primary uppercase", right && "text-right", className)}>
       {children}
     </th>
   );

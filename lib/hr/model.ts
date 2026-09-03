@@ -29,6 +29,8 @@ export type Department = {
   timecardCheck: string | null;
   sortOrder: number;
   active: boolean;
+  /** Its position in the full list, so an automatic colour is the same on every screen. */
+  colorIndex: number;
 };
 
 export type Employee = {
@@ -367,6 +369,33 @@ export function displayTime(time: string): string {
   const suffix = h >= 12 ? "PM" : "AM";
   const hour = h % 12 === 0 ? 12 : h % 12;
   return `${hour}:${String(m ?? 0).padStart(2, "0")} ${suffix}`;
+}
+
+/** "6:30a", "3p": a time where there is no room for more. */
+export function shortTime(time: string): string {
+  const [h, m] = time.split(":").map(Number);
+  const hour = h % 12 === 0 ? 12 : h % 12;
+  return `${hour}${m ? `:${String(m).padStart(2, "0")}` : ""}${h >= 12 ? "p" : "a"}`;
+}
+
+/**
+ * The span a day's shifts cover, earliest start to latest end, as "6a–4p".
+ * An end before its start is the next morning.
+ */
+export function daySpan(shifts: Pick<Shift, "startTime" | "endTime">[]): string | null {
+  let first: string | null = null;
+  let last: string | null = null;
+  let lastHours = -1;
+  for (const s of shifts) {
+    if (!s.startTime || !s.endTime) continue;
+    if (first === null || timeToHours(s.startTime) < timeToHours(first)) first = s.startTime;
+    const endHours = timeToHours(s.endTime) <= timeToHours(s.startTime) ? timeToHours(s.endTime) + 24 : timeToHours(s.endTime);
+    if (endHours > lastHours) {
+      lastHours = endHours;
+      last = s.endTime;
+    }
+  }
+  return first && last ? `${shortTime(first)}–${shortTime(last)}` : null;
 }
 
 /** "6:00 AM – 4:00 PM". */

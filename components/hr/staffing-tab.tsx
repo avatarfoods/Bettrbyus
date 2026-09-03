@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, Pencil } from "lucide-react";
 import { saveStaffing } from "@/lib/hr/actions";
@@ -9,6 +9,7 @@ import {
   displayTime,
   isSchedulable,
   runsAllDay,
+  shortTime,
   timeOptions,
   timeToHours,
   type Department,
@@ -16,32 +17,31 @@ import {
 } from "@/lib/hr/model";
 import { departmentColor } from "@/lib/hr/colors";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { Hint } from "@/components/production/settings/shared";
 import { cn } from "@/lib/utils";
 
 /**
- * The staffing sheet, as a tab - Carlos's spreadsheet, on one page.
+ * The staffing sheet, as a tab - Carlos's spreadsheet, on one page, quiet.
  *
- * One row per department, grouped by line the way the codes group them: who
- * supervises it, how many it should have, how many Paychex says are active,
- * how many are missing in red. Down the right, the whole day from 4 AM round
- * to 4 AM as one bar per department in its colour, so the shape of the plant
- * is visible without scrolling sideways. Reading is for everyone. Changing
- * anything is behind Edit, and Edit is only there for administrators.
+ * One row per department, grouped by line: how many it should have in blue,
+ * how many Paychex says are active in green, and the gap - red when people
+ * are missing, blue with a minus when there are more than required, a quiet
+ * green nought when it is exactly right. The supervisor is a "?" you tap, not
+ * a column of names. Down the right, the whole day from 4 AM round to 4 AM as
+ * one soft bar per department with its hours written on it. Reading is for
+ * everyone. Changing anything is behind Edit, and Edit is only there for
+ * administrators.
  */
 export function StaffingTab({
   departments,
-  allDepartments,
   employees,
   canEdit,
 }: {
   departments: Department[];
-  allDepartments: Department[];
   employees: Employee[];
   canEdit: boolean;
 }) {
   const [editing, setEditing] = useState(false);
-  const look = (d: Department) => departmentColor(d.color, allDepartments.indexOf(d));
+  const look = (d: Department) => departmentColor(d.color, d.colorIndex);
   const empById = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
 
   /** Who can be picked as a supervisor: everyone active, supervisors first. */
@@ -55,9 +55,10 @@ export function StaffingTab({
 
   const rows = departments.map((department) => {
     const active = employees.filter((e) => e.departmentId === department.id && isSchedulable(e)).length;
-    const missing = Math.max(0, department.requiredHeadcount - active);
+    // Positive: people to hire. Negative: more than required.
+    const gap = department.requiredHeadcount - active;
     const supervisor = department.supervisorId ? empById.get(department.supervisorId) : undefined;
-    return { department, active, missing, supervisor };
+    return { department, active, gap, supervisor };
   });
 
   /* Grouped by line, in the order departments come. */
@@ -73,21 +74,24 @@ export function StaffingTab({
     (sum, r) => ({
       required: sum.required + r.department.requiredHeadcount,
       active: sum.active + r.active,
-      missing: sum.missing + r.missing,
+      missing: sum.missing + Math.max(0, r.gap),
+      extra: sum.extra + Math.max(0, -r.gap),
     }),
-    { required: 0, active: 0, missing: 0 }
+    { required: 0, active: 0, missing: 0, extra: 0 }
   );
+
+  const columns = editing ? 7 : 6;
 
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-sm bg-card px-3 py-2 ring-1 ring-foreground/10">
-        <Big label="required" value={String(totals.required)} hint="How many people the departments are supposed to have, added up." />
-        <Big label="active in Paychex" value={String(totals.active)} hint="Active people on the schedule, from the last Paychex import. Contractors and anyone switched off are not counted." />
-        <Big label="to hire" value={String(totals.missing)} warn={totals.missing > 0} />
+        <Big label="required" value={String(totals.required)} tone="blue" />
+        <Big label="active" value={String(totals.active)} tone="green" />
+        <Big label="to hire" value={String(totals.missing)} tone={totals.missing > 0 ? "red" : "green"} />
+        {totals.extra > 0 && <Big label="over" value={`-${totals.extra}`} tone="blue" />}
         <span className="ml-auto flex items-center gap-2">
-          <span className="hidden items-center gap-1 text-[0.6875rem] text-muted-foreground sm:flex">
-            The bar is the hours each department usually runs
-            <Hint text="Not the schedule - the shape of the day, 4 AM round to 4 AM, so Main Kitchen at 6:30 AM to 3:00 AM reads at a glance." />
+          <span className="hidden text-[0.6875rem] text-muted-foreground sm:inline">
+            Blue: what each department should have. Green: who is active in Paychex. Red: people to hire. A minus: more than required.
           </span>
           {canEdit && (
             <button
@@ -108,24 +112,24 @@ export function StaffingTab({
       </div>
 
       <div className="overflow-x-auto rounded-sm bg-card ring-1 ring-foreground/10">
-        <table className="w-full min-w-[58rem] table-fixed border-collapse text-[0.6875rem] leading-tight">
+        <table className={cn("w-full table-fixed border-collapse text-[0.6875rem] leading-tight", editing ? "min-w-[58rem]" : "min-w-[46rem]")}>
           <colgroup>
-            <col style={{ width: "11.5rem" }} />
-            <col style={{ width: editing ? "10rem" : "8rem" }} />
-            <col style={{ width: "3.75rem" }} />
+            <col style={{ width: "11rem" }} />
+            <col style={{ width: editing ? "10rem" : "2.25rem" }} />
+            <col style={{ width: "4rem" }} />
             <col style={{ width: "3.5rem" }} />
-            <col style={{ width: "3.75rem" }} />
-            <col style={{ width: editing ? "12rem" : "8.5rem" }} />
+            <col style={{ width: "4.25rem" }} />
+            {editing && <col style={{ width: "12rem" }} />}
             <col />
           </colgroup>
           <thead>
-            <tr className="bg-surface-sunk">
-              <Th className="sticky left-0 z-10 bg-surface-sunk">Department</Th>
-              <Th>Supervisor</Th>
+            <tr className="bg-brand-muted">
+              <Th className="sticky left-0 z-10 bg-brand-muted">Department</Th>
+              <Th className={cn(!editing && "px-0 text-center")}>{editing ? "Supervisor" : "Sup"}</Th>
               <Th right>Required</Th>
               <Th right>Active</Th>
               <Th right>Missing</Th>
-              <Th>Usual hours</Th>
+              {editing && <Th>Usual hours</Th>}
               <Th className="px-1">
                 <Timeline.Header />
               </Th>
@@ -134,31 +138,34 @@ export function StaffingTab({
           <tbody>
             {groups.map((group) => {
               const sum = group.rows.reduce(
-                (s, r) => ({ required: s.required + r.department.requiredHeadcount, active: s.active + r.active, missing: s.missing + r.missing }),
-                { required: 0, active: 0, missing: 0 }
+                (s, r) => ({
+                  required: s.required + r.department.requiredHeadcount,
+                  active: s.active + r.active,
+                  missing: s.missing + Math.max(0, r.gap),
+                  extra: s.extra + Math.max(0, -r.gap),
+                }),
+                { required: 0, active: 0, missing: 0, extra: 0 }
               );
               return [
-                <tr key={`line-${group.line}`} className="border-y border-border/60 bg-muted/40">
-                  <td className="sticky left-0 z-10 bg-muted/40 px-3 py-0.5 text-[0.5625rem] font-bold tracking-wider text-muted-foreground uppercase">
+                <tr key={`line-${group.line}`} className="border-y border-primary/15 bg-brand-muted/40">
+                  <td className="sticky left-0 z-10 bg-brand-muted/40 px-3 py-0.5 text-[0.5625rem] font-bold tracking-wider text-primary uppercase">
                     {group.line}
                   </td>
-                  <td className="px-2 py-0.5 text-[0.5625rem] text-muted-foreground">
-                    {group.rows.length} department{group.rows.length === 1 ? "" : "s"}
+                  <td className="px-1 py-0.5 text-center text-[0.5625rem] text-primary/70 tabular-nums">{group.rows.length}</td>
+                  <td className="px-2 py-0.5 text-right text-[0.625rem] font-semibold text-primary tabular-nums">{sum.required}</td>
+                  <td className="px-2 py-0.5 text-right text-[0.625rem] font-semibold text-success tabular-nums">{sum.active}</td>
+                  <td className="px-2 py-0.5 text-right text-[0.625rem] font-bold tabular-nums">
+                    <Gap missing={sum.missing} extra={sum.extra} small />
                   </td>
-                  <td className="px-2 py-0.5 text-right text-[0.625rem] font-semibold text-muted-foreground tabular-nums">{sum.required}</td>
-                  <td className="px-2 py-0.5 text-right text-[0.625rem] font-semibold text-muted-foreground tabular-nums">{sum.active}</td>
-                  <td className={cn("px-2 py-0.5 text-right text-[0.625rem] font-semibold tabular-nums", sum.missing > 0 ? "text-destructive" : "text-muted-foreground")}>
-                    {sum.missing}
-                  </td>
-                  <td colSpan={2} />
+                  <td colSpan={editing ? 2 : 1} />
                 </tr>,
-                ...group.rows.map(({ department, active, missing, supervisor }) => (
+                ...group.rows.map(({ department, active, gap, supervisor }) => (
                   <StaffingRow
                     key={department.id}
                     department={department}
                     style={look(department)}
                     active={active}
-                    missing={missing}
+                    gap={gap}
                     supervisor={supervisor ?? null}
                     people={people}
                     editing={canEdit && editing}
@@ -168,19 +175,21 @@ export function StaffingTab({
             })}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-10 text-center text-sm text-muted-foreground">No departments to show.</td>
+                <td colSpan={columns} className="px-3 py-10 text-center text-sm text-muted-foreground">No departments to show.</td>
               </tr>
             )}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-t-foreground/20 bg-surface-sunk font-semibold">
-              <td colSpan={2} className="sticky left-0 z-10 bg-surface-sunk px-3 py-1 text-[0.5625rem] tracking-wider text-muted-foreground uppercase">
+            <tr className="border-t-2 border-t-success/40 bg-success/10 font-semibold">
+              <td colSpan={2} className="sticky left-0 z-10 bg-success/10 px-3 py-1 text-[0.5625rem] tracking-wider text-muted-foreground uppercase">
                 Total
               </td>
-              <td className="px-2 py-1 text-right tabular-nums">{totals.required}</td>
-              <td className="px-2 py-1 text-right tabular-nums">{totals.active}</td>
-              <td className={cn("px-2 py-1 text-right tabular-nums", totals.missing > 0 && "text-destructive")}>{totals.missing}</td>
-              <td colSpan={2} className="px-1 py-1">
+              <td className="px-2 py-1 text-right text-primary tabular-nums">{totals.required}</td>
+              <td className="px-2 py-1 text-right text-success tabular-nums">{totals.active}</td>
+              <td className="px-2 py-1 text-right tabular-nums">
+                <Gap missing={totals.missing} extra={totals.extra} />
+              </td>
+              <td colSpan={editing ? 2 : 1} className="px-1 py-1">
                 <Timeline.Header ticksOnly />
               </td>
             </tr>
@@ -191,11 +200,25 @@ export function StaffingTab({
   );
 }
 
+/** Missing in red, extra in blue with a minus, exactly right as a quiet green nought. */
+function Gap({ missing, extra, small }: { missing: number; extra: number; small?: boolean }) {
+  if (missing > 0) {
+    return (
+      <span className={cn("font-black text-destructive tabular-nums", small ? "text-[0.625rem]" : "text-sm")}>
+        {missing}
+        {extra > 0 && <span className="ml-1 text-[0.5625rem] font-semibold text-primary">-{extra}</span>}
+      </span>
+    );
+  }
+  if (extra > 0) return <span className={cn("font-bold text-primary tabular-nums", small ? "text-[0.625rem]" : "text-xs")}>-{extra}</span>;
+  return <span className={cn("font-semibold text-success/70 tabular-nums", small ? "text-[0.625rem]" : "text-xs")}>0</span>;
+}
+
 function StaffingRow({
   department,
   style,
   active,
-  missing,
+  gap,
   supervisor,
   people,
   editing,
@@ -203,7 +226,8 @@ function StaffingRow({
   department: Department;
   style: ReturnType<typeof departmentColor>;
   active: number;
-  missing: number;
+  /** Required minus active: positive to hire, negative over. */
+  gap: number;
   supervisor: Employee | null;
   people: Employee[];
   editing: boolean;
@@ -218,7 +242,8 @@ function StaffingRow({
   const options = useMemo(() => timeOptions(), []);
 
   const allDay = !!start && start === end;
-  const liveMissing = Math.max(0, (Number(required) || 0) - active);
+  const shownRequired = editing ? Number(required) || 0 : department.requiredHeadcount;
+  const shownGap = editing ? shownRequired - active : gap;
 
   function save(next: { required?: string; start?: string; end?: string; supervisorId?: string }) {
     const r = Number(next.required ?? required);
@@ -248,11 +273,11 @@ function StaffingRow({
     });
   }
 
-  const shownMissing = editing ? liveMissing : missing;
+  const hoursLabel = allDay ? "24 h" : start && end ? `${shortTime(start)} – ${shortTime(end)}` : "";
 
   return (
-    <tr className={cn("group border-b border-border/40 last:border-b-0 hover:bg-muted/30", pending && "opacity-60")}>
-      <td className="sticky left-0 z-10 bg-card py-0.5 pr-2 pl-0 group-hover:bg-muted/30">
+    <tr className={cn("group border-b border-border/40 last:border-b-0 hover:bg-brand-muted/30", pending && "opacity-60")}>
+      <td className="sticky left-0 z-10 bg-card py-0.5 pr-2 pl-0 group-hover:bg-brand-muted/30">
         <span className="flex items-center gap-2">
           <span className={cn("block h-5 w-1.5 shrink-0", style.dot)} />
           <span className="flex min-w-0 flex-col leading-tight">
@@ -261,7 +286,9 @@ function StaffingRow({
           </span>
         </span>
       </td>
-      <td className="px-2 py-0.5">
+
+      {/* Supervisor: a select while editing; otherwise a "?" that tells you who. */}
+      <td className={cn("py-0.5", editing ? "px-2" : "px-0 text-center")}>
         {editing ? (
           <select
             value={supervisorId}
@@ -292,14 +319,14 @@ function StaffingRow({
                 ))}
             </optgroup>
           </select>
-        ) : supervisor ? (
-          <span className="truncate">{displayName(supervisor)}</span>
         ) : (
-          <span className="text-warning-foreground" title="No supervisor chosen. An administrator sets it with Edit.">
-            Nobody yet
-          </span>
+          <Mark
+            tone={supervisor ? "blue" : "amber"}
+            label={supervisor ? `Supervisor: ${displayName(supervisor)}` : `No supervisor chosen for ${department.name}. An administrator picks one with Edit.`}
+          />
         )}
       </td>
+
       <td className="px-2 py-0.5 text-right tabular-nums">
         {editing ? (
           <input
@@ -309,22 +336,33 @@ function StaffingRow({
             onBlur={() => save({ required })}
             onKeyDown={(event) => event.key === "Enter" && (event.target as HTMLInputElement).blur()}
             aria-label={`People required in ${department.name}`}
-            className={cn(INPUT, "w-12 text-right font-semibold")}
+            className={cn(INPUT, "w-12 text-right font-semibold text-primary")}
           />
         ) : (
-          <span className="text-xs font-semibold">{department.requiredHeadcount}</span>
+          <span className="text-xs font-semibold text-primary">{department.requiredHeadcount}</span>
         )}
       </td>
-      <td className="px-2 py-0.5 text-right text-xs font-semibold tabular-nums">{active}</td>
-      <td className="px-2 py-0.5 text-right">
-        {shownMissing > 0 ? (
-          <span className="inline-block min-w-6 rounded-sm bg-destructive/10 px-1 text-xs font-bold text-destructive tabular-nums">{shownMissing}</span>
+      <td className="px-2 py-0.5 text-right text-xs font-bold text-success tabular-nums">{active}</td>
+
+      {/* The gap: red when short, blue with a minus when over, a quiet nought when right. */}
+      <td className={cn("px-2 py-0.5 text-right", shownGap > 0 && "bg-destructive/10", shownGap < 0 && "bg-brand-muted/60")}>
+        {shownGap > 0 ? (
+          <span className="inline-flex items-center justify-end gap-1">
+            <span className="text-sm font-black text-destructive tabular-nums">{shownGap}</span>
+            <Mark tone="red" label={`${department.name} has ${active} active and needs ${shownRequired}. ${shownGap} to hire.`} />
+          </span>
+        ) : shownGap < 0 ? (
+          <span className="inline-flex items-center justify-end gap-1">
+            <span className="text-xs font-bold text-primary tabular-nums">{shownGap}</span>
+            <Mark tone="blue" label={`${department.name} has ${active} active, ${-shownGap} more than the ${shownRequired} required.`} />
+          </span>
         ) : (
-          <span className="text-xs font-semibold text-success tabular-nums">0</span>
+          <span className="text-xs font-semibold text-success/70 tabular-nums">0</span>
         )}
       </td>
-      <td className="px-2 py-0.5">
-        {editing ? (
+
+      {editing && (
+        <td className="px-2 py-0.5">
           <span className="flex items-center gap-1">
             <select
               value={allDay ? "" : start}
@@ -378,25 +416,30 @@ function StaffingRow({
               }}
               className={cn(
                 "h-6 shrink-0 rounded-sm px-1.5 text-[0.625rem] font-semibold ring-1 transition-colors",
-                allDay ? "bg-foreground text-background ring-foreground" : "bg-card text-muted-foreground ring-foreground/15 hover:bg-muted"
+                allDay ? "bg-primary text-primary-foreground ring-primary" : "bg-card text-muted-foreground ring-foreground/15 hover:bg-muted"
               )}
             >
               24h
             </button>
             {pending && <Loader2 className="size-3 animate-spin text-muted-foreground" />}
           </span>
-        ) : runsAllDay(department) ? (
-          <span className="font-medium">Around the clock</span>
-        ) : department.usualStart && department.usualEnd ? (
-          <span className="tabular-nums">
-            {displayTime(department.usualStart)} – {displayTime(department.usualEnd)}
-          </span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
-      </td>
+        </td>
+      )}
+
       <td className="px-1 py-0.5">
-        <Timeline.Bar start={start || null} end={end || null} className={style.dot} />
+        <Timeline.Bar
+          start={start || null}
+          end={end || null}
+          className={style.soft}
+          label={hoursLabel}
+          title={
+            runsAllDay({ usualStart: start || null, usualEnd: end || null })
+              ? `${department.name} runs around the clock`
+              : start && end
+                ? `${department.name} usually runs ${displayTime(start)} – ${displayTime(end)}`
+                : `${department.name}: usual hours not set`
+          }
+        />
       </td>
     </tr>
   );
@@ -422,39 +465,43 @@ function shortHour(minutes: number): string {
 
 const Timeline = {
   Header({ ticksOnly }: { ticksOnly?: boolean }) {
+    // Twelve cells, one per two hours, so every label has room: 4a 6a 8a ... 12a 2a.
+    const marks = SLOTS / 4;
     return (
-      <span
-        className="grid text-[0.5625rem] font-semibold text-muted-foreground tabular-nums"
-        style={{ gridTemplateColumns: `repeat(${SLOTS}, minmax(0, 1fr))` }}
-      >
-        {Array.from({ length: SLOTS }, (_, i) => {
-          const minutes = (ORIGIN_MINUTES + i * 30) % 1440;
-          const tick = i % 4 === 0;
+      <span className="grid text-[0.5625rem] font-semibold text-primary/70 tabular-nums" style={{ gridTemplateColumns: `repeat(${marks}, minmax(0, 1fr))` }}>
+        {Array.from({ length: marks }, (_, i) => {
+          const minutes = (ORIGIN_MINUTES + i * 120) % 1440;
           return (
-            <span key={i} className={cn("h-3.5 truncate pl-0.5", tick ? "border-l border-foreground/25" : i % 2 === 0 ? "border-l border-border/40" : "")}>
-              {tick && !ticksOnly ? shortHour(minutes) : ""}
+            <span key={i} className="h-3.5 overflow-visible border-l border-primary/25 pl-0.5 whitespace-nowrap">
+              {ticksOnly ? "" : shortHour(minutes)}
             </span>
           );
         })}
       </span>
     );
   },
-  Bar({ start, end, className }: { start: string | null; end: string | null; className: string }) {
+  Bar({ start, end, className, label, title }: { start: string | null; end: string | null; className: string; label: string; title: string }) {
     if (!start || !end) {
-      return <Ruler>{null}</Ruler>;
+      return <Ruler title={title}>{null}</Ruler>;
     }
     const a = slotOf(start);
     let b = slotOf(end);
     if (b <= a) b += SLOTS;
     const segments: [number, number][] = b > SLOTS ? [[a, SLOTS], [0, b - SLOTS]] : [[a, b]];
+    // The hours are written on the widest piece of the bar.
+    const widest = segments.reduce((best, seg) => (seg[1] - seg[0] > best[1] - best[0] ? seg : best), segments[0]);
     return (
-      <Ruler>
+      <Ruler title={title}>
         {segments.map(([from, to], i) => (
           <span
             key={i}
-            className={cn("absolute inset-y-0.5 rounded-[2px]", className)}
+            className={cn("absolute inset-y-0.5 flex items-center overflow-hidden rounded-[2px] px-1", className)}
             style={{ left: `${(from / SLOTS) * 100}%`, width: `${((to - from) / SLOTS) * 100}%` }}
-          />
+          >
+            {from === widest[0] && to === widest[1] && (
+              <span className="truncate text-[0.5625rem] font-semibold text-foreground/80 tabular-nums">{label}</span>
+            )}
+          </span>
         ))}
       </Ruler>
     );
@@ -462,12 +509,12 @@ const Timeline = {
 };
 
 /** The track a bar sits on, with the same ticks as the header so bars line up. */
-function Ruler({ children }: { children: React.ReactNode }) {
+function Ruler({ children, title }: { children: React.ReactNode; title: string }) {
   return (
-    <span className="relative block h-5 rounded-sm bg-muted/50">
+    <span title={title} className="relative block h-5 rounded-sm bg-brand-muted/30">
       <span className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${SLOTS}, minmax(0, 1fr))` }}>
         {Array.from({ length: SLOTS }, (_, i) => (
-          <span key={i} className={cn(i % 4 === 0 && i > 0 && "border-l border-foreground/10")} />
+          <span key={i} className={cn(i % 4 === 0 && i > 0 && "border-l border-primary/10")} />
         ))}
       </span>
       {children}
@@ -475,24 +522,70 @@ function Ruler({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * A small "?" that explains itself when tapped as well as when hovered, since
+ * half the plant reads this on an iPad. Blue for information, amber for
+ * something not set, red for a gap.
+ */
+function Mark({ tone, label }: { tone: "blue" | "amber" | "red"; label: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: PointerEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [open]);
+
+  return (
+    <span ref={ref} className="relative inline-flex">
+      <button
+        type="button"
+        title={label}
+        aria-label={label}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "inline-flex size-4 items-center justify-center rounded-sm text-[0.625rem] font-bold transition-colors",
+          tone === "blue" && "bg-brand-muted text-primary hover:bg-primary hover:text-primary-foreground",
+          tone === "amber" && "bg-warning-muted text-warning-foreground hover:bg-warning-foreground hover:text-white",
+          tone === "red" && "bg-destructive/15 text-destructive hover:bg-destructive hover:text-white"
+        )}
+      >
+        ?
+      </button>
+      {open && (
+        <span
+          role="tooltip"
+          className="absolute top-full left-1/2 z-30 mt-1 w-max max-w-56 -translate-x-1/2 rounded-sm bg-card px-2 py-1 text-left text-[0.6875rem] font-normal text-foreground shadow-lg ring-1 ring-foreground/15 whitespace-normal"
+        >
+          {label}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function Th({ children, right, className }: { children?: React.ReactNode; right?: boolean; className?: string }) {
   return (
-    <th className={cn("border-b border-border px-2 py-1 text-left text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase", right && "text-right", className)}>
+    <th className={cn("border-b border-primary/15 px-2 py-1 text-left text-[0.5625rem] font-semibold tracking-wider text-primary uppercase", right && "text-right", className)}>
       {children}
     </th>
   );
 }
 
-function Big({ label, value, hint, warn }: { label: string; value: string; hint?: string; warn?: boolean }) {
+function Big({ label, value, tone }: { label: string; value: string; tone: "blue" | "green" | "red" }) {
   return (
     <span className="flex items-baseline gap-1">
-      <span className={cn("text-lg font-bold tabular-nums", warn && "text-destructive")}>{value}</span>
-      <span className="flex items-center gap-1 text-[0.625rem] text-muted-foreground">
-        {label}
-        {hint && <Hint text={hint} />}
+      <span className={cn("text-lg font-bold tabular-nums", tone === "blue" && "text-primary", tone === "green" && "text-success", tone === "red" && "text-destructive")}>
+        {value}
       </span>
+      <span className="text-[0.625rem] text-muted-foreground">{label}</span>
     </span>
   );
 }
 
-const INPUT = "h-6 w-full rounded-sm bg-card px-1.5 text-[0.6875rem] ring-1 ring-foreground/15 focus:ring-primary focus:outline-none";
+const INPUT = "h-6 w-full rounded-sm bg-card px-1.5 text-[0.6875rem] ring-1 ring-primary/25 focus:ring-primary focus:outline-none";

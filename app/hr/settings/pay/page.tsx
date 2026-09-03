@@ -16,12 +16,16 @@ export default async function HrPaySettingsPage() {
 
   return (
     <PageShell
-      breadcrumbs={[{ label: "HR" }, { label: "Settings" }, { label: "Pay rules" }]}
+      breadcrumbs={[{ label: "HR" }, { label: "Configuration" }, { label: "Pay rules" }]}
       meta={<span>Every cost in HR is worked out from these</span>}
     >
-      <div className="px-3 pt-3 sm:px-4">
-        <HrSetupBanner missingTable={data.missingTable} missingRules={data.missingRules} noDepartments={false} />
-      </div>
+      <HrSetupBanner
+        missingTable={data.missingTable}
+        missingRules={data.missingRules}
+        missingAbsences={data.missingAbsences}
+        noDepartments={false}
+        padded
+      />
       <PaySettingsForm settings={data.settings} canEdit={access.isAdmin && !data.missingTable} />
     </PageShell>
   );

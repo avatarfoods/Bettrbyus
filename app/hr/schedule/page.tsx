@@ -59,7 +59,7 @@ export default async function HrSchedulePage({
 
   const departments = visibleDepartments(access, data.departments.filter((d) => d.active));
   const department = departments.find((d) => d.id === params.dept) ?? departments[0] ?? null;
-  const departmentIndex = department ? data.departments.indexOf(department) : 0;
+  const departmentIndex = department?.colorIndex ?? 0;
 
   // The span and its dates.
   const span: Span = params.span === "day" ? "day" : params.span === "range" ? "range" : "week";
@@ -110,7 +110,7 @@ export default async function HrSchedulePage({
           name: dept.name,
           line: dept.line,
           colorKey: dept.color,
-          colorIndex: data.departments.indexOf(dept),
+          colorIndex: dept.colorIndex,
           status: entry?.status ?? "none",
           scheduleId: entry?.status === "approved" ? entry.scheduleId : null,
           recipients: members.filter((e) => e.personalEmail || e.email).length,
@@ -211,6 +211,7 @@ export default async function HrSchedulePage({
         <HrSetupBanner
           missingTable={data.missingTable}
           missingRules={data.missingRules}
+          missingAbsences={data.missingAbsences}
           noDepartments={!data.missingTable && data.departments.filter((d) => d.active).length === 0}
         />
 

@@ -16,12 +16,16 @@ export default async function HrDepartmentsPage() {
 
   return (
     <PageShell
-      breadcrumbs={[{ label: "HR" }, { label: "Settings" }, { label: "Departments" }]}
+      breadcrumbs={[{ label: "HR" }, { label: "Configuration" }, { label: "Departments" }]}
       meta={<span>{data.departments.length} departments</span>}
     >
-      <div className="px-3 pt-3 sm:px-4">
-        <HrSetupBanner missingTable={data.missingTable} missingRules={data.missingRules} noDepartments={false} />
-      </div>
+      <HrSetupBanner
+        missingTable={data.missingTable}
+        missingRules={data.missingRules}
+        missingAbsences={data.missingAbsences}
+        noDepartments={false}
+        padded
+      />
       <HrDepartmentsSettings
         departments={data.departments}
         employees={data.employees}

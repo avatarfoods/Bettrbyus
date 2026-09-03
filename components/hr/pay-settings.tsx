@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { savePaySettings } from "@/lib/hr/actions";
 import { burdenPct, money, weekCost, type PaySettings, type SalaryRule } from "@/lib/hr/model";
-import { Hint, Notice, primaryButton, useConfigRunner } from "@/components/production/settings/shared";
+import { Switch, SwitchThumb } from "@/components/ui/switch";
+import { Hint, Notice, SettingsPage, primaryButton, useConfigRunner } from "@/components/production/settings/shared";
 import { cn } from "@/lib/utils";
 
 /**
@@ -43,18 +44,16 @@ export function PaySettingsForm({ settings, canEdit }: { settings: PaySettings; 
 
   const set = (key: keyof FormState) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((prev) => ({ ...prev, [key]: event.target.value }));
-  const toggle = (key: "dailyOvertimeEnabled") => (event: React.ChangeEvent<HTMLInputElement>) =>
-    setForm((prev) => ({ ...prev, [key]: event.target.checked }));
 
   return (
-    <div className="flex flex-col gap-3 px-3 py-3 sm:px-4">
+    <SettingsPage intro="The rules every cost on the dashboard and the schedule is worked out by: when overtime starts, how salaried people are counted, and what the company pays on top of wages. The worked example on the right recomputes as you type.">
       <Notice notice={notice} />
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="flex flex-col gap-3">
           <Section
             title="Overtime"
-            hint="When an hour is paid at the higher rate. Weekly applies to every hourly person. Daily is Nevada's over-8-in-a-day rule for lower earners; it is off because everyone signed a 4 x 10 agreement."
+            hint={`When an hour is paid at the higher rate. Weekly applies to every hourly person. Daily is Nevada's over-8-in-a-day rule for lower earners${form.dailyOvertimeEnabled ? "; it is on." : "; it is off because everyone signed a 4 x 10 agreement."}`}
           >
             <Row label="Weekly, after">
               <Num value={form.weeklyOvertimeAfter} onChange={set("weeklyOvertimeAfter")} unit="hours" disabled={!canEdit} />
@@ -63,7 +62,17 @@ export function PaySettingsForm({ settings, canEdit }: { settings: PaySettings; 
               <Num value={form.overtimeMultiplier} onChange={set("overtimeMultiplier")} unit="x the hourly rate" disabled={!canEdit} />
             </Row>
             <Row label="Daily rule" hint="Nevada: over 8 hours in a day is overtime for anyone earning under 1.5 x minimum wage. Leave off under a 4 x 10 agreement.">
-              <Switch checked={form.dailyOvertimeEnabled} onChange={toggle("dailyOvertimeEnabled")} disabled={!canEdit} on="On" off="Off" />
+              <span className="flex h-8 items-center gap-2 text-sm">
+                <Switch
+                  checked={form.dailyOvertimeEnabled}
+                  disabled={!canEdit}
+                  onCheckedChange={(on) => setForm((prev) => ({ ...prev, dailyOvertimeEnabled: on }))}
+                  aria-label="Daily overtime rule"
+                >
+                  <SwitchThumb />
+                </Switch>
+                <span className={form.dailyOvertimeEnabled ? "font-medium" : "text-muted-foreground"}>{form.dailyOvertimeEnabled ? "On" : "Off"}</span>
+              </span>
             </Row>
             {form.dailyOvertimeEnabled && (
               <>
@@ -133,7 +142,7 @@ export function PaySettingsForm({ settings, canEdit }: { settings: PaySettings; 
               title="Hourly at $15"
               subtitle="Five days, 6:00 to 4:00, 1 hour break"
               rows={[
-                ["Paid hours", `${hourly.hours.toFixed(0)}`],
+                ["Paid hours", `${hourly.hours.toFixed(0)} h`],
                 ["Regular", `${hourly.regularHours.toFixed(0)} h`],
                 ["Overtime", `${hourly.overtimeHours.toFixed(0)} h`],
                 ["Wages", money(hourly.wages)],
@@ -168,7 +177,7 @@ export function PaySettingsForm({ settings, canEdit }: { settings: PaySettings; 
           )}
         </aside>
       </div>
-    </div>
+    </SettingsPage>
   );
 }
 
@@ -192,7 +201,7 @@ function Section({ title, hint, children }: { title: string; hint: string; child
 function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 border-b border-border/50 py-1.5 last:border-b-0">
-      <span className="flex w-36 shrink-0 items-center gap-1 text-xs text-muted-foreground">
+      <span className="flex w-40 shrink-0 items-center gap-1 text-xs text-muted-foreground">
         {label}
         {hint && <Hint text={hint} />}
       </span>
@@ -223,27 +232,6 @@ function Num({
       />
       <span className="text-xs text-muted-foreground">{unit}</span>
     </span>
-  );
-}
-
-function Switch({
-  checked,
-  onChange,
-  disabled,
-  on,
-  off,
-}: {
-  checked: boolean;
-  onChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  disabled?: boolean;
-  on: string;
-  off: string;
-}) {
-  return (
-    <label className="flex h-8 items-center gap-2 text-sm">
-      <input type="checkbox" checked={checked} onChange={onChange} disabled={disabled} className="size-4" />
-      <span className={checked ? "font-medium" : "text-muted-foreground"}>{checked ? on : off}</span>
-    </label>
   );
 }
 

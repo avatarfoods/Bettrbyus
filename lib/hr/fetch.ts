@@ -50,6 +50,7 @@ function toDepartment(row: Row): Department {
     timecardCheck: str(row.timecard_check),
     sortOrder: num(row.sort_order) ?? 0,
     active: bool(row.active, true),
+    colorIndex: 0,
   };
 }
 
@@ -127,6 +128,8 @@ export type HrData = {
   missingTable: boolean;
   /** The rules migration has not run. */
   missingRules: boolean;
+  /** The day-types migration has not run. */
+  missingAbsences: boolean;
 };
 
 export async function fetchHrData(supabase: SupabaseClient): Promise<HrData> {
@@ -151,6 +154,7 @@ export async function fetchHrData(supabase: SupabaseClient): Promise<HrData> {
     (departments.error !== null && /could not find the table|42P01/i.test(departments.error)) ||
     (settings.error !== null && isMissingTable(settings.error));
   const missingRules = groups.error !== null && isMissingTable(groups.error);
+  const missingAbsences = absences.error !== null && isMissingTable(absences.error);
 
   const s = (settings.data ?? {}) as Row;
 
@@ -169,7 +173,7 @@ export async function fetchHrData(supabase: SupabaseClient): Promise<HrData> {
   }));
 
   return {
-    departments: departments.rows.map(toDepartment),
+    departments: departments.rows.map((row, index) => ({ ...toDepartment(row), colorIndex: index })),
     employees: employees.rows.map(toEmployee),
     settings: settings.data
       ? {
@@ -210,6 +214,7 @@ export async function fetchHrData(supabase: SupabaseClient): Promise<HrData> {
     })),
     missingTable: missing,
     missingRules,
+    missingAbsences,
   };
 }
 

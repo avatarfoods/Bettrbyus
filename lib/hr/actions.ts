@@ -26,10 +26,11 @@ export type HrResult = { ok: true } | { ok: false; message: string };
 const HR = "/hr";
 const fail = (message: string): HrResult => ({ ok: false, message });
 
-const missing = (error: { message: string; code?: string }) =>
-  isMissingTable(error)
-    ? "HR needs its migrations. Run 20260903_hr and 20260903_hr_rules in the Supabase SQL editor."
-    : error.message;
+const missing = (error: { message: string; code?: string }) => {
+  if (!isMissingTable(error)) return error.message;
+  if (/absence/i.test(error.message)) return "Off because needs the 20260903_hr_absences migration. Run it in the Supabase SQL editor.";
+  return "HR needs its migrations. Run 20260903_hr, 20260903_hr_rules, 20260903_hr_staffing, 20260903_hr_absences and 20260903_hr_arrange in the Supabase SQL editor.";
+};
 
 function revalidateAll() {
   for (const path of [
@@ -65,7 +66,7 @@ export async function importEmployees(input: {
   const supabase = await createClient();
   const profile = await getCurrentUserProfile(supabase);
   if (!profile) return fail("You are signed out");
-  if (!isAdminProfile(profile)) return fail("Only an administrator can import people");
+  if (!(await isHrAdmin(supabase, profile))) return fail("Only an administrator can import people");
 
   const { data: existing, error: deptError } = await supabase
     .from("hr_departments")
@@ -179,7 +180,7 @@ export async function saveEmployee(input: {
   const supabase = await createClient();
   const profile = await getCurrentUserProfile(supabase);
   if (!profile) return fail("You are signed out");
-  if (!isAdminProfile(profile)) return fail("Only an administrator can change a person");
+  if (!(await isHrAdmin(supabase, profile))) return fail("Only an administrator can change a person");
 
   const { error } = await supabase
     .from("hr_employees")
@@ -206,7 +207,7 @@ export async function setShowOnSchedule(input: { id: string; show: boolean }): P
   const supabase = await createClient();
   const profile = await getCurrentUserProfile(supabase);
   if (!profile) return fail("You are signed out");
-  if (!isAdminProfile(profile)) return fail("Only an administrator can change a person");
+  if (!(await isHrAdmin(supabase, profile))) return fail("Only an administrator can change a person");
   const { error } = await supabase
     .from("hr_employees")
     .update({ show_on_schedule: input.show, updated_at: new Date().toISOString() })
@@ -235,7 +236,7 @@ export async function saveDepartment(input: {
   const supabase = await createClient();
   const profile = await getCurrentUserProfile(supabase);
   if (!profile) return fail("You are signed out");
-  if (!isAdminProfile(profile)) return fail("Only an administrator can change departments");
+  if (!(await isHrAdmin(supabase, profile))) return fail("Only an administrator can change departments");
 
   const row = {
     name,
@@ -390,7 +391,7 @@ export async function saveAbsenceType(input: {
   const supabase = await createClient();
   const profile = await getCurrentUserProfile(supabase);
   if (!profile) return fail("You are signed out");
-  if (!isAdminProfile(profile)) return fail("Only an administrator can change day types");
+  if (!(await isHrAdmin(supabase, profile))) return fail("Only an administrator can change day types");
 
   const row = {
     name,
@@ -416,7 +417,7 @@ export async function deleteAbsenceType(input: { id: string }): Promise<HrResult
   const supabase = await createClient();
   const profile = await getCurrentUserProfile(supabase);
   if (!profile) return fail("You are signed out");
-  if (!isAdminProfile(profile)) return fail("Only an administrator can change day types");
+  if (!(await isHrAdmin(supabase, profile))) return fail("Only an administrator can change day types");
   const { error } = await supabase.from("hr_absence_types").delete().eq("id", input.id);
   if (error) return fail(missing(error));
   revalidateAll();
@@ -440,7 +441,7 @@ export async function saveGroup(input: {
   const supabase = await createClient();
   const profile = await getCurrentUserProfile(supabase);
   if (!profile) return fail("You are signed out");
-  if (!isAdminProfile(profile)) return fail("Only an administrator can change groups");
+  if (!(await isHrAdmin(supabase, profile))) return fail("Only an administrator can change groups");
 
   const row = {
     name,
@@ -484,7 +485,7 @@ export async function deleteGroup(input: { id: string }): Promise<HrResult> {
   const supabase = await createClient();
   const profile = await getCurrentUserProfile(supabase);
   if (!profile) return fail("You are signed out");
-  if (!isAdminProfile(profile)) return fail("Only an administrator can change groups");
+  if (!(await isHrAdmin(supabase, profile))) return fail("Only an administrator can change groups");
   const { error } = await supabase.from("hr_groups").delete().eq("id", input.id);
   if (error) return fail(missing(error));
   revalidateAll();
@@ -502,7 +503,7 @@ export async function saveApprovalChain(input: {
   const supabase = await createClient();
   const profile = await getCurrentUserProfile(supabase);
   if (!profile) return fail("You are signed out");
-  if (!isAdminProfile(profile)) return fail("Only an administrator can change who approves");
+  if (!(await isHrAdmin(supabase, profile))) return fail("Only an administrator can change who approves");
 
   const unique = [...new Set(input.employeeIds.filter(Boolean))];
 
@@ -690,6 +691,38 @@ export async function saveShifts(input: {
 }
 
 /** Signs off a floater's days in this schedule. */
+/**
+ * Clears days in your draft for a department's week: the whole week, one
+ * person's week, or one date for everyone. The rows go, so the days read OFF.
+ * Only your draft is touched - an approved week is never cleared from here;
+ * Edit copies it into a draft first, and that copy is what is cleared.
+ */
+export async function clearShifts(input: {
+  departmentId: string;
+  weekStart: string;
+  /** Only these people. Everyone when missing. */
+  employeeIds?: string[];
+  /** Only these dates. The whole week when missing. */
+  dates?: string[];
+}): Promise<HrResult & { cleared?: number }> {
+  if (!input.departmentId || !input.weekStart) return fail("Missing details");
+  const supabase = await createClient();
+  const profile = await getCurrentUserProfile(supabase);
+  if (!profile) return fail("You are signed out");
+
+  const draft = await openDraft(supabase, input.departmentId, input.weekStart, profile.id);
+  if ("error" in draft) return fail(draft.error);
+
+  let query = supabase.from("hr_shifts").delete({ count: "exact" }).eq("schedule_id", draft.id);
+  if (input.employeeIds && input.employeeIds.length > 0) query = query.in("employee_id", input.employeeIds);
+  if (input.dates && input.dates.length > 0) query = query.in("work_date", input.dates);
+  const { error, count } = await query;
+  if (error) return fail(missing(error));
+
+  revalidatePath(`${HR}/schedule`);
+  return { ok: true, cleared: count ?? 0 };
+}
+
 export async function approveFloats(input: {
   scheduleId: string;
   employeeId: string;
@@ -1070,7 +1103,7 @@ export async function setHrAccess(input: {
   const supabase = await createClient();
   const profile = await getCurrentUserProfile(supabase);
   if (!profile) return fail("You are signed out");
-  if (!isAdminProfile(profile)) return fail("Only an administrator can change HR access");
+  if (!isAdminProfile(profile)) return fail("Only a System administrator can change HR access");
   if (input.profileId === profile.id && input.level !== "admin") {
     return fail("You cannot take HR away from yourself");
   }
@@ -1092,11 +1125,22 @@ export async function savePaySettings(input: PaySettings): Promise<HrResult> {
   const supabase = await createClient();
   const profile = await getCurrentUserProfile(supabase);
   if (!profile) return fail("You are signed out");
-  if (!isAdminProfile(profile)) return fail("Only an administrator can change pay rules");
+  if (!(await isHrAdmin(supabase, profile))) return fail("Only an administrator can change pay rules");
 
-  for (const [label, value] of Object.entries(input)) {
+  const labels: Record<string, string> = {
+    weeklyOvertimeAfter: "Weekly overtime after",
+    dailyOvertimeAfter: "Daily overtime after",
+    dailyOvertimeRateCeiling: "Daily rule applies under",
+    overtimeMultiplier: "Overtime rate",
+    salaryDaysPerWeek: "Days in a week",
+    ficaPct: "FICA",
+    futaPct: "FUTA",
+    statePct: "Nevada MBT",
+    workersCompPct: "Workers' comp",
+  };
+  for (const [key, value] of Object.entries(input)) {
     if (typeof value === "number" && (!Number.isFinite(value) || value < 0)) {
-      return fail(`${label} must be zero or more`);
+      return fail(`${labels[key] ?? key} must be a number, zero or more`);
     }
   }
 

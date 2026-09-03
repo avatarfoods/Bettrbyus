@@ -13,6 +13,7 @@ import {
   ActiveDot,
   AddButton,
   EditorActions,
+  Hint,
   IconButton,
   Labelled,
   Notice,
@@ -23,7 +24,8 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * Day types: the reasons a day can be off.
+ * Off because: the reasons a day can be off - what the dropdown on the
+ * schedule card offers.
  *
  * PTO, paid holiday, unpaid holiday, furlough, sick - and whatever else the
  * plant needs. Each has a short code for the cell and the printed sheet, a
@@ -43,7 +45,7 @@ export function AbsenceSettings({ types, canEdit }: { types: AbsenceType[]; canE
         <THead
           columns={[
             { label: "", className: "w-6" },
-            { label: "Day type" },
+            { label: "Reason" },
             { label: "Code" },
             { label: "Paid" },
             { label: "Hours paid", numeric: true },
@@ -77,11 +79,11 @@ export function AbsenceSettings({ types, canEdit }: { types: AbsenceType[]; canE
                 <TD>
                   {canEdit && (
                     <span className="flex justify-end gap-1">
-                      <IconButton label="Edit day type" onClick={() => setDraft(type)}>
+                      <IconButton label="Edit reason" onClick={() => setDraft(type)}>
                         Edit
                       </IconButton>
                       <IconButton
-                        label="Delete day type"
+                        label="Delete reason"
                         danger
                         disabled={pending}
                         onClick={async () => {
@@ -104,7 +106,7 @@ export function AbsenceSettings({ types, canEdit }: { types: AbsenceType[]; canE
             );
           })}
           {types.length === 0 && (
-            <TableEmpty colSpan={8}>No day types yet. Run the 20260903_hr_absences migration to get the starting five, or add one.</TableEmpty>
+            <TableEmpty colSpan={8}>No reasons yet. Run the 20260903_hr_absences migration to get the starting five - PTO, holidays, furlough, sick - or add one.</TableEmpty>
           )}
         </TBody>
       </DataTable>
@@ -112,17 +114,21 @@ export function AbsenceSettings({ types, canEdit }: { types: AbsenceType[]; canE
       {canEdit &&
         (draft ? (
           <TypeEditor
+            key={draft.id ?? "new"}
             draft={draft}
             pending={pending}
             onCancel={() => setDraft(null)}
-            onSave={(value) => {
-              run(() => saveAbsenceType(value), "Day type saved");
-              setDraft(null);
-            }}
+            onSave={(value) =>
+              run(async () => {
+                const result = await saveAbsenceType(value);
+                if (result.ok) setDraft(null);
+                return result;
+              }, "Reason saved")
+            }
           />
         ) : (
           <AddButton onClick={() => setDraft({ name: "", code: "", paid: false, paidHours: 8, color: null, sortOrder: types.length + 1, active: true })}>
-            Add a day type
+            Add a reason
           </AddButton>
         ))}
     </SettingsPage>
@@ -186,14 +192,14 @@ function TypeEditor({
         </Labelled>
       </div>
 
-      <Labelled label="Colour" hint="How the day looks on the schedule.">
+      <ColourRow hint="How the day looks on the schedule.">
         <ColorGrid value={color} onChange={setColor} />
-      </Labelled>
+      </ColourRow>
 
       <EditorActions
         pending={pending}
         disabled={!name.trim() || !code.trim()}
-        saveLabel="Save day type"
+        saveLabel="Save reason"
         onCancel={onCancel}
         onSave={() =>
           onSave({
@@ -208,6 +214,19 @@ function TypeEditor({
           })
         }
       />
+    </div>
+  );
+}
+
+/** Like Labelled, but not a label: a label would click the first swatch for you. */
+function ColourRow({ hint, children }: { hint: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-3 border-b border-border/50 py-1 last:border-b-0">
+      <span className="flex w-40 shrink-0 items-center gap-1 pt-1.5 text-xs text-muted-foreground">
+        <span className="min-w-0">Colour</span>
+        <Hint text={hint} />
+      </span>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }

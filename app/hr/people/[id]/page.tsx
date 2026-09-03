@@ -55,6 +55,7 @@ export default async function HrPersonPage({ params }: { params: Promise<{ id: s
         employee={employee}
         departments={data.departments.filter((d) => d.active || d.id === employee.departmentId)}
         canEdit={access.isAdmin && !data.missingTable}
+        seesCost={access.seesCost}
       />
     </PageShell>
   );

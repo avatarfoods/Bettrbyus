@@ -49,6 +49,7 @@ export default async function HrDashboardPage({
         <HrSetupBanner
           missingTable={data.missingTable}
           missingRules={data.missingRules}
+          missingAbsences={data.missingAbsences}
           noDepartments={!data.missingTable && data.departments.filter((d) => d.active).length === 0}
         />
         {access.blocked ? (

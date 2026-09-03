@@ -171,7 +171,6 @@ export function WeekControls({
   const [open, setOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
 
   const schedules = week?.schedules ?? [];
   const viewing = week?.viewing ?? null;
@@ -220,10 +219,9 @@ export function WeekControls({
       cancelLabel: "Cancel",
     });
     if (!ok) return;
-    setError(null);
     startTransition(async () => {
       const result = await approveSchedule({ scheduleId: schedule.id });
-      if (!result.ok) setError(result.message);
+      if (!result.ok) await confirm({ title: result.message, cancelLabel: false });
       else if (result.complete) go({ view: null, edit: null });
       router.refresh();
     });
@@ -238,11 +236,10 @@ export function WeekControls({
       cancelLabel: "Cancel",
     });
     if (!ok) return;
-    setError(null);
     startTransition(async () => {
       // The Monday, not `from` - in Day span `from` is the day being looked at.
       const result = await copyWeekIntoDraft({ departmentId, weekStart: weekStartOf(from), fromScheduleId: source.id, shiftDays });
-      if (!result.ok) setError(result.message);
+      if (!result.ok) await confirm({ title: result.message, cancelLabel: false });
       else go({ edit: "1", view: null });
       router.refresh();
     });
@@ -260,10 +257,9 @@ export function WeekControls({
       tone: "danger",
     });
     if (!ok) return;
-    setError(null);
     startTransition(async () => {
       const result = await discardSchedule({ scheduleId: schedule.id });
-      if (!result.ok) setError(result.message);
+      if (!result.ok) await confirm({ title: result.message, cancelLabel: false });
       else go({ view: null, edit: null });
       router.refresh();
     });
@@ -283,7 +279,8 @@ export function WeekControls({
           aria-label="Department"
           title="✓ approved · ✎ draft, not approved yet · ○ not started"
           className={cn(
-            "h-7 max-w-56 rounded-sm bg-card px-1.5 text-xs font-semibold ring-1 focus:ring-primary focus:outline-none",
+            // Wide enough for the longest department and its standing; only a phone screen caps it.
+            "h-7 max-w-[calc(100vw-3rem)] rounded-sm bg-card px-1.5 pr-6 text-xs font-semibold ring-1 focus:ring-primary focus:outline-none",
             statusOf[departmentId] === "approved"
               ? "ring-success/60"
               : statusOf[departmentId] === "draft"
@@ -423,7 +420,7 @@ export function WeekControls({
           type="button"
           disabled={pending}
           onClick={() => sign(viewing)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-success px-3 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
+          className="inline-flex h-7 items-center gap-1.5 rounded-sm bg-success px-3 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
         >
           {pending ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
           {chain.length === 0 || approvalState(chain, viewing.approvals).done + 1 >= chain.length
@@ -458,6 +455,7 @@ export function WeekControls({
       )}
       {week && (
         <SendDialog
+          key={`${departmentId}|${weekStart}`}
           open={sendOpen}
           onClose={() => setSendOpen(false)}
           options={sendOptions}
@@ -564,7 +562,6 @@ export function WeekControls({
               </>
             )}
 
-            {error && <p className="bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">{error}</p>}
           </div>
         </>
       )}

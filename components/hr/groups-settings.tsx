@@ -6,6 +6,7 @@ import { deleteGroup, saveGroup } from "@/lib/hr/actions";
 import { displayName, isSchedulable, type Department, type Employee, type Group } from "@/lib/hr/model";
 import { departmentColor } from "@/lib/hr/colors";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { Switch, SwitchThumb } from "@/components/ui/switch";
 import { DataTable, TBody, TD, THead, TR, TableEmpty } from "@/components/ui/data-table";
 import {
   AddButton,
@@ -114,15 +115,19 @@ export function GroupsSettings({
       {canEdit &&
         (draft ? (
           <GroupEditor
+            key={draft.id ?? "new"}
             draft={draft}
             departments={departments}
             employees={employees}
             pending={pending}
             onCancel={() => setDraft(null)}
-            onSave={(value) => {
-              run(() => saveGroup(value), "Group saved");
-              setDraft(null);
-            }}
+            onSave={(value) =>
+              run(async () => {
+                const result = await saveGroup(value);
+                if (result.ok) setDraft(null);
+                return result;
+              }, "Group saved")
+            }
           />
         ) : (
           <AddButton onClick={() => setDraft({ name: "", seesAllDepartments: false, seesCost: false, sortOrder: groups.length + 1, departmentIds: [], memberIds: [] })}>
@@ -173,7 +178,9 @@ function GroupEditor({
         </Labelled>
         <Labelled label="Departments" hint="Every department, or each member's own plus the ones ticked below.">
           <span className="flex h-8 items-center gap-2 text-sm">
-            <input type="checkbox" checked={seesAll} onChange={(event) => setSeesAll(event.target.checked)} className="size-4" />
+            <Switch checked={seesAll} onCheckedChange={setSeesAll} aria-label="Sees every department">
+              <SwitchThumb />
+            </Switch>
             {seesAll ? "Every department" : "Own department plus the ticked ones"}
           </span>
         </Labelled>
@@ -186,9 +193,9 @@ function GroupEditor({
             <Hint text="Shared departments everyone in this group can look at, on top of their own. Stewarding and Quality Control are the usual ones." />
           </p>
           <div className="flex flex-wrap gap-1.5">
-            {departments.map((d, index) => {
+            {departments.map((d) => {
               const on = departmentIds.includes(d.id);
-              const look = departmentColor(d.color, index);
+              const look = departmentColor(d.color, d.colorIndex);
               return (
                 <button
                   key={d.id}
@@ -219,6 +226,7 @@ function GroupEditor({
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Find a person…"
+          aria-label="Find a person"
           className={cn(inputClass, "mb-1 max-w-xs")}
         />
         <div className="grid max-h-56 gap-x-4 overflow-y-auto rounded-sm bg-surface-sunk p-2 sm:grid-cols-2 lg:grid-cols-3">

@@ -315,7 +315,7 @@ export const APPS: AppDefinition[] = [
           { group: "People", label: "Departments", href: "/hr/settings/departments", icon: Building2 },
           { group: "People", label: "Groups", href: "/hr/settings/groups", icon: Users },
           { group: "Approval", label: "Approval chain", href: "/hr/settings/approval", icon: ListChecks },
-          { group: "Schedule", label: "Day types", href: "/hr/settings/absences", icon: CalendarDays },
+          { group: "Schedule", label: "Off because", href: "/hr/settings/absences", icon: CalendarDays },
           { group: "Cost", label: "Pay rules", href: "/hr/settings/pay", icon: Calculator },
           // Who may open HR lives with every other access right, in Settings > Users.
         ],

@@ -57,12 +57,12 @@ export function ApprovalSettings({
           ]}
         />
         <TBody>
-          {departments.map((department, index) => {
+          {departments.map((department) => {
             const chain = steps.filter((s) => s.departmentId === department.id).sort((a, b) => a.step - b.step);
             return (
               <TR key={department.id}>
                 <TD>
-                  <span aria-hidden className={cn("block h-4 w-1.5", departmentColor(department.color, index).dot)} />
+                  <span aria-hidden className={cn("block h-4 w-1.5", departmentColor(department.color, department.colorIndex).dot)} />
                 </TD>
                 <TD strong>{department.name}</TD>
                 <TD>
@@ -106,10 +106,13 @@ export function ApprovalSettings({
           initial={steps.filter((s) => s.departmentId === editing).sort((a, b) => a.step - b.step).map((s) => s.employeeId)}
           pending={pending}
           onCancel={() => setEditing(null)}
-          onSave={(employeeIds) => {
-            run(() => saveApprovalChain({ departmentId: editing, employeeIds }), "Approval chain saved");
-            setEditing(null);
-          }}
+          onSave={(employeeIds) =>
+            run(async () => {
+              const result = await saveApprovalChain({ departmentId: editing, employeeIds });
+              if (result.ok) setEditing(null);
+              return result;
+            }, "Approval chain saved")
+          }
         />
       )}
     </SettingsPage>
@@ -168,6 +171,7 @@ function ChainEditor({
             </span>
             <select
               value={id}
+              aria-label={`Step ${index + 1}`}
               onChange={(event) => setIds(ids.map((v, i) => (i === index ? event.target.value : v)))}
               className={cn(inputClass, "max-w-xs")}
             >

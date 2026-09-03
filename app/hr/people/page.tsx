@@ -58,18 +58,25 @@ export default async function HrPeoplePage() {
         </span>
       }
     >
-      <div className="px-3 pt-3 sm:px-4">
-        <HrSetupBanner missingTable={data.missingTable} missingRules={data.missingRules} noDepartments={false} />
-        {access.blocked && (
+      <HrSetupBanner
+        missingTable={data.missingTable}
+        missingRules={data.missingRules}
+        missingAbsences={data.missingAbsences}
+        noDepartments={false}
+        padded
+      />
+      {access.blocked && (
+        <div className="px-3 pt-3 sm:px-4">
           <p className="rounded-sm bg-warning-muted px-3 py-2 text-sm text-warning-foreground">
             HR is not open to your login. Ask an administrator to change your HR access.
           </p>
-        )}
-      </div>
+        </div>
+      )}
       <PeopleList
         employees={employees}
         departments={access.seesAll ? data.departments.filter((d) => d.active) : departments}
         canEdit={access.isAdmin && !data.missingTable}
+        seesCost={access.seesCost}
       />
     </PageShell>
   );

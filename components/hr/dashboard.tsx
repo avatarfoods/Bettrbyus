@@ -5,10 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Clock,
   DollarSign,
   GripVertical,
   LayoutGrid,
@@ -21,6 +19,7 @@ import {
   DAY_NAMES,
   addDays,
   dateRange,
+  daySpan,
   displayName,
   displayTime,
   isOff,
@@ -46,6 +45,7 @@ import { beginDrag, dataOf, moveItem } from "@/components/hr/drag";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Hint } from "@/components/production/settings/shared";
 import { StaffingTab } from "@/components/hr/staffing-tab";
+import { PayrollTable } from "@/components/hr/payroll-table";
 import { cn } from "@/lib/utils";
 
 /**
@@ -169,7 +169,7 @@ export function HrDashboard({
     [deptChoices, view.dept]
   );
 
-  const look = (d: Department) => departmentColor(d.color, allDepartments.indexOf(d));
+  const look = (d: Department) => departmentColor(d.color, d.colorIndex);
   const empById = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
 
   /** Everything worked out once per department, for the range. */
@@ -188,6 +188,10 @@ export function HrDashboard({
       const deptShifts = deptSchedules.flatMap((s) => shiftsBySchedule.get(s.id) ?? []);
 
       // Cost is per person per week, then summed - salary is a weekly thing.
+      // Each person's week is then spread over the days they worked (a paid
+      // day off counts) in proportion to hours, so the days add up to the
+      // week exactly and a salaried person's pay lands on their days.
+      const dayCost = new Map<string, number>();
       const costs = deptSchedules.flatMap((schedule) => {
         const mine = shiftsBySchedule.get(schedule.id) ?? [];
         const byEmployee = new Map<string, Shift[]>();
@@ -198,9 +202,22 @@ export function HrDashboard({
         }
         return [...byEmployee.entries()].map(([id, list]) => {
           const person = empById.get(id);
-          return person
+          const cost = person
             ? weekCost(person, list, settings, department.breakHours, paidAbsence)
             : weekCost({ id, payType: "hourly", payRate: null }, list, settings, department.breakHours, paidAbsence);
+          const weights = list.map((s) => ({
+            date: s.workDate,
+            weight: !isOff(s) ? shiftHours(s, department.breakHours) : s.absenceTypeId ? (paidAbsence.get(s.absenceTypeId) ?? 0) : 0,
+          }));
+          let sum = weights.reduce((a, w) => a + w.weight, 0);
+          if (sum <= 0 && cost.total > 0) {
+            for (const w of weights) w.weight = 1;
+            sum = weights.length;
+          }
+          if (sum > 0) {
+            for (const w of weights) dayCost.set(w.date, (dayCost.get(w.date) ?? 0) + (cost.total * w.weight) / sum);
+          }
+          return cost;
         });
       });
       const total = sumCosts(costs);
@@ -215,6 +232,7 @@ export function HrDashboard({
           shifts: onDay,
           people: onDay.length,
           hours: onDay.reduce((sum, s) => sum + shiftHours(s, department.breakHours), 0),
+          cost: dayCost.get(date) ?? 0,
         };
       });
 
@@ -297,13 +315,6 @@ export function HrDashboard({
   const dayHours = rows.reduce((sum, row) => sum + (row.perDay[dayIndex]?.hours ?? 0), 0);
 
   const deptRow = dept ? allRows.find((row) => row.department.id === dept) ?? null : null;
-
-  const rangeLabel =
-    mode === "day"
-      ? longDate(picked)
-      : mode === "week"
-        ? `Week of ${longDate(from)}`
-        : `${longDate(from)} — ${longDate(to)}`;
 
   return (
     <div className="flex min-h-full flex-col gap-2.5">
@@ -442,73 +453,66 @@ export function HrDashboard({
         <Tab active={tab === "overview"} onClick={() => setTab("overview")} icon={<LayoutGrid />} label="Overview" />
         <Tab active={tab === "staffing"} onClick={() => setTab("staffing")} icon={<Users />} label="Staffing" />
         {seesCost && <Tab active={tab === "cost"} onClick={() => setTab("cost")} icon={<DollarSign />} label="Cost" />}
-        <span className="ml-auto flex flex-wrap items-center gap-2 pb-1 text-xs">
-          <span className="text-sm font-bold">{rangeLabel}</span>
-          <span
-            className={cn(
-              "inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[0.625rem] font-bold tracking-wider uppercase",
-              plant.approved === rows.length && rows.length > 0 ? "bg-success text-white" : "bg-warning-muted text-warning-foreground"
-            )}
-          >
-            {plant.approved === rows.length && rows.length > 0 ? <CheckCircle2 className="size-3" /> : <Clock className="size-3" />}
-            {plant.approved} of {rows.length} approved
-          </span>
-          {tab === "overview" && canArrange && !day && !dept && rows.length > 1 && (
-            arranging ? (
-              <>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={saveArrangement}
-                  className="inline-flex h-7 items-center gap-1.5 rounded-sm bg-success px-2.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
-                >
-                  {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-                  Save order
-                </button>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={stopArranging}
-                  className="inline-flex h-7 items-center rounded-sm px-2 text-xs text-muted-foreground hover:bg-muted"
-                >
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={startArranging}
-                title="Drag departments into the order you want. It holds everywhere: here, staffing, the schedule's list."
-                className="inline-flex h-7 items-center gap-1.5 rounded-sm bg-card px-2.5 text-xs font-semibold ring-1 ring-foreground/15 hover:bg-muted"
-              >
-                <GripVertical className="size-3.5" />
-                Arrange
-              </button>
-            )
-          )}
-        </span>
       </div>
 
       {tab === "staffing" ? (
-        <StaffingTab departments={rows.map((r) => r.department)} allDepartments={allDepartments} employees={allPeople} canEdit={canEditStaffing} />
+        <StaffingTab departments={rows.map((r) => r.department)} employees={allPeople} canEdit={canEditStaffing} />
       ) : tab === "cost" ? (
-        <CostTab rows={rows} plant={plant} look={look} from={from} to={to} settings={settings} />
+        <CostTab rows={rows} plant={plant} look={look} from={from} to={to} days={days} today={today} settings={settings} people={allPeople} />
       ) : deptRow ? (
         <DepartmentPage row={deptRow} />
       ) : mode === "day" ? (
         <DayPage />
       ) : (
         <>
-          {/* What is being looked at, said once: the whole span. */}
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-            <Total value={plant.people} unit={`of ${plant.headcount} scheduled`} />
-            <Total value={Math.round(plant.hours)} unit="hours" />
-            {plant.overtime > 0.01 && (
-              <span className="text-xs font-semibold text-warning-foreground tabular-nums">{plant.overtime.toFixed(1)} h overtime</span>
-            )}
-            <span className="ml-auto flex items-center gap-1 text-[0.6875rem] text-muted-foreground">
-              {arranging ? "Drag a department by its grip, then Save order" : "Tap a number to open a department, a date to open the day"}
-              <Hint text="A number under a date opens that department alone: its people down, the dates across, that day lit up. A date at the top opens the whole plant for that day, by shift. Back returns here." />
+          {/* What is being looked at, said once: the whole span, in the same card every tab starts with. */}
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-sm bg-card px-3 py-2 ring-1 ring-foreground/10">
+            <Big label="scheduled" value={`${plant.people} of ${plant.headcount}`} tone="blue" />
+            <Big label="hours" value={String(Math.round(plant.hours))} tone="green" />
+            {plant.overtime > 0.01 && <Big label="overtime" value={`${plant.overtime.toFixed(1)} h`} warn />}
+            <Big
+              label="approved"
+              value={`${plant.approved} of ${rows.length}`}
+              tone={plant.approved === rows.length && rows.length > 0 ? "green" : "amber"}
+            />
+            <span className="ml-auto flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1 text-[0.6875rem] text-muted-foreground">
+                {arranging ? "Drag a department by its grip, then Save order" : "Tap a number to open a department, a date to open the day"}
+                <Hint text="A number under a date opens that department alone: its people down, the dates across, that day lit up. A date at the top opens the whole plant for that day, by shift. Back returns here." />
+              </span>
+              {canArrange && rows.length > 1 && (
+                arranging ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={saveArrangement}
+                      className="inline-flex h-6 items-center gap-1 rounded-sm bg-success px-2 text-[0.6875rem] font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                    >
+                      {pending ? <Loader2 className="size-3 animate-spin" /> : <Save className="size-3" />}
+                      Save order
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={stopArranging}
+                      className="inline-flex h-6 items-center rounded-sm px-2 text-[0.6875rem] text-muted-foreground hover:bg-muted"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={startArranging}
+                    title="Drag departments into the order you want. It holds everywhere: here, staffing, the schedule's list."
+                    className="inline-flex h-6 items-center gap-1 rounded-sm bg-card px-2 text-[0.6875rem] font-semibold ring-1 ring-foreground/15 hover:bg-muted"
+                  >
+                    <GripVertical className="size-3" />
+                    Arrange
+                  </button>
+                )
+              )}
             </span>
           </div>
 
@@ -530,11 +534,11 @@ export function HrDashboard({
   function DepartmentTable() {
     return (
       <div className={cn("overflow-x-auto rounded-sm bg-card ring-1 ring-foreground/10", arranging && "select-none [-webkit-touch-callout:none] ring-2 ring-primary/40")}>
-        <table className="w-full border-collapse text-sm" style={{ minWidth: `${28 + days.length * 3.5}rem` }}>
+        <table className="w-full border-collapse text-sm" style={{ minWidth: `${22 + days.length * 5}rem` }}>
           <thead>
-            <tr className="bg-surface-sunk">
-              <th className="sticky left-0 z-10 bg-surface-sunk px-3 py-1.5 text-left text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">Department</th>
-              <th className="px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">People</th>
+            <tr className="bg-brand-muted">
+              <th className="sticky left-0 z-10 w-40 bg-brand-muted px-3 py-1.5 text-left text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">Department</th>
+              <th className="px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">People</th>
               {days.map((date, i) => {
                 const isToday = date === today;
                 return (
@@ -556,12 +560,34 @@ export function HrDashboard({
                   </th>
                 );
               })}
-              <th className="border-l border-border px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">Hours</th>
+              <th className="border-l border-border px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">Hours</th>
               <th className="w-8" />
             </tr>
           </thead>
           <tbody>
-            {orderedRows.map(({ department, home, approvedWeeks, weeksInRange, total, peopleScheduled, perDay }) => {
+            {groupByLine(orderedRows).flatMap((group) => [
+              <tr key={`line-${group.line}`} className="border-y border-primary/15 bg-brand-muted/40">
+                <td className="sticky left-0 z-10 bg-brand-muted/40 px-3 py-0.5 text-[0.5625rem] font-bold tracking-wider text-primary uppercase">
+                  {group.line}
+                </td>
+                <td className="px-2 py-0.5 text-right text-[0.625rem] font-semibold text-primary tabular-nums">
+                  {group.rows.reduce((sum, r) => sum + r.peopleScheduled, 0)}
+                  <span className="font-normal text-primary/60"> / {group.rows.reduce((sum, r) => sum + r.home.length, 0)}</span>
+                </td>
+                {days.map((date, i) => {
+                  const count = group.rows.reduce((sum, r) => sum + (r.perDay[i]?.people ?? 0), 0);
+                  return (
+                    <td key={date} className="border-l border-primary/10 px-1 py-0.5 text-center text-[0.625rem] font-semibold text-primary tabular-nums">
+                      {count > 0 ? count : <span className="text-primary/30">—</span>}
+                    </td>
+                  );
+                })}
+                <td className="border-l border-primary/10 px-2 py-0.5 text-right text-[0.625rem] font-semibold text-primary tabular-nums">
+                  {Math.round(group.rows.reduce((sum, r) => sum + r.total.hours, 0)) || ""}
+                </td>
+                <td />
+              </tr>,
+              ...group.rows.map(({ department, home, approvedWeeks, weeksInRange, total, peopleScheduled, perDay }) => {
               const style = look(department);
               const isDrop = arranging && dropOn === department.id;
               return (
@@ -596,13 +622,12 @@ export function HrDashboard({
                         <span className={cn("block h-7 w-1.5 shrink-0", style.dot)} />
                         <span className="flex min-w-0 flex-col leading-tight">
                           <span className="truncate text-xs font-semibold">{department.name}</span>
-                          <span className="flex items-center gap-1 text-[0.5625rem] text-muted-foreground">
-                            {department.line}
+                          <span className="flex min-w-0 items-center gap-1 truncate text-[0.5625rem] text-muted-foreground">
                             <span
                               aria-hidden
-                              className={cn("inline-block size-1.5 rounded-[1px]", approvedWeeks >= weeksInRange ? "bg-success" : "bg-warning-foreground")}
+                              className={cn("inline-block size-1.5 shrink-0 rounded-[1px]", approvedWeeks >= weeksInRange ? "bg-success" : "bg-warning-foreground")}
                             />
-                            {approvedWeeks >= weeksInRange ? "approved" : approvedWeeks === 0 ? "not approved" : `${approvedWeeks} of ${weeksInRange} weeks`}
+                            {approvedWeeks >= weeksInRange ? "approved" : approvedWeeks === 0 ? "not approved" : `${approvedWeeks} of ${weeksInRange} wk`}
                           </span>
                         </span>
                       </button>
@@ -611,20 +636,15 @@ export function HrDashboard({
                   <td className="px-2 py-1 text-right text-xs tabular-nums">
                     <span className="font-semibold">{peopleScheduled}</span>
                     <span className="text-muted-foreground"> / {home.length}</span>
-                    {/* How much of the department is in, as a bar. */}
-                    <span className="mt-0.5 block h-1 w-full rounded-sm bg-muted">
-                      <span className={cn("block h-1 rounded-sm", style.dot)} style={{ width: `${home.length ? Math.min(100, (peopleScheduled / home.length) * 100) : 0}%` }} />
-                    </span>
                   </td>
                   {perDay.map((d) => (
                     <td
                       key={d.date}
                       title={d.hours > 0 ? `${d.hours.toFixed(1)} hours` : undefined}
                       className={cn(
-                        "border-l border-border/60 px-1 py-1 text-center text-xs tabular-nums",
+                        "border-l border-border/60 p-0.5 text-center text-xs tabular-nums",
                         isWeekend(d.date) && "bg-surface-sunk/60",
-                        d.date === today && "bg-brand-muted/50",
-                        d.people === 0 && "text-muted-foreground/40"
+                        d.date === today && "bg-brand-muted/50"
                       )}
                     >
                       {d.people > 0 ? (
@@ -634,12 +654,15 @@ export function HrDashboard({
                           // The number opens the department with this day lit up.
                           onClick={() => go(from, to, d.date, span, department.id)}
                           title={`${department.name} on ${longDate(d.date)}: who is in`}
-                          className={cn("inline-block min-w-6 rounded-sm px-1 font-semibold hover:ring-1 hover:ring-primary", style.tint)}
+                          className={cn("flex w-full flex-col items-center rounded-sm px-1 py-0.5 leading-tight hover:ring-1 hover:ring-primary", style.tint)}
                         >
-                          {d.people}
+                          <span className="text-xs font-bold whitespace-nowrap">
+                            {d.people} <span className="text-[0.625rem] font-medium">{d.people === 1 ? "person" : "people"}</span>
+                          </span>
+                          <span className="text-[0.5625rem] font-medium text-foreground/70 whitespace-nowrap">{daySpan(d.shifts)}</span>
                         </button>
                       ) : (
-                        "—"
+                        <span className="block py-1 text-[0.625rem] font-semibold tracking-wider text-muted-foreground/40">OFF</span>
                       )}
                     </td>
                   ))}
@@ -656,11 +679,12 @@ export function HrDashboard({
                   </td>
                 </tr>
               );
-            })}
+            }),
+            ])}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-t-foreground/20 bg-surface-sunk text-xs">
-              <td className="sticky left-0 z-10 bg-surface-sunk px-3 py-1 text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+            <tr className="border-t-2 border-t-success/40 bg-success/10 text-xs">
+              <td className="sticky left-0 z-10 bg-success/10 px-3 py-1 text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
                 {view.line || view.dept ? "Selection" : "Whole plant"}
               </td>
               <td className="px-2 py-1 text-right font-semibold tabular-nums">
@@ -724,7 +748,7 @@ export function HrDashboard({
                   <ul className="flex flex-col">
                     {groupByShift(d.shifts).map((group, index) => (
                       <li key={`${group.start}-${group.end}`} className="border-b border-border/40 last:border-b-0">
-                        <p className="flex items-baseline gap-2 bg-surface-sunk py-0.5 pr-2 pl-3 text-[0.625rem]">
+                        <p className="flex items-baseline gap-2 bg-brand-muted/40 py-0.5 pr-2 pl-3 text-[0.625rem]">
                           <span className="font-semibold tracking-wider text-muted-foreground uppercase">{ordinal(index)} shift</span>
                           <span className="font-bold tabular-nums">
                             {displayTime(group.start)}
@@ -823,8 +847,8 @@ export function HrDashboard({
         <div className="overflow-x-auto rounded-sm bg-card ring-1 ring-foreground/10">
           <table className="w-full border-collapse text-xs" style={{ minWidth: `${14 + days.length * 6}rem` }}>
             <thead>
-              <tr className="bg-surface-sunk">
-                <th className="sticky left-0 z-10 w-44 bg-surface-sunk px-2 py-1.5 text-left text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">Person</th>
+              <tr className="bg-brand-muted">
+                <th className="sticky left-0 z-10 w-44 bg-brand-muted px-2 py-1.5 text-left text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">Person</th>
                 {days.map((date, i) => {
                   const lit = date === day;
                   const isToday = date === today;
@@ -848,7 +872,7 @@ export function HrDashboard({
                     </th>
                   );
                 })}
-                <th className="w-16 border-l border-border px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">Hours</th>
+                <th className="w-16 border-l border-border px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">Hours</th>
               </tr>
             </thead>
             <tbody>
@@ -923,8 +947,8 @@ export function HrDashboard({
               )}
             </tbody>
             <tfoot>
-              <tr className="border-t-2 border-t-foreground/20 bg-surface-sunk">
-                <td className="sticky left-0 z-10 bg-surface-sunk px-2 py-1 text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">People in</td>
+              <tr className="border-t-2 border-t-success/40 bg-success/10">
+                <td className="sticky left-0 z-10 bg-success/10 px-2 py-1 text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">People in</td>
                 {perDay.map((d) => (
                   <td key={d.date} className={cn("border-l border-border/60 px-1 py-1 text-center font-semibold tabular-nums", d.date === day && "bg-brand-muted")}>
                     {d.people > 0 ? d.people : <span className="text-muted-foreground/40">—</span>}
@@ -949,6 +973,7 @@ type Row = {
   weeksInRange: number;
   total: ReturnType<typeof sumCosts>;
   peopleScheduled: number;
+  perDay: { date: string; people: number; hours: number; cost: number }[];
 };
 
 function CostTab({
@@ -957,19 +982,75 @@ function CostTab({
   look,
   from,
   to,
+  days,
+  today,
   settings,
+  people,
 }: {
   rows: Row[];
   plant: { total: number; wages: number; burden: number; hours: number; overtime: number; people: number; headcount: number };
   look: (d: Department) => ReturnType<typeof departmentColor>;
   from: string;
   to: string;
+  days: string[];
+  today: string;
   settings: PaySettings;
+  /** Everyone active, for payroll on the books. */
+  people: Employee[];
 }) {
+  const [view, setView] = useState<"byday" | "scheduled" | "payroll">("byday");
   const biggest = Math.max(1, ...rows.map((r) => r.total.total));
+  const toggle = (
+    <div className="flex overflow-hidden rounded-sm ring-1 ring-foreground/15">
+      {(
+        [
+          ["byday", "By day"],
+          ["scheduled", "Totals"],
+          ["payroll", "Payroll on the books"],
+        ] as const
+      ).map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => setView(id)}
+          aria-pressed={view === id}
+          className={cn(
+            "h-7 px-2.5 text-[0.6875rem] font-semibold tracking-wide uppercase transition-colors",
+            view === id ? "bg-foreground text-background" : "bg-card text-muted-foreground hover:bg-muted"
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+  if (view === "byday") {
+    return (
+      <div className="flex flex-col gap-2.5">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-sm bg-card px-3 py-2 ring-1 ring-foreground/10">
+          {toggle}
+          <span className="ml-auto flex flex-wrap items-center gap-x-4">
+            <Big label={days.length === 1 ? "this day" : days.length === 7 ? "this week" : `these ${days.length} days`} value={money(plant.total)} />
+            {days.length > 1 && <Big label="a day, on average" value={money(plant.total / days.length)} />}
+            {plant.overtime > 0.01 && <Big label="overtime" value={`${plant.overtime.toFixed(1)} h`} warn />}
+            <Hint text="What each department costs each day: wages plus employer taxes from the approved weeks on screen. Each person's week is spread over the days they worked in proportion to hours, so the days add up to the week exactly - salaried people land on their days, overtime on the days that made it." />
+          </span>
+        </div>
+        <CostGrid rows={rows} days={days} today={today} look={look} />
+      </div>
+    );
+  }
+  if (view === "payroll") {
+    return (
+      <div className="flex flex-col gap-2.5">
+        <PayrollTable departments={rows.map((r) => r.department)} people={people} settings={settings} look={look} leading={toggle} />
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-2.5">
-      <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 rounded-sm bg-card px-3 py-2 ring-1 ring-foreground/10">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-sm bg-card px-3 py-2 ring-1 ring-foreground/10">
+        {toggle}
         <Big label="costs the company" value={money(plant.total)} hint="Wages plus employer taxes, for every approved week in the range. Salaried people count by the week." />
         <Big label="wages" value={money(plant.wages)} />
         <Big label="employer taxes" value={money(plant.burden)} />
@@ -984,7 +1065,7 @@ function CostTab({
       <div className="overflow-x-auto rounded-sm bg-card ring-1 ring-foreground/10">
         <table className="w-full min-w-[48rem] border-collapse text-sm">
           <thead>
-            <tr className="bg-surface-sunk text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+            <tr className="bg-brand-muted text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">
               <th className="px-3 py-1.5 text-left">Department</th>
               <th className="px-2 py-1.5 text-right">People</th>
               <th className="px-2 py-1.5 text-right">Hours</th>
@@ -1021,7 +1102,7 @@ function CostTab({
                     <td className="px-2 py-1 text-right text-xs font-bold tabular-nums">{money(total.total)}</td>
                     <td className="px-2 py-1">
                       <span className="block h-2 rounded-sm bg-muted">
-                        <span className={cn("block h-2 rounded-sm", style.dot)} style={{ width: `${(total.total / biggest) * 100}%` }} />
+                        <span className={cn("block h-2 rounded-sm", style.soft)} style={{ width: `${(total.total / biggest) * 100}%` }} />
                       </span>
                     </td>
                   </tr>
@@ -1034,7 +1115,7 @@ function CostTab({
             )}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-t-foreground/20 bg-surface-sunk text-xs font-semibold">
+            <tr className="border-t-2 border-t-success/40 bg-success/10 text-xs font-semibold">
               <td className="px-3 py-1 text-[0.5625rem] tracking-wider text-muted-foreground uppercase">Total</td>
               <td className="px-2 py-1 text-right tabular-nums">{plant.people}</td>
               <td className="px-2 py-1 text-right tabular-nums">{plant.hours.toFixed(0)}</td>
@@ -1051,7 +1132,131 @@ function CostTab({
   );
 }
 
+/** Money across the days: a department per row, a date per column, the total at the end. */
+function CostGrid({
+  rows,
+  days,
+  today,
+  look,
+}: {
+  rows: Row[];
+  days: string[];
+  today: string;
+  look: (d: Department) => ReturnType<typeof departmentColor>;
+}) {
+  const perDayTotal = days.map((_, i) => rows.reduce((sum, r) => sum + (r.perDay[i]?.cost ?? 0), 0));
+  const grand = rows.reduce((sum, r) => sum + r.total.total, 0);
+  return (
+    <div className="overflow-x-auto rounded-sm bg-card ring-1 ring-foreground/10">
+      <table className="w-full border-collapse text-sm" style={{ minWidth: `${22 + days.length * 5.5}rem` }}>
+        <thead>
+          <tr className="bg-brand-muted">
+            <th className="sticky left-0 z-10 w-40 bg-brand-muted px-3 py-1.5 text-left text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">Department</th>
+            {days.map((date, i) => (
+              <th key={date} className={cn("border-l border-border/60 px-1 py-1 text-center", isWeekend(date) && "bg-surface-sunk/60", date === today && "bg-brand-muted")}>
+                <span className={cn("block text-[0.5625rem] font-semibold tracking-wider uppercase", date === today ? "text-primary" : "text-muted-foreground")}>
+                  {date === today ? "Today" : dayShort(date)}
+                </span>
+                <span className="block text-xs font-bold tabular-nums">{monthDay(date)}</span>
+                <span className="block text-[0.5625rem] font-semibold text-muted-foreground tabular-nums">{perDayTotal[i] > 0 ? money(perDayTotal[i]) : "—"}</span>
+              </th>
+            ))}
+            <th className="border-l border-border px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {groupByLine(rows).flatMap((group) => [
+            <tr key={`line-${group.line}`} className="border-y border-primary/15 bg-brand-muted/40">
+              <td className="sticky left-0 z-10 bg-brand-muted/40 px-3 py-0.5 text-[0.5625rem] font-bold tracking-wider text-primary uppercase">
+                {group.line}
+              </td>
+              {days.map((date, i) => {
+                const cost = group.rows.reduce((sum, r) => sum + (r.perDay[i]?.cost ?? 0), 0);
+                return (
+                  <td key={date} className="border-l border-primary/10 px-1 py-0.5 text-center text-[0.625rem] font-semibold text-primary tabular-nums">
+                    {cost > 0 ? money(cost) : <span className="text-primary/30">—</span>}
+                  </td>
+                );
+              })}
+              <td className="border-l border-primary/10 px-2 py-0.5 text-right text-[0.625rem] font-semibold text-primary tabular-nums">
+                {money(group.rows.reduce((sum, r) => sum + r.total.total, 0))}
+              </td>
+            </tr>,
+            ...group.rows.map(({ department, perDay, total }) => {
+            const style = look(department);
+            return (
+              <tr key={department.id} className="group border-b border-border/50 last:border-b-0 hover:bg-muted/40">
+                <td className="sticky left-0 z-10 bg-card py-1 pr-3 pl-0 group-hover:bg-muted/40">
+                  <span className="flex items-center gap-2">
+                    <span className={cn("block h-7 w-1.5 shrink-0", style.dot)} />
+                    <span className="flex min-w-0 flex-col leading-tight">
+                      <span className="truncate text-xs font-semibold">{department.name}</span>
+                      <span className="truncate text-[0.5625rem] text-muted-foreground">{department.line}</span>
+                    </span>
+                  </span>
+                </td>
+                {perDay.map((d) => (
+                  <td
+                    key={d.date}
+                    className={cn("border-l border-border/60 p-0.5 text-center tabular-nums", isWeekend(d.date) && "bg-surface-sunk/60", d.date === today && "bg-brand-muted/50")}
+                  >
+                    {d.cost > 0 ? (
+                      <span className={cn("flex flex-col items-center rounded-sm px-1 py-0.5 leading-tight", style.tint)}>
+                        <span className="text-xs font-bold whitespace-nowrap">{money(d.cost)}</span>
+                        <span className="text-[0.5625rem] text-foreground/70 whitespace-nowrap">
+                          {d.hours.toFixed(0)} h · {d.people} {d.people === 1 ? "person" : "people"}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="block py-1 text-[0.625rem] font-semibold tracking-wider text-muted-foreground/40">OFF</span>
+                    )}
+                  </td>
+                ))}
+                <td className="border-l border-border px-2 py-1 text-right text-xs font-bold tabular-nums">
+                  {total.total > 0 ? money(total.total) : ""}
+                  {total.overtimeHours > 0.01 && (
+                    <span className="block text-[0.5625rem] font-semibold text-warning-foreground">{total.overtimeHours.toFixed(1)} h OT</span>
+                  )}
+                </td>
+              </tr>
+            );
+          }),
+          ])}
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={days.length + 2} className="px-3 py-10 text-center text-sm text-muted-foreground">No departments to show.</td>
+            </tr>
+          )}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-t-success/40 bg-success/10 text-xs font-semibold">
+            <td className="sticky left-0 z-10 bg-success/10 px-3 py-1 text-[0.5625rem] tracking-wider text-muted-foreground uppercase">Total</td>
+            {perDayTotal.map((c, i) => (
+              <td key={days[i]} className="border-l border-border/60 px-1 py-1 text-center tabular-nums">
+                {c > 0 ? money(c) : <span className="text-muted-foreground/40">—</span>}
+              </td>
+            ))}
+            <td className="border-l border-border px-2 py-1 text-right font-bold tabular-nums">{money(grand)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
 /* ---------------- pieces ---------------- */
+
+/** Rows bunched under their line - Bettr Bowl, Pizza, Warehouse... - in the order they come. */
+function groupByLine<T extends { department: Department }>(rows: T[]): { line: string; rows: T[] }[] {
+  const groups: { line: string; rows: T[] }[] = [];
+  for (const row of rows) {
+    const line = row.department.line ?? "Other";
+    const group = groups.find((g) => g.line === line);
+    if (group) group.rows.push(row);
+    else groups.push({ line, rows: [row] });
+  }
+  return groups;
+}
 
 /** A day's shifts bunched by start and end, earliest start first. */
 function groupByShift(shifts: Shift[]): { start: string; end: string; shifts: Shift[] }[] {
@@ -1101,7 +1306,7 @@ function Tab({ active, onClick, icon, label }: { active: boolean; onClick: () =>
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "-mb-0.5 inline-flex h-8 items-center gap-1.5 border-b-2 px-3 text-xs font-semibold transition-colors [&>svg]:size-3.5",
+        "-mb-0.5 inline-flex h-7 items-center gap-1 border-b-2 px-2.5 text-[0.6875rem] font-semibold transition-colors [&>svg]:size-3",
         active ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
       )}
     >
@@ -1111,10 +1316,32 @@ function Tab({ active, onClick, icon, label }: { active: boolean; onClick: () =>
   );
 }
 
-function Big({ label, value, hint, warn }: { label: string; value: string; hint?: string; warn?: boolean }) {
+function Big({
+  label,
+  value,
+  hint,
+  warn,
+  tone,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  warn?: boolean;
+  tone?: "blue" | "green" | "amber";
+}) {
   return (
     <span className="flex items-baseline gap-1">
-      <span className={cn("text-lg font-bold tabular-nums", warn && "text-warning-foreground")}>{value}</span>
+      <span
+        className={cn(
+          "text-lg font-bold tabular-nums",
+          warn && "text-warning-foreground",
+          tone === "blue" && "text-primary",
+          tone === "green" && "text-success",
+          tone === "amber" && "text-warning-foreground"
+        )}
+      >
+        {value}
+      </span>
       <span className="flex items-center gap-1 text-[0.625rem] text-muted-foreground">
         {label}
         {hint && <Hint text={hint} />}

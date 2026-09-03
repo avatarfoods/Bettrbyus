@@ -3,13 +3,15 @@
 import { useState } from "react";
 import { saveDepartment } from "@/lib/hr/actions";
 import type { Department, Employee } from "@/lib/hr/model";
-import { departmentColor } from "@/lib/hr/colors";
+import { DEPARTMENT_PALETTE, departmentColor } from "@/lib/hr/colors";
 import { ColorGrid } from "@/components/hr/color-grid";
 import { DataTable, TBody, TD, THead, TR, TableEmpty } from "@/components/ui/data-table";
+import { Switch, SwitchThumb } from "@/components/ui/switch";
 import {
   ActiveDot,
   AddButton,
   EditorActions,
+  Hint,
   IconButton,
   Labelled,
   Notice,
@@ -63,10 +65,10 @@ export function HrDepartmentsSettings({
           ]}
         />
         <TBody>
-          {departments.map((department, index) => (
+          {departments.map((department) => (
             <TR key={department.id}>
               <TD>
-                <span aria-hidden className={cn("block h-4 w-1.5", departmentColor(department.color, index).dot)} />
+                <span aria-hidden className={cn("block h-4 w-1.5", departmentColor(department.color, department.colorIndex).dot)} />
               </TD>
               <TD strong>{department.name}</TD>
               <TD mono muted>
@@ -111,13 +113,18 @@ export function HrDepartmentsSettings({
       {canEdit &&
         (draft ? (
           <DepartmentEditor
+            key={draft.id ?? "new"}
             draft={draft}
             pending={pending}
             onCancel={() => setDraft(null)}
-            onSave={(value) => {
-              run(() => saveDepartment(value), "Department saved");
-              setDraft(null);
-            }}
+            onSave={(value) =>
+              // The editor closes only once the save is known to have worked.
+              run(async () => {
+                const result = await saveDepartment(value);
+                if (result.ok) setDraft(null);
+                return result;
+              }, "Department saved")
+            }
           />
         ) : (
           <AddButton onClick={() => setDraft({ name: "", sortOrder: departments.length + 1, active: true, color: null, breakHours: 0 })}>
@@ -180,15 +187,17 @@ function DepartmentEditor({
         </Labelled>
         <Labelled label="Active" hint="Inactive departments drop off the schedule and dashboard but keep their history.">
           <span className="flex h-8 items-center gap-2">
-            <input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} className="size-4" />
+            <Switch checked={active} onCheckedChange={setActive} aria-label="Active">
+              <SwitchThumb />
+            </Switch>
             <ActiveDot active={active} />
           </span>
         </Labelled>
       </div>
 
-      <Labelled label="Colour" hint="The band people scan for before they read the name. Automatic hands out the palette in order.">
-        <ColorGrid value={color} onChange={setColor} allowAutomatic index={Math.max(0, (Number(sortOrder) || 1) - 1)} />
-      </Labelled>
+      <ColourRow hint="The band people scan for before they read the name. Automatic hands out the palette in order.">
+        <ColorGrid value={color} onChange={setColor} allowAutomatic index={draft.colorIndex ?? 0} columns={DEPARTMENT_PALETTE} />
+      </ColourRow>
 
       <EditorActions
         pending={pending}
@@ -207,6 +216,19 @@ function DepartmentEditor({
           })
         }
       />
+    </div>
+  );
+}
+
+/** Like Labelled, but not a label: a label would click the first swatch for you. */
+function ColourRow({ hint, children }: { hint: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-3 border-b border-border/50 py-1 last:border-b-0">
+      <span className="flex w-40 shrink-0 items-center gap-1 pt-1.5 text-xs text-muted-foreground">
+        <span className="min-w-0">Colour</span>
+        <Hint text={hint} />
+      </span>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }

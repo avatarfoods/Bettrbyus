@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRightLeft, CheckCircle2, GripVertical, Loader2, MailX, Trash2, X } from "lucide-react";
-import { approveFloats, removeFloater, saveEmployeeOrder, saveShifts } from "@/lib/hr/actions";
+import { approveFloats, clearShifts, removeFloater, saveEmployeeOrder, saveShifts } from "@/lib/hr/actions";
 import type { AwayShift, WeekOnScreen } from "@/lib/hr/fetch";
 import {
   DAY_NAMES,
@@ -291,6 +291,40 @@ export function ScheduleGrid({
   const columns = 2 + dates.length + 1 + (seesCost ? 1 : 0);
   const multiWeek = weeks.length > 1;
 
+  /** Everything in the draft for one week goes: every day, everyone. */
+  async function clearWeek(weekStart: string) {
+    const ok = await confirm({
+      title: `Clear the whole week of ${monthDay(weekStart)} for ${departmentName}?`,
+      description: "Every day for everyone in your draft becomes OFF. The approved week, if there is one, is not touched.",
+      confirmLabel: "Clear the week",
+      cancelLabel: "Cancel",
+      tone: "danger",
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      const result = await clearShifts({ departmentId, weekStart });
+      if (!result.ok) await confirm({ title: result.message, cancelLabel: false });
+      router.refresh();
+    });
+  }
+
+  /** One date for everyone in the department. */
+  async function clearDate(date: string) {
+    const ok = await confirm({
+      title: `Clear ${dayName(date)} ${monthDay(date)} for everyone in ${departmentName}?`,
+      description: "That day becomes OFF for every person in your draft. Other days are not touched.",
+      confirmLabel: "Clear the day",
+      cancelLabel: "Cancel",
+      tone: "danger",
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      const result = await clearShifts({ departmentId, weekStart: weekStartOf(date), dates: [date] });
+      if (!result.ok) await confirm({ title: result.message, cancelLabel: false });
+      router.refresh();
+    });
+  }
+
   const rowProps = (employee: Employee, row: number, floater?: FloaterInfo) => ({
     rowIndex: row,
     employee,
@@ -330,7 +364,14 @@ export function ScheduleGrid({
         {seesCost && <Stat label={multiWeek ? "these weeks" : "this week"} value={money(total.total)} strong />}
         {seesCost && <Stat label="wages" value={money(total.wages)} />}
         {seesCost && <Stat label="employer taxes" value={money(total.burden)} />}
-        <Stat label="hours" value={total.hours.toFixed(1)} />
+        <span className="flex items-center gap-1">
+          <Stat label="hours" value={total.hours.toFixed(1)} />
+          <Hint
+            text={`Comes-in to leaves, less the department's break. Overtime is over ${settings.weeklyOvertimeAfter} hours in a week${
+              settings.dailyOvertimeEnabled ? `, or over ${settings.dailyOvertimeAfter} in a day for anyone under ${money(settings.dailyOvertimeRateCeiling)}/hour` : ""
+            }.${seesCost ? " Cost is wages plus employer taxes at the rates in Configuration, Pay rules. Salaried people are counted by the week the moment any day is scheduled." : ""}`}
+          />
+        </span>
         {total.overtimeHours > 0.01 && <Stat label="overtime" value={`${total.overtimeHours.toFixed(1)} h`} warn />}
         {total.paidAbsenceHours > 0.01 && <Stat label="paid time off" value={`${total.paidAbsenceHours.toFixed(0)} h`} />}
         <Stat label="people working" value={`${total.people} of ${everyone.length}`} />
@@ -346,6 +387,20 @@ export function ScheduleGrid({
         {!multiWeek && weeks[0]?.viewing?.status === "draft" && (
           <span className="ml-auto rounded-sm bg-warning-foreground px-1.5 py-0.5 text-[0.625rem] font-bold tracking-wider text-white uppercase">Draft</span>
         )}
+        {editing && !multiWeek && weeks[0] && (
+          <button
+            type="button"
+            onClick={() => clearWeek(weeks[0].weekStart)}
+            title="Every day for everyone becomes OFF in your draft"
+            className={cn(
+              "inline-flex h-6 items-center gap-1 rounded-sm px-1.5 text-[0.6875rem] font-semibold text-destructive hover:bg-destructive/10",
+              weeks[0].viewing?.status !== "draft" && "ml-auto"
+            )}
+          >
+            <Trash2 className="size-3" />
+            Clear the whole week
+          </button>
+        )}
       </div>
 
       <div className="overflow-x-auto rounded-sm bg-card ring-1 ring-foreground/10">
@@ -356,8 +411,8 @@ export function ScheduleGrid({
           <thead>
             {/* Across more than one week, a band over each week says what it is. */}
             {multiWeek && (
-              <tr className="bg-surface-sunk">
-                <th colSpan={2} className="sticky left-0 z-10 bg-surface-sunk" />
+              <tr className="bg-brand-muted">
+                <th colSpan={2} className="sticky left-0 z-10 bg-brand-muted" />
                 {weeks.map((week) => {
                   const span = dates.filter((d) => weekStartOf(d) === week.weekStart).length;
                   if (span === 0) return null;
@@ -373,11 +428,11 @@ export function ScheduleGrid({
                 <th colSpan={columns - 2 - dates.length} className="border-b border-l border-border" />
               </tr>
             )}
-            <tr className="bg-surface-sunk">
-              <th className="sticky left-0 z-10 w-12 border-b border-border bg-surface-sunk px-2 py-1.5 text-left text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+            <tr className="bg-brand-muted">
+              <th className="sticky left-0 z-10 w-12 border-b border-border bg-brand-muted px-2 py-1.5 text-left text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">
                 ID
               </th>
-              <th className="sticky left-12 z-10 w-44 border-b border-border bg-surface-sunk px-2 py-1.5 text-left text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+              <th className="sticky left-12 z-10 w-40 border-b border-border bg-brand-muted px-2 py-1.5 text-left text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">
                 <span className="flex items-center gap-1.5">
                   Person
                   {editing && (
@@ -397,13 +452,24 @@ export function ScheduleGrid({
                     {dayName(date)}
                   </span>
                   <span className="block text-xs font-bold tabular-nums">{monthDay(date)}</span>
+                  {editing && (
+                    <button
+                      type="button"
+                      onClick={() => clearDate(date)}
+                      aria-label={`Clear ${dayName(date)} ${monthDay(date)} for everyone`}
+                      title="This day becomes OFF for everyone in the department"
+                      className="mt-0.5 inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="size-3" />
+                    </button>
+                  )}
                 </th>
               ))}
-              <th className="w-20 border-b border-l border-border px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+              <th className="w-20 border-b border-l border-border px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">
                 Hours
               </th>
               {seesCost && (
-                <th className="w-24 border-b border-border px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                <th className="w-24 border-b border-border px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">
                   Cost
                 </th>
               )}
@@ -417,7 +483,7 @@ export function ScheduleGrid({
 
             {floaters.length > 0 && (
               <tr>
-                <td colSpan={columns} className="sticky left-0 border-y border-border bg-surface-sunk px-2 py-1 text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                <td colSpan={columns} className="sticky left-0 border-y border-primary/15 bg-brand-muted/40 px-2 py-1 text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">
                   <span className="flex items-center gap-1.5">
                     From other departments
                     <Hint text="People whose home is another department, working here. Their cost counts here. A ? means an approver of this department has not signed them off yet." />
@@ -430,7 +496,7 @@ export function ScheduleGrid({
                 key={employee.id}
                 {...rowProps(employee, ordered.length + index, {
                   home: employee.departmentId ? deptById.get(employee.departmentId) : undefined,
-                  homeIndex: employee.departmentId ? departments.findIndex((d) => d.id === employee.departmentId) : 0,
+                  homeIndex: (employee.departmentId ? deptById.get(employee.departmentId)?.colorIndex : undefined) ?? 0,
                   pending: dates.some((date) => {
                     const s = byKey.get(`${employee.id}|${date}`);
                     return s && s.isFloat && !s.floatApprovedAt && !isOff(s);
@@ -451,8 +517,8 @@ export function ScheduleGrid({
           </tbody>
 
           <tfoot>
-            <tr className="border-t-2 border-t-foreground/20 bg-surface-sunk text-xs">
-              <td colSpan={2} className="sticky left-0 z-10 bg-surface-sunk px-2 py-1 text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+            <tr className="border-t-2 border-t-success/40 bg-success/10 text-xs">
+              <td colSpan={2} className="sticky left-0 z-10 bg-success/10 px-2 py-1 text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
                 Per day
               </td>
               {dates.map((date, index) => (
@@ -474,11 +540,6 @@ export function ScheduleGrid({
         </table>
       </div>
 
-      <p className="flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
-        Hours are comes-in to leaves, less the department&rsquo;s break. Overtime is over {settings.weeklyOvertimeAfter} hours in a week
-        {settings.dailyOvertimeEnabled && `, or over ${settings.dailyOvertimeAfter} in a day for anyone under ${money(settings.dailyOvertimeRateCeiling)}/hour`}.
-        {seesCost && <Hint text="Cost is wages plus employer taxes at the rates in Configuration, Pay rules. Salaried people are counted by the week the moment any day is scheduled." />}
-      </p>
     </div>
   );
 }
@@ -788,7 +849,7 @@ function DayCell({
   const [pending, startTransition] = useTransition();
   const off = isOff(shift);
   const awayDept = away ? deptById.get(away.departmentId) : undefined;
-  const awayLook = awayDept ? departmentColor(awayDept.color, departments.indexOf(awayDept)) : null;
+  const awayLook = awayDept ? departmentColor(awayDept.color, awayDept.colorIndex) : null;
   const absence = shift?.absenceTypeId ? absenceById.get(shift.absenceTypeId) : undefined;
   const absenceLook = absence ? departmentColor(absence.color, absenceTypes.indexOf(absence)) : null;
   const weekend = [0, 6].includes(new Date(`${date}T00:00:00Z`).getUTCDay());
@@ -998,6 +1059,26 @@ function DayCard({
   const allWeek = weekDates(weekStart);
   const hosts = departments.filter((d) => d.active && d.id !== departmentId && d.id !== employee.departmentId);
 
+  async function clearPersonWeek() {
+    const ok = await confirm({
+      title: `Clear ${displayName(employee)}'s week of ${monthDay(weekStart)}?`,
+      description: "Every day this week becomes OFF for this person in your draft. Nobody else is touched.",
+      confirmLabel: "Clear the week",
+      cancelLabel: "Cancel",
+      tone: "danger",
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      const result = await clearShifts({ departmentId, weekStart, employeeIds: [employee.id] });
+      if (!result.ok) {
+        await confirm({ title: result.message, cancelLabel: false });
+        return;
+      }
+      onClose();
+      router.refresh();
+    });
+  }
+
   return (
     <>
       {/* Anything outside the card closes it. */}
@@ -1102,42 +1183,44 @@ function DayCard({
                   Another dept
                 </button>
               )}
+              <button
+                type="button"
+                disabled={pending}
+                onClick={clearPersonWeek}
+                title="Every day of this week becomes OFF for this person"
+                className={cn(BIG, "col-span-2 bg-card text-destructive ring-1 ring-destructive/30 hover:bg-destructive/10")}
+              >
+                <Trash2 className="size-3.5" />
+                Clear {employee.preferredName || employee.firstName}&rsquo;s whole week
+              </button>
             </div>
 
-            {/* Off for a reason: PTO, holiday, furlough... one tap each. */}
+            {/* Off for a reason: one dropdown. The day is written the moment a reason is picked. */}
             {absenceTypes.filter((t) => t.active).length > 0 && (
-              <div className="flex flex-col gap-1">
-                <p className="flex items-center gap-1 text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+              <label className="flex flex-col gap-0.5 text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                <span className="flex items-center gap-1">
                   Off because
-                  <Hint text="The day is OFF with the reason on it. Paid reasons add their hours at the person's rate, without overtime. Add or change reasons in Configuration, Day types." />
-                </p>
-                <div className="flex flex-wrap gap-1.5">
+                  <Hint text="Pick the reason and the day becomes OFF with it written on. Paid reasons add their hours at the person's rate, without overtime. The list is yours to change in Configuration, Off because." />
+                </span>
+                <select
+                  value={shift?.absenceTypeId ?? ""}
+                  disabled={pending}
+                  onChange={(event) => {
+                    const id = event.target.value;
+                    if (id) run([{ workDate: date, startTime: null, endTime: null, absenceTypeId: id }]);
+                  }}
+                  className={cn(TIME, "normal-case tracking-normal")}
+                >
+                  <option value="">Choose a reason…</option>
                   {absenceTypes
                     .filter((t) => t.active)
-                    .map((t, index) => {
-                      const tone = departmentColor(t.color, index);
-                      const active = shift?.absenceTypeId === t.id;
-                      return (
-                        <button
-                          key={t.id}
-                          type="button"
-                          disabled={pending}
-                          aria-pressed={active}
-                          onClick={() => run([{ workDate: date, startTime: null, endTime: null, absenceTypeId: t.id }])}
-                          className={cn(
-                            "inline-flex h-8 items-center gap-1.5 rounded-sm px-2 text-xs font-semibold ring-1 transition-colors",
-                            tone.tint,
-                            active ? "ring-2 ring-primary" : "ring-foreground/10 hover:ring-primary"
-                          )}
-                        >
-                          <span className={cn("block h-3 w-1", tone.dot)} />
-                          {t.name}
-                          <span className="text-[0.5625rem] font-normal text-muted-foreground">{t.paid ? `paid ${t.paidHours}h` : "unpaid"}</span>
-                        </button>
-                      );
-                    })}
-                </div>
-              </div>
+                    .map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} · {t.paid ? `paid ${t.paidHours} h` : "unpaid"}
+                      </option>
+                    ))}
+                </select>
+              </label>
             )}
           </>
         ) : (

@@ -22,10 +22,13 @@ export function PersonForm({
   employee,
   departments,
   canEdit,
+  seesCost,
 }: {
   employee: Employee;
   departments: Department[];
   canEdit: boolean;
+  /** Pay is money: administrators only. */
+  seesCost: boolean;
 }) {
   const router = useRouter();
   const confirm = useConfirm();
@@ -39,17 +42,22 @@ export function PersonForm({
   const [isSupervisor, setIsSupervisor] = useState(employee.isSupervisor);
   const [showOnSchedule, setShow] = useState(employee.showOnSchedule);
 
-  const department = departments.find((d) => d.id === (departmentId || employee.departmentId));
-  const look = department ? departmentColor(department.color, departments.indexOf(department)) : null;
+  const department = departments.find((d) => d.id === departmentId);
+  const look = department ? departmentColor(department.color, department.colorIndex) : null;
   const inactive = !employee.active || !showOnSchedule || employee.employeeType === "contractor";
 
-  function save() {
+  async function save() {
+    const rate = payRate.trim() === "" ? null : Number(payRate);
+    if (rate !== null && (!Number.isFinite(rate) || rate < 0)) {
+      await confirm({ title: "The rate has to be a number, zero or more", cancelLabel: false });
+      return;
+    }
     startTransition(async () => {
       const result = await saveEmployee({
         id: employee.id,
         departmentId: departmentId || null,
         payType,
-        payRate: payRate.trim() === "" ? null : Number(payRate) || null,
+        payRate: rate,
         email: email.trim() || null,
         personalEmail: personalEmail.trim() || null,
         phone: phone.trim() || null,
@@ -126,6 +134,8 @@ export function PersonForm({
               </span>
             </span>
           </Labelled>
+          {seesCost && (
+          <>
           <Labelled label="Pay type" hint="Salaried people are paid by the week. Hourly people are paid the hours scheduled, with overtime.">
             <select value={payType} onChange={(event) => setPayType(event.target.value as "hourly" | "salary")} disabled={!canEdit} className={inputClass}>
               <option value="hourly">Hourly</option>
@@ -150,7 +160,9 @@ export function PersonForm({
               </span>
             </span>
           </Labelled>
-          <Labelled label="Supervisor" hint="Marks the person as a supervisor. Who approves which department is set in Configuration, Approval chain.">
+          </>
+          )}
+          <Labelled label="Supervisor" hint="Marks the person as a supervisor. Who approves which department is set in Configuration, Approval.">
             <span className="flex h-8 items-center">
               <Switch checked={isSupervisor} disabled={!canEdit} onCheckedChange={setIsSupervisor} aria-label="Supervisor">
                 <SwitchThumb />

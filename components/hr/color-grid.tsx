@@ -1,7 +1,7 @@
 "use client";
 
 import { Check } from "lucide-react";
-import { HR_PALETTE, departmentColor } from "@/lib/hr/colors";
+import { HR_PALETTE, departmentColor, type ColorColumn } from "@/lib/hr/colors";
 import { cn } from "@/lib/utils";
 
 /**
@@ -15,6 +15,7 @@ export function ColorGrid({
   onChange,
   allowAutomatic,
   index = 0,
+  columns = HR_PALETTE,
 }: {
   value: string | null;
   onChange: (next: string | null) => void;
@@ -22,9 +23,11 @@ export function ColorGrid({
   allowAutomatic?: boolean;
   /** For the automatic swatch: which colour this item would inherit. */
   index?: number;
+  /** Which columns to offer. Departments get the cool ones only. */
+  columns?: ColorColumn[];
 }) {
   const chosen = value ? departmentColor(value, index) : null;
-  const rows = HR_PALETTE[0]?.shades.length ?? 0;
+  const rows = columns[0]?.shades.length ?? 0;
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -32,10 +35,10 @@ export function ColorGrid({
         role="listbox"
         aria-label="Colour"
         className="grid w-max max-w-full gap-0.5 rounded-sm bg-card p-1 ring-1 ring-foreground/10"
-        style={{ gridTemplateColumns: `repeat(${HR_PALETTE.length}, minmax(0, 1.5rem))` }}
+        style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1.5rem))` }}
       >
         {Array.from({ length: rows }, (_, row) =>
-          HR_PALETTE.map((column) => {
+          columns.map((column) => {
             const option = column.shades[row];
             const active = chosen?.key === option.key;
             return (

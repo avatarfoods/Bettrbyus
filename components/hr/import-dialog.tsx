@@ -229,7 +229,8 @@ function ImportPanel({ onDone, existing }: { onDone: () => void; existing: Exist
             ref={fileInput}
             type="file"
             accept=".xlsx,.xls,.csv"
-            className="hidden"
+            aria-label="Paychex export file"
+            className="sr-only"
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) void read(file);
@@ -390,8 +391,8 @@ function Counter({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "flex flex-col items-start rounded-sm bg-card px-3 py-1.5 text-left ring-1 transition-colors",
-        active ? "ring-2 ring-primary" : "ring-foreground/10 hover:ring-foreground/30"
+        "flex flex-col items-start rounded-sm bg-card px-3 py-1.5 text-left transition-colors",
+        active ? "ring-2 ring-primary" : "ring-1 ring-foreground/10 hover:ring-foreground/30"
       )}
     >
       <span className={cn("text-lg font-bold tabular-nums", value === 0 ? "text-muted-foreground/40" : tones[tone])}>{value}</span>

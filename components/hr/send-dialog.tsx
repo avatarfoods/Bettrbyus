@@ -147,7 +147,7 @@ export function SendDialog({
               <select
                 value={departmentId}
                 onChange={(event) => setDepartmentId(event.target.value)}
-                className="h-9 w-full rounded-sm bg-card px-2 text-sm font-medium normal-case tracking-normal ring-1 ring-foreground/15 focus:ring-2 focus:ring-primary focus:outline-none"
+                className="h-8 w-full rounded-sm bg-card px-2 text-sm font-medium normal-case tracking-normal ring-1 ring-foreground/15 focus:ring-2 focus:ring-primary focus:outline-none"
               >
                 {departmentId === "" && <option value="">Choose a department…</option>}
                 {options.map((o) => (
@@ -213,7 +213,7 @@ export function SendDialog({
             <div className="max-h-[50vh] overflow-auto rounded-sm ring-1 ring-foreground/10">
               <table className="w-full min-w-[36rem] border-collapse text-[0.6875rem] leading-tight">
                 <thead className="sticky top-0 z-10">
-                  <tr className="bg-surface-sunk text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                  <tr className="bg-brand-muted text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">
                     <th className="px-2 py-1 text-left">Name</th>
                     {preview.dates.map((date, i) => (
                       <th key={date} className={cn("px-1 py-1 text-center", i >= 5 && "bg-muted/60")}>

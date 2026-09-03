@@ -6,7 +6,7 @@ import { resolveAccess } from "@/lib/hr/access";
 import { getCurrentUserProfile } from "@/lib/auth/profile";
 import { createClient } from "@/lib/supabase/server";
 
-export const metadata = { title: "Day types" };
+export const metadata = { title: "Off because" };
 export const dynamic = "force-dynamic";
 
 export default async function HrAbsencesPage() {
@@ -16,12 +16,16 @@ export default async function HrAbsencesPage() {
 
   return (
     <PageShell
-      breadcrumbs={[{ label: "HR" }, { label: "Settings" }, { label: "Day types" }]}
-      meta={<span>{data.absenceTypes.filter((t) => t.active).length} in use</span>}
+      breadcrumbs={[{ label: "HR" }, { label: "Configuration" }, { label: "Off because" }]}
+      meta={<span>{data.absenceTypes.filter((t) => t.active).length} reasons in use</span>}
     >
-      <div className="px-3 pt-3 sm:px-4">
-        <HrSetupBanner missingTable={data.missingTable} missingRules={data.missingRules} noDepartments={false} />
-      </div>
+      <HrSetupBanner
+        missingTable={data.missingTable}
+        missingRules={data.missingRules}
+        missingAbsences={data.missingAbsences}
+        noDepartments={false}
+        padded
+      />
       <AbsenceSettings types={data.absenceTypes} canEdit={access.isAdmin && !data.missingTable} />
     </PageShell>
   );
