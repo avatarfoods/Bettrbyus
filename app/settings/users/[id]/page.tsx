@@ -19,10 +19,14 @@ export default async function UserPage({ params }: Params) {
   const { id } = await params;
 
   const supabase = await createClient();
-  const [users, me] = await Promise.all([
+  const [users, me, { data: hrRow }] = await Promise.all([
     fetchUsers(),
     getCurrentUserProfile(supabase),
+    // HR access is its own row; a login with none is an HR user.
+    supabase.from("hr_user_access").select("level").eq("profile_id", id).maybeSingle(),
   ]);
+  const hrLevel =
+    hrRow?.level === "admin" || hrRow?.level === "none" ? (hrRow.level as "admin" | "none") : "user";
 
   const index = users.findIndex((entry) => entry.id === id);
   const user = index === -1 ? null : users[index];
@@ -49,7 +53,7 @@ export default async function UserPage({ params }: Params) {
         />
       }
     >
-      <UserForm user={user} isSelf={me?.id === user.id} />
+      <UserForm user={user} isSelf={me?.id === user.id} hrLevel={hrLevel} />
     </PageShell>
   );
 }

@@ -26,10 +26,23 @@ const FILTERS: { id: Filter; label: string }[] = [
 ];
 
 /** Odoo's Users list. Click a row to open the record. */
-export function UsersTable({ users }: { users: UserRow[] }) {
+export function UsersTable({
+  users,
+  hrLevels = [],
+}: {
+  users: UserRow[];
+  /** Login id -> HR level, for the HR column. Absent means User. */
+  hrLevels?: [string, string][];
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const hrOf = useMemo(() => new Map(hrLevels), [hrLevels]);
+  const hrLabel = (user: UserRow) => {
+    if (user.isAdmin) return "Administrator";
+    const level = hrOf.get(user.id);
+    return level === "admin" ? "Administrator" : level === "none" ? "None" : "User";
+  };
 
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -107,7 +120,8 @@ export function UsersTable({ users }: { users: UserRow[] }) {
             columns={[
               { label: "Name" },
               { label: "Login" },
-              { label: "Type" },
+              { label: "System" },
+              { label: "HR" },
               { label: "Latest authentication" },
               { label: "Status" },
               { label: "", className: "w-10" },
@@ -132,6 +146,17 @@ export function UsersTable({ users }: { users: UserRow[] }) {
                     <span className="text-muted-foreground">User</span>
                   )}
                 </TD>
+                <TD>
+                  <span
+                    className={cn(
+                      hrLabel(user) === "Administrator" && "text-primary",
+                      hrLabel(user) === "None" && "text-muted-foreground/60",
+                      hrLabel(user) === "User" && "text-muted-foreground"
+                    )}
+                  >
+                    {hrLabel(user)}
+                  </span>
+                </TD>
                 <TD muted>
                   <LastSeen value={user.lastSignInAt} />
                 </TD>
@@ -150,7 +175,7 @@ export function UsersTable({ users }: { users: UserRow[] }) {
               </TR>
             ))}
             {rows.length === 0 && (
-              <TableEmpty colSpan={6}>No users match that search.</TableEmpty>
+              <TableEmpty colSpan={7}>No users match that search.</TableEmpty>
             )}
           </TBody>
         </DataTable>

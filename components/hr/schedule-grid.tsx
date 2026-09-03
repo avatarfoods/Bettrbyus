@@ -1,0 +1,1004 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowRightLeft, CheckCircle2, Loader2, MailX, Trash2, X } from "lucide-react";
+import { approveFloats, removeFloater, saveShifts } from "@/lib/hr/actions";
+import type { AwayShift, WeekOnScreen } from "@/lib/hr/fetch";
+import {
+  DAY_NAMES,
+  commonShifts,
+  displayName,
+  displayTime,
+  isOff,
+  money,
+  monthDay,
+  paidAbsenceMap,
+  sendTo,
+  shiftHours,
+  shiftLabel,
+  sumCosts,
+  timeOptions,
+  weekCost,
+  weekDates,
+  weekStartOf,
+  type AbsenceType,
+  type Department,
+  type Employee,
+  type PaySettings,
+  type Shift,
+} from "@/lib/hr/model";
+import { departmentColor } from "@/lib/hr/colors";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { Hint } from "@/components/production/settings/shared";
+import { cn } from "@/lib/utils";
+
+/**
+ * The schedule, one row per person, one column per day.
+ *
+ * Built from the workbook people already read - people down, days across,
+ * START and END in each day, OFF where there is nothing - and made for people
+ * who do not much like computers: a day is a button, tapping it opens one
+ * card with big choices, and the card writes the day the moment Save is
+ * pressed. Arrow keys walk the grid; Enter opens a day; Delete makes it OFF.
+ *
+ * Locked until Edit is pressed, like the production plan. Tapping a locked
+ * day says so instead of doing nothing.
+ */
+export function ScheduleGrid({
+  departmentId,
+  departmentName,
+  departmentColorKey,
+  departmentIndex,
+  dates,
+  weeks,
+  employees,
+  floaters,
+  departments,
+  shifts,
+  away,
+  settings,
+  breakHours,
+  absenceTypes,
+  editing,
+  seesCost,
+  canApproveFloat,
+}: {
+  departmentId: string;
+  departmentName: string;
+  departmentColorKey: string | null;
+  departmentIndex: number;
+  /** The days on screen: one, a week, or a range. */
+  dates: string[];
+  /** The weeks those days fall in, with what is on screen for each. */
+  weeks: WeekOnScreen[];
+  /** This department's own people. */
+  employees: Employee[];
+  /** People from other departments with a shift in what is on screen. */
+  floaters: Employee[];
+  departments: Department[];
+  shifts: Shift[];
+  /** Own people working elsewhere. */
+  away: AwayShift[];
+  settings: PaySettings;
+  breakHours: number;
+  /** Reasons a day can be off, for the card and the cell. */
+  absenceTypes: AbsenceType[];
+  editing: boolean;
+  seesCost: boolean;
+  canApproveFloat: boolean;
+}) {
+  const look = departmentColor(departmentColorKey, departmentIndex);
+  const deptById = useMemo(() => new Map(departments.map((d) => [d.id, d])), [departments]);
+  const weekByStart = useMemo(() => new Map(weeks.map((w) => [w.weekStart, w])), [weeks]);
+  const absenceById = useMemo(() => new Map(absenceTypes.map((t) => [t.id, t])), [absenceTypes]);
+  const paidAbsence = useMemo(() => paidAbsenceMap(absenceTypes), [absenceTypes]);
+
+  const byKey = useMemo(() => {
+    const map = new Map<string, Shift>();
+    for (const shift of shifts) map.set(`${shift.employeeId}|${shift.workDate}`, shift);
+    return map;
+  }, [shifts]);
+
+  const awayByKey = useMemo(() => {
+    const map = new Map<string, AwayShift>();
+    for (const a of away) map.set(`${a.employeeId}|${a.workDate}`, a);
+    return map;
+  }, [away]);
+
+  const everyone = useMemo(() => [...employees, ...floaters], [employees, floaters]);
+  const usual = useMemo(() => commonShifts(shifts), [shifts]);
+
+  /**
+   * Each person, costed per week and summed over the weeks on screen.
+   * Salary is a weekly thing, so a range is never costed as one long week.
+   */
+  const costs = useMemo(
+    () =>
+      everyone.map((employee) => {
+        const perWeek = weeks.map((week) =>
+          weekCost(
+            employee,
+            weekDates(week.weekStart)
+              .map((date) => byKey.get(`${employee.id}|${date}`))
+              .filter(Boolean) as Shift[],
+            settings,
+            breakHours,
+            paidAbsence
+          )
+        );
+        return sumCosts(perWeek);
+      }),
+    [everyone, weeks, byKey, settings, breakHours, paidAbsence]
+  );
+  const total = costs.reduce(
+    (sum, c) => ({
+      hours: sum.hours + c.hours,
+      overtimeHours: sum.overtimeHours + c.overtimeHours,
+      paidAbsenceHours: sum.paidAbsenceHours + c.paidAbsenceHours,
+      wages: sum.wages + c.wages,
+      burden: sum.burden + c.burden,
+      total: sum.total + c.total,
+      people: sum.people + (c.people > 0 ? 1 : 0),
+    }),
+    { hours: 0, overtimeHours: 0, paidAbsenceHours: 0, wages: 0, burden: 0, total: 0, people: 0 }
+  );
+
+  const dayHours = dates.map((date) =>
+    everyone.reduce((sum, employee) => {
+      const shift = byKey.get(`${employee.id}|${date}`);
+      return sum + (shift ? shiftHours(shift, breakHours) : 0);
+    }, 0)
+  );
+  const dayPeople = dates.map(
+    (date) => everyone.filter((e) => !isOff(byKey.get(`${e.id}|${date}`))).length
+  );
+
+  /** Which day is open for editing: employee id and date. Nothing while locked. */
+  const [openCell, setOpen] = useState<{ employeeId: string; date: string } | null>(null);
+  const open = editing ? openCell : null;
+
+  const columns = 2 + dates.length + 1 + (seesCost ? 1 : 0);
+  const multiWeek = weeks.length > 1;
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* The span in one line: what it costs and who is in. */}
+      <div className={cn("flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-sm px-3 py-1.5", look.tint)}>
+        <span className="flex items-center gap-1.5 text-xs font-bold tracking-wide uppercase">
+          <span className={cn("block h-4 w-1", look.dot)} />
+          {departmentName}
+        </span>
+        {seesCost && <Stat label={multiWeek ? "these weeks" : "this week"} value={money(total.total)} strong />}
+        {seesCost && <Stat label="wages" value={money(total.wages)} />}
+        {seesCost && <Stat label="employer taxes" value={money(total.burden)} />}
+        <Stat label="hours" value={total.hours.toFixed(1)} />
+        {total.overtimeHours > 0.01 && <Stat label="overtime" value={`${total.overtimeHours.toFixed(1)} h`} warn />}
+        {total.paidAbsenceHours > 0.01 && <Stat label="paid time off" value={`${total.paidAbsenceHours.toFixed(0)} h`} />}
+        <Stat label="people working" value={`${total.people} of ${everyone.length}`} />
+        {breakHours > 0 && (
+          <span className="flex items-center gap-1 text-[0.625rem] text-muted-foreground">
+            {breakHours} h break/day
+            <Hint text="Unpaid break set on the department, taken off every shift. Change it in Configuration, Departments." />
+          </span>
+        )}
+        {!multiWeek && weeks[0]?.viewing?.status === "approved" && (
+          <span className="ml-auto rounded-sm bg-success px-1.5 py-0.5 text-[0.625rem] font-bold tracking-wider text-white uppercase">Approved</span>
+        )}
+        {!multiWeek && weeks[0]?.viewing?.status === "draft" && (
+          <span className="ml-auto rounded-sm bg-warning-foreground px-1.5 py-0.5 text-[0.625rem] font-bold tracking-wider text-white uppercase">Draft</span>
+        )}
+      </div>
+
+      <div className="overflow-x-auto rounded-sm bg-card ring-1 ring-foreground/10">
+        <table className="w-full border-collapse text-sm" style={{ minWidth: `${22 + dates.length * 6.5}rem` }}>
+          <thead>
+            {/* Across more than one week, a band over each week says what it is. */}
+            {multiWeek && (
+              <tr className="bg-surface-sunk">
+                <th colSpan={2} className="sticky left-0 z-10 bg-surface-sunk" />
+                {weeks.map((week) => {
+                  const span = dates.filter((d) => weekStartOf(d) === week.weekStart).length;
+                  if (span === 0) return null;
+                  return (
+                    <th key={week.weekStart} colSpan={span} className="border-b border-l border-border/60 px-1 py-1 text-center">
+                      <span className="flex items-center justify-center gap-1.5 text-[0.625rem]">
+                        <span className="font-semibold tabular-nums">Week of {monthDay(week.weekStart)}</span>
+                        <WeekBadge status={week.viewing?.status ?? null} editing={editing} />
+                      </span>
+                    </th>
+                  );
+                })}
+                <th colSpan={columns - 2 - dates.length} className="border-b border-l border-border" />
+              </tr>
+            )}
+            <tr className="bg-surface-sunk">
+              <th className="sticky left-0 z-10 w-12 border-b border-border bg-surface-sunk px-2 py-1.5 text-left text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                ID
+              </th>
+              <th className="sticky left-12 z-10 w-44 border-b border-border bg-surface-sunk px-2 py-1.5 text-left text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                <span className="flex items-center gap-1.5">
+                  Person
+                  {editing && (
+                    <Hint text="Tap a day to set it. Arrow keys move between days and people, Enter opens the day, Delete makes it OFF." />
+                  )}
+                </span>
+              </th>
+              {dates.map((date) => (
+                <th key={date} className={cn("border-b border-l border-border/60 px-1 py-1 text-center", dates.length === 1 && "text-left")}>
+                  <span className="block text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                    {dayName(date)}
+                  </span>
+                  <span className="block text-xs font-bold tabular-nums">{monthDay(date)}</span>
+                </th>
+              ))}
+              <th className="w-20 border-b border-l border-border px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                Hours
+              </th>
+              {seesCost && (
+                <th className="w-24 border-b border-border px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                  Cost
+                </th>
+              )}
+            </tr>
+          </thead>
+
+          <tbody>
+            {employees.map((employee, row) => (
+              <PersonRow
+                key={employee.id}
+                rowIndex={row}
+                employee={employee}
+                cost={costs[row]}
+                dates={dates}
+                byKey={byKey}
+                awayByKey={awayByKey}
+                deptById={deptById}
+                weekByStart={weekByStart}
+                departments={departments}
+                look={look}
+                departmentId={departmentId}
+                editing={editing}
+                settings={settings}
+                seesCost={seesCost}
+                usual={usual}
+                absenceTypes={absenceTypes}
+                absenceById={absenceById}
+                open={open}
+                setOpen={setOpen}
+              />
+            ))}
+
+            {floaters.length > 0 && (
+              <tr>
+                <td colSpan={columns} className="sticky left-0 border-y border-border bg-surface-sunk px-2 py-1 text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                  <span className="flex items-center gap-1.5">
+                    From other departments
+                    <Hint text="People whose home is another department, working here. Their cost counts here. A ? means an approver of this department has not signed them off yet." />
+                  </span>
+                </td>
+              </tr>
+            )}
+            {floaters.map((employee, index) => (
+              <PersonRow
+                key={employee.id}
+                rowIndex={employees.length + index}
+                employee={employee}
+                cost={costs[employees.length + index]}
+                dates={dates}
+                byKey={byKey}
+                awayByKey={awayByKey}
+                deptById={deptById}
+                weekByStart={weekByStart}
+                departments={departments}
+                look={look}
+                departmentId={departmentId}
+                editing={editing}
+                settings={settings}
+                seesCost={seesCost}
+                usual={usual}
+                absenceTypes={absenceTypes}
+                absenceById={absenceById}
+                open={open}
+                setOpen={setOpen}
+                floater={{
+                  home: employee.departmentId ? deptById.get(employee.departmentId) : undefined,
+                  homeIndex: employee.departmentId ? departments.findIndex((d) => d.id === employee.departmentId) : 0,
+                  pending: dates.some((date) => {
+                    const s = byKey.get(`${employee.id}|${date}`);
+                    return s && s.isFloat && !s.floatApprovedAt && !isOff(s);
+                  }),
+                  canApprove: canApproveFloat,
+                  scheduleIds: [...new Set(dates.map((d) => byKey.get(`${employee.id}|${d}`)?.scheduleId).filter(Boolean))] as string[],
+                }}
+              />
+            ))}
+
+            {everyone.length === 0 && (
+              <tr>
+                <td colSpan={columns} className="px-3 py-10 text-center text-sm text-muted-foreground">
+                  Nobody in this department yet. Import from Paychex, or move people here in People.
+                </td>
+              </tr>
+            )}
+          </tbody>
+
+          <tfoot>
+            <tr className="border-t-2 border-t-foreground/20 bg-surface-sunk text-xs">
+              <td colSpan={2} className="sticky left-0 z-10 bg-surface-sunk px-2 py-1 text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                Per day
+              </td>
+              {dates.map((date, index) => (
+                <td key={date} className="border-l border-border/60 px-1 py-1 text-center tabular-nums">
+                  {dayHours[index] > 0 ? (
+                    <>
+                      <span className="font-semibold">{dayHours[index].toFixed(0)}h</span>
+                      <span className="ml-1 text-[0.625rem] text-muted-foreground">{dayPeople[index]}p</span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground/40">—</span>
+                  )}
+                </td>
+              ))}
+              <td className="border-l border-border px-2 py-1 text-right font-semibold tabular-nums">{total.hours.toFixed(1)}</td>
+              {seesCost && <td className="px-2 py-1 text-right font-bold tabular-nums">{money(total.total)}</td>}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <p className="flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
+        Hours are comes-in to leaves, less the department&rsquo;s break. Overtime is over {settings.weeklyOvertimeAfter} hours in a week
+        {settings.dailyOvertimeEnabled && `, or over ${settings.dailyOvertimeAfter} in a day for anyone under ${money(settings.dailyOvertimeRateCeiling)}/hour`}.
+        {seesCost && <Hint text="Cost is wages plus employer taxes at the rates in Configuration, Pay rules. Salaried people are counted by the week the moment any day is scheduled." />}
+      </p>
+    </div>
+  );
+}
+
+/* ---------------- pieces ---------------- */
+
+function dayName(date: string): string {
+  return DAY_NAMES[(new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7].slice(0, 3);
+}
+
+function WeekBadge({ status, editing }: { status: "draft" | "approved" | "archived" | null; editing: boolean }) {
+  if (status === "approved") {
+    return <span className="rounded-sm bg-success px-1 text-[0.5625rem] font-bold tracking-wider text-white uppercase">Approved</span>;
+  }
+  if (status === "draft") {
+    return <span className="rounded-sm bg-warning-foreground px-1 text-[0.5625rem] font-bold tracking-wider text-white uppercase">Draft</span>;
+  }
+  return (
+    <span className="rounded-sm bg-muted px-1 text-[0.5625rem] font-bold tracking-wider text-muted-foreground uppercase">
+      {editing ? "Empty" : "Nothing yet"}
+    </span>
+  );
+}
+
+function Stat({ label, value, strong, warn }: { label: string; value: string; strong?: boolean; warn?: boolean }) {
+  return (
+    <span className="text-xs">
+      <span className={cn("tabular-nums", strong ? "text-lg font-bold" : "font-semibold", warn && "text-warning-foreground")}>{value}</span>
+      <span className="ml-1 text-[0.625rem] text-muted-foreground">{label}</span>
+    </span>
+  );
+}
+
+type FloaterInfo = {
+  home: Department | undefined;
+  homeIndex: number;
+  pending: boolean;
+  canApprove: boolean;
+  scheduleIds: string[];
+};
+
+type Usual = ReturnType<typeof commonShifts>;
+type OpenCell = { employeeId: string; date: string } | null;
+
+function PersonRow({
+  rowIndex,
+  employee,
+  cost,
+  dates,
+  byKey,
+  awayByKey,
+  deptById,
+  weekByStart,
+  departments,
+  look,
+  departmentId,
+  editing,
+  settings,
+  seesCost,
+  usual,
+  absenceTypes,
+  absenceById,
+  open,
+  setOpen,
+  floater,
+}: {
+  rowIndex: number;
+  employee: Employee;
+  cost: ReturnType<typeof sumCosts>;
+  dates: string[];
+  byKey: Map<string, Shift>;
+  awayByKey: Map<string, AwayShift>;
+  deptById: Map<string, Department>;
+  weekByStart: Map<string, WeekOnScreen>;
+  departments: Department[];
+  look: ReturnType<typeof departmentColor>;
+  departmentId: string;
+  editing: boolean;
+  settings: PaySettings;
+  seesCost: boolean;
+  usual: Usual;
+  absenceTypes: AbsenceType[];
+  absenceById: Map<string, AbsenceType>;
+  open: OpenCell;
+  setOpen: (next: OpenCell) => void;
+  floater?: FloaterInfo;
+}) {
+  const router = useRouter();
+  const confirm = useConfirm();
+  const [pending, startTransition] = useTransition();
+  const homeLook = floater?.home ? departmentColor(floater.home.color, floater.homeIndex) : null;
+  const noEmail = !sendTo(employee);
+
+  return (
+    <tr className="group border-b border-border/50 last:border-b-0">
+      <td className="sticky left-0 z-10 bg-card px-2 py-0 font-mono text-[0.625rem] text-muted-foreground group-hover:bg-muted/40">
+        {employee.paychexId}
+      </td>
+      <td className="sticky left-12 z-10 bg-card px-2 py-0 group-hover:bg-muted/40">
+        <span className="flex items-center gap-1.5">
+          <span className={cn("block h-3.5 w-0.5 shrink-0", floater && homeLook ? homeLook.dot : look.dot)} />
+          <span className="min-w-0 truncate text-xs font-medium">{displayName(employee)}</span>
+          {employee.payType === "salary" && (
+            <span title="Salaried: paid by the week" className="shrink-0 rounded-sm bg-primary/15 px-1 text-[0.5625rem] font-bold text-primary">S</span>
+          )}
+          {employee.isSupervisor && <span className="shrink-0 text-[0.5625rem] font-semibold text-muted-foreground">SUP</span>}
+          {noEmail && (
+            <span title="No email on file. This person will not receive the schedule by email - print it for them." className="shrink-0 text-warning-foreground">
+              <MailX className="size-3" />
+            </span>
+          )}
+          {floater && (
+            <span className="ml-auto flex shrink-0 items-center gap-1">
+              <span className={cn("rounded-sm px-1 text-[0.5625rem] font-semibold", homeLook?.tint)}>from {floater.home?.name ?? "elsewhere"}</span>
+              {floater.pending ? (
+                floater.canApprove && floater.scheduleIds.length > 0 ? (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    title="Approve this person working here"
+                    onClick={() =>
+                      startTransition(async () => {
+                        for (const scheduleId of floater.scheduleIds) {
+                          const result = await approveFloats({ scheduleId, employeeId: employee.id });
+                          if (!result.ok) await confirm({ title: result.message, cancelLabel: false });
+                        }
+                        router.refresh();
+                      })
+                    }
+                    className="inline-flex h-5 items-center gap-0.5 rounded-sm bg-warning-muted px-1 text-[0.5625rem] font-bold text-warning-foreground hover:bg-success hover:text-white"
+                  >
+                    ? Approve
+                  </button>
+                ) : (
+                  <span title="Waiting for an approver of this department to sign off" className="rounded-sm bg-warning-muted px-1 text-[0.5625rem] font-bold text-warning-foreground">?</span>
+                )
+              ) : (
+                <CheckCircle2 className="size-3 text-success" aria-label="Approved" />
+              )}
+              {editing && floater.scheduleIds.length > 0 && (
+                <button
+                  type="button"
+                  disabled={pending}
+                  aria-label="Remove from this department"
+                  title="Remove from this department"
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: `Take ${displayName(employee)} off this department?`,
+                      description: "Their days here are removed. Their home department is not touched.",
+                      confirmLabel: "Remove",
+                      cancelLabel: "Cancel",
+                      tone: "danger",
+                    });
+                    if (!ok) return;
+                    startTransition(async () => {
+                      for (const scheduleId of floater.scheduleIds) {
+                        await removeFloater({ scheduleId, employeeId: employee.id });
+                      }
+                      router.refresh();
+                    });
+                  }}
+                  className="inline-flex size-5 items-center justify-center text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="size-3" />
+                </button>
+              )}
+            </span>
+          )}
+        </span>
+      </td>
+
+      {dates.map((date, dayIndex) => (
+        <DayCell
+          key={date}
+          rowIndex={rowIndex}
+          dayIndex={dayIndex}
+          departmentId={departmentId}
+          employee={employee}
+          date={date}
+          shift={byKey.get(`${employee.id}|${date}`)}
+          away={floater ? undefined : awayByKey.get(`${employee.id}|${date}`)}
+          deptById={deptById}
+          departments={departments}
+          look={floater && homeLook ? homeLook : look}
+          weekStatus={weekByStart.get(weekStartOf(date))?.viewing?.status ?? null}
+          isFloat={!!floater}
+          editing={editing}
+          usual={usual}
+          absenceTypes={absenceTypes}
+          absenceById={absenceById}
+          isOpen={open?.employeeId === employee.id && open.date === date}
+          onOpen={() => setOpen({ employeeId: employee.id, date })}
+          onClose={() => setOpen(null)}
+        />
+      ))}
+
+      <td className="border-l border-border px-2 py-0.5 text-right text-xs tabular-nums">
+        {cost.hours > 0 ? cost.hours.toFixed(1) : ""}
+        {cost.overtimeHours > 0.01 && (
+          <span title={`${cost.overtimeHours.toFixed(1)} hours at ${settings.overtimeMultiplier}x`} className="ml-1 text-[0.5625rem] font-semibold text-warning-foreground">
+            +{cost.overtimeHours.toFixed(1)} OT
+          </span>
+        )}
+      </td>
+      {seesCost && (
+        <td
+          title={employee.payRate === null && cost.hours > 0 ? "No rate from Paychex - counted as zero" : `${money(cost.wages)} wages + ${money(cost.burden)} employer taxes`}
+          className={cn("px-2 py-0.5 text-right text-xs font-semibold tabular-nums", employee.payRate === null && cost.hours > 0 && "text-warning-foreground")}
+        >
+          {cost.total > 0 ? money(cost.total) : ""}
+          {employee.payRate === null && cost.hours > 0 && " ?"}
+        </td>
+      )}
+    </tr>
+  );
+}
+
+/**
+ * One person, one day.
+ *
+ * A button. Locked, it reads "6:00 AM / 4:00 PM" or OFF and explains itself
+ * if tapped. Editing, tapping opens the card. Arrow keys move to the next
+ * day or person, Enter opens, Delete makes the day OFF.
+ */
+function DayCell({
+  rowIndex,
+  dayIndex,
+  departmentId,
+  employee,
+  date,
+  shift,
+  away,
+  deptById,
+  departments,
+  look,
+  weekStatus,
+  isFloat,
+  editing,
+  usual,
+  absenceTypes,
+  absenceById,
+  isOpen,
+  onOpen,
+  onClose,
+}: {
+  rowIndex: number;
+  dayIndex: number;
+  departmentId: string;
+  employee: Employee;
+  date: string;
+  shift: Shift | undefined;
+  away: AwayShift | undefined;
+  deptById: Map<string, Department>;
+  departments: Department[];
+  /** This row's colour: the department's, or a floater's home department's. */
+  look: ReturnType<typeof departmentColor>;
+  weekStatus: "draft" | "approved" | "archived" | null;
+  isFloat: boolean;
+  editing: boolean;
+  usual: Usual;
+  absenceTypes: AbsenceType[];
+  absenceById: Map<string, AbsenceType>;
+  isOpen: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const confirm = useConfirm();
+  const [pending, startTransition] = useTransition();
+  const off = isOff(shift);
+  const awayDept = away ? deptById.get(away.departmentId) : undefined;
+  const awayLook = awayDept ? departmentColor(awayDept.color, departments.indexOf(awayDept)) : null;
+  const absence = shift?.absenceTypeId ? absenceById.get(shift.absenceTypeId) : undefined;
+  const absenceLook = absence ? departmentColor(absence.color, absenceTypes.indexOf(absence)) : null;
+  const weekend = [0, 6].includes(new Date(`${date}T00:00:00Z`).getUTCDay());
+
+  function focusCell(dr: number, dd: number) {
+    const target = document.querySelector<HTMLButtonElement>(`[data-hr-cell][data-row="${rowIndex + dr}"][data-day="${dayIndex + dd}"]`);
+    target?.focus();
+  }
+
+  function setOff() {
+    if (off) return;
+    startTransition(async () => {
+      const result = await saveShifts({
+        departmentId,
+        weekStart: weekStartOf(date),
+        employeeId: employee.id,
+        isFloat,
+        days: [{ workDate: date, startTime: null, endTime: null }],
+      });
+      if (!result.ok) await confirm({ title: result.message, cancelLabel: false });
+      router.refresh();
+    });
+  }
+
+  function onKey(event: React.KeyboardEvent<HTMLButtonElement>) {
+    const moves: Record<string, [number, number]> = { ArrowRight: [0, 1], ArrowLeft: [0, -1], ArrowDown: [1, 0], ArrowUp: [-1, 0] };
+    const move = moves[event.key];
+    if (move) {
+      event.preventDefault();
+      focusCell(move[0], move[1]);
+      return;
+    }
+    if (editing && (event.key === "Delete" || event.key === "Backspace")) {
+      event.preventDefault();
+      setOff();
+    }
+  }
+
+  /*
+    What the day says.
+
+    Working here: the times on this department's colour. Working elsewhere:
+    that department's name and the times, on ITS colour, so a glance at the
+    row shows where the person is. OFF stays quiet.
+  */
+  const label = off ? (
+    absence ? (
+      <span title={`${absence.name}${absence.paid ? ` - paid, ${absence.paidHours} h` : " - unpaid"}`} className="flex flex-col leading-tight">
+        <span className="text-[0.6875rem] font-black tracking-wider">{absence.code}</span>
+        <span className="text-[0.5625rem] opacity-80">{absence.paid ? "paid" : "unpaid"}</span>
+      </span>
+    ) : awayDept && away ? (
+      <span
+        title={`Working in ${awayDept.name} this day${away.approved ? "" : " - not yet approved by that department"}`}
+        className="flex flex-col leading-tight"
+      >
+        <span className="truncate text-[0.625rem] font-bold uppercase">
+          {awayDept.name}
+          {!away.approved && " ?"}
+        </span>
+        <span className="text-[0.625rem]">
+          {displayTime(away.startTime)} – {displayTime(away.endTime)}
+        </span>
+      </span>
+    ) : (
+      <span className="font-semibold text-muted-foreground/50">OFF</span>
+    )
+  ) : (
+    <span className="flex flex-col leading-tight font-semibold">
+      <span>{displayTime(shift!.startTime!)}</span>
+      <span className="font-medium opacity-80">{displayTime(shift!.endTime!)}</span>
+    </span>
+  );
+
+  return (
+    <td
+      className={cn(
+        "relative border-l border-border/60 p-0.5 text-center text-xs tabular-nums",
+        weekend && "bg-surface-sunk/60",
+        pending && "opacity-50"
+      )}
+    >
+      <button
+        type="button"
+        data-hr-cell
+        data-row={rowIndex}
+        data-day={dayIndex}
+        aria-label={`${displayName(employee)}, ${dayName(date)} ${monthDay(date)}`}
+        onKeyDown={onKey}
+        onClick={async () => {
+          if (!editing) {
+            await confirm({
+              title: weekStatus === "approved" ? "This week is approved and locked" : "The week is locked",
+              description:
+                weekStatus === "approved"
+                  ? "Press Edit the week, top left. You will be asked to confirm, a copy opens as your draft, and the change needs approval again."
+                  : "Press Edit the week, top left, to change hours. Your changes go into a draft until it is approved.",
+              cancelLabel: false,
+            });
+            return;
+          }
+          if (isOpen) onClose();
+          else onOpen();
+        }}
+        className={cn(
+          "min-h-8 w-full rounded-sm px-1 py-0 text-[0.6875rem] leading-tight transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+          !off && look.tint,
+          off && !absence && awayLook && awayLook.tint,
+          off && absenceLook && absenceLook.tint,
+          editing ? "hover:ring-1 hover:ring-primary" : "cursor-default",
+          isOpen && "ring-2 ring-primary"
+        )}
+      >
+        {label}
+      </button>
+
+      {isOpen && editing && (
+        <DayCard
+          departmentId={departmentId}
+          employee={employee}
+          date={date}
+          shift={shift}
+          isFloat={isFloat}
+          usual={usual}
+          absenceTypes={absenceTypes}
+          departments={departments}
+          onClose={() => {
+            onClose();
+            requestAnimationFrame(() => focusCell(0, 0));
+          }}
+        />
+      )}
+    </td>
+  );
+}
+
+/**
+ * The card. Everything a supervisor can do to one person's day, in big
+ * plain controls: comes in, leaves, the shifts this department usually works,
+ * OFF, the same thing Monday to Friday or all week, and sending the person to
+ * another department for the day.
+ */
+function DayCard({
+  departmentId,
+  employee,
+  date,
+  shift,
+  isFloat,
+  usual,
+  absenceTypes,
+  departments,
+  onClose,
+}: {
+  departmentId: string;
+  employee: Employee;
+  date: string;
+  shift: Shift | undefined;
+  isFloat: boolean;
+  usual: Usual;
+  absenceTypes: AbsenceType[];
+  departments: Department[];
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const confirm = useConfirm();
+  const [pending, startTransition] = useTransition();
+  const [start, setStart] = useState(shift?.startTime ?? usual[0]?.start ?? "06:00");
+  const [end, setEnd] = useState(shift?.endTime ?? usual[0]?.end ?? "16:00");
+  const [elsewhere, setElsewhere] = useState(false);
+  const [hostId, setHostId] = useState("");
+  const options = useMemo(() => timeOptions(), []);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const weekStart = weekStartOf(date);
+
+  useEffect(() => {
+    cardRef.current?.querySelector<HTMLElement>("select, button")?.focus();
+  }, []);
+
+  function run(
+    days: { workDate: string; startTime: string | null; endTime: string | null; absenceTypeId?: string | null }[],
+    toDepartment?: string
+  ) {
+    startTransition(async () => {
+      const result = await saveShifts({
+        departmentId: toDepartment ?? departmentId,
+        weekStart,
+        employeeId: employee.id,
+        isFloat: toDepartment ? true : isFloat,
+        days,
+      });
+      if (!result.ok) {
+        await confirm({ title: result.message, cancelLabel: false });
+        return;
+      }
+      onClose();
+      router.refresh();
+    });
+  }
+
+  const weekdays = weekDates(weekStart).slice(0, 5);
+  const allWeek = weekDates(weekStart);
+  const hosts = departments.filter((d) => d.active && d.id !== departmentId && d.id !== employee.departmentId);
+
+  return (
+    <>
+      {/* Anything outside the card closes it. */}
+      <button type="button" aria-label="Close" onClick={onClose} className="fixed inset-0 z-[55] cursor-default bg-foreground/10 sm:bg-transparent" />
+      <div
+        ref={cardRef}
+        role="dialog"
+        aria-label={`${displayName(employee)} on ${dayName(date)} ${monthDay(date)}`}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onClose();
+          }
+        }}
+        className="fixed inset-x-2 bottom-2 z-[60] flex flex-col gap-2 rounded-sm bg-card p-3 text-left shadow-xl ring-1 ring-foreground/15 sm:absolute sm:inset-auto sm:top-full sm:left-1/2 sm:w-80 sm:-translate-x-1/2"
+      >
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold">{displayName(employee)}</p>
+            <p className="text-xs text-muted-foreground">
+              {DAY_NAMES[(new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7]} {monthDay(date)}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close" className="inline-flex size-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted">
+            <X className="size-4" />
+          </button>
+        </div>
+
+        {/* The shifts this department usually works: one tap. */}
+        {usual.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {usual.map((u) => {
+              const active = u.start === start && u.end === end;
+              return (
+                <button
+                  key={`${u.start}-${u.end}`}
+                  type="button"
+                  onClick={() => {
+                    setStart(u.start);
+                    setEnd(u.end);
+                  }}
+                  aria-pressed={active}
+                  className={cn(
+                    "h-8 rounded-sm px-2 text-xs font-semibold ring-1 transition-colors",
+                    active ? "bg-primary text-primary-foreground ring-primary" : "bg-card ring-foreground/15 hover:bg-muted"
+                  )}
+                >
+                  {shiftLabel(u.start, u.end)}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2">
+          <label className="flex flex-col gap-0.5 text-[0.625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+            Comes in
+            <select value={start} onChange={(event) => setStart(event.target.value)} className={TIME}>
+              {options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-0.5 text-[0.625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+            Leaves
+            <select value={end} onChange={(event) => setEnd(event.target.value)} className={TIME}>
+              {options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {!elsewhere ? (
+          <>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button type="button" disabled={pending} onClick={() => run([{ workDate: date, startTime: start, endTime: end }])} className={cn(BIG, "col-span-2 bg-primary text-primary-foreground")}>
+                {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+                Save this day
+              </button>
+              <button type="button" disabled={pending} onClick={() => run(weekdays.map((d) => ({ workDate: d, startTime: start, endTime: end })))} className={cn(BIG, "bg-card ring-1 ring-foreground/15 hover:bg-muted")}>
+                Same Mon–Fri
+              </button>
+              <button type="button" disabled={pending} onClick={() => run(allWeek.map((d) => ({ workDate: d, startTime: start, endTime: end })))} className={cn(BIG, "bg-card ring-1 ring-foreground/15 hover:bg-muted")}>
+                Same all week
+              </button>
+              <button
+                type="button"
+                disabled={pending || (isOff(shift) && !shift?.absenceTypeId)}
+                onClick={() => run([{ workDate: date, startTime: null, endTime: null, absenceTypeId: null }])}
+                className={cn(BIG, "bg-card text-destructive ring-1 ring-foreground/15 hover:bg-destructive/10 disabled:opacity-40")}
+              >
+                OFF this day
+              </button>
+              {!isFloat && hosts.length > 0 && (
+                <button type="button" disabled={pending} onClick={() => setElsewhere(true)} className={cn(BIG, "bg-card ring-1 ring-foreground/15 hover:bg-muted")}>
+                  <ArrowRightLeft className="size-3.5" />
+                  Another dept
+                </button>
+              )}
+            </div>
+
+            {/* Off for a reason: PTO, holiday, furlough... one tap each. */}
+            {absenceTypes.filter((t) => t.active).length > 0 && (
+              <div className="flex flex-col gap-1">
+                <p className="flex items-center gap-1 text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                  Off because
+                  <Hint text="The day is OFF with the reason on it. Paid reasons add their hours at the person's rate, without overtime. Add or change reasons in Configuration, Day types." />
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {absenceTypes
+                    .filter((t) => t.active)
+                    .map((t, index) => {
+                      const tone = departmentColor(t.color, index);
+                      const active = shift?.absenceTypeId === t.id;
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          disabled={pending}
+                          aria-pressed={active}
+                          onClick={() => run([{ workDate: date, startTime: null, endTime: null, absenceTypeId: t.id }])}
+                          className={cn(
+                            "inline-flex h-8 items-center gap-1.5 rounded-sm px-2 text-xs font-semibold ring-1 transition-colors",
+                            tone.tint,
+                            active ? "ring-2 ring-primary" : "ring-foreground/10 hover:ring-primary"
+                          )}
+                        >
+                          <span className={cn("block h-3 w-1", tone.dot)} />
+                          {t.name}
+                          <span className="text-[0.5625rem] font-normal text-muted-foreground">{t.paid ? `paid ${t.paidHours}h` : "unpaid"}</span>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="flex flex-col gap-1.5 rounded-sm bg-surface-sunk p-2">
+            <p className="flex items-center gap-1 text-[0.625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+              Works in another department this day
+              <Hint text="The hours above are written on that department's schedule with a ? until one of its approvers signs. Here the day shows 'at that department'. Their cost for the day counts there." />
+            </p>
+            <select value={hostId} onChange={(event) => setHostId(event.target.value)} className={TIME}>
+              <option value="">Which department…</option>
+              {hosts.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.line ? `${d.line} › ` : ""}
+                  {d.name}
+                </option>
+              ))}
+            </select>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button type="button" disabled={pending || !hostId} onClick={() => run([{ workDate: date, startTime: start, endTime: end }], hostId)} className={cn(BIG, "bg-primary text-primary-foreground disabled:opacity-50")}>
+                {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+                Send there
+              </button>
+              <button type="button" onClick={() => setElsewhere(false)} className={cn(BIG, "bg-card ring-1 ring-foreground/15 hover:bg-muted")}>
+                Back
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+const TIME = "h-9 w-full rounded-sm bg-card px-2 text-sm font-medium ring-1 ring-foreground/15 focus:ring-2 focus:ring-primary focus:outline-none";
+const BIG = "inline-flex h-9 items-center justify-center gap-1.5 rounded-sm px-2 text-xs font-semibold transition-colors disabled:opacity-60";
