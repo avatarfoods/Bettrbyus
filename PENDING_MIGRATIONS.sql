@@ -17,6 +17,10 @@
 --   - Batch yield, called-in and per-line print units cannot be saved
 --   - The 199 desired batch / batch yield values from MASTER FRESH
 --     08.13.2026 are not loaded
+--   - Master PO cannot use its DAILY USAGE / OPEN ORDER buffer settings, and
+--     the unresolved-BOM-line warning has nowhere to read from
+--   - Syncing from Odoo fails outright (materials have nowhere to store
+--     which company they were bought under)
 -- ============================================================
 
 
@@ -1267,4 +1271,50 @@ comment on column public.purchasing_recipes.default_container_size is
 
 comment on column public.purchasing_recipes.default_container_label is
   'bucket, cart, pan, bin, case or bag.';
+
+-- 20260903_purchasing_live_mode
+-- Master PO stops depending on a re-uploaded Excel snapshot: order quantities
+-- are now computed live from the production schedule + BOM. This adds the
+-- dual-mode defaults the old workbook's "DAILY USAGE" / "OPEN ORDER" toggle
+-- used (5% / 15% buffers, taken straight from the workbook's own P2/T2
+-- cells), and a diagnostic view for BOM lines nothing can be bought against.
+
+alter table public.app_settings
+  add column if not exists purchasing_daily_usage_days integer not null default 3,
+  add column if not exists purchasing_daily_usage_extra_pct numeric not null default 5,
+  add column if not exists purchasing_open_order_days integer not null default 14,
+  add column if not exists purchasing_open_order_extra_pct numeric not null default 15;
+
+-- A line with neither a material nor a sub-recipe contributes zero demand
+-- silently - there is no fuzzy name match to fall back on the way the old
+-- Excel-driven import had. This is how that gap gets caught before it turns
+-- into an under-ordered material.
+create or replace view public.purchasing_recipe_lines_unresolved
+with (security_invoker = on) as
+select
+  rl.id,
+  rl.recipe_id,
+  r.name as recipe_name,
+  rl.ingredient_name,
+  rl.quantity,
+  rl.uom
+from public.purchasing_recipe_lines rl
+join public.purchasing_recipes r on r.id = rl.recipe_id
+where rl.material_id is null
+  and rl.sub_recipe_id is null
+  and r.active = true;
+
+-- 20260903_purchasing_materials_company
+-- Materials are purchased separately per Odoo company (Tuscany Cookies LLC,
+-- AvatarNaturalFoods, Yaya's, ...), not shared across them. Tagging each
+-- synced material with the company it came from is what lets the Materials
+-- page and Master PO show/select "just this place" instead of one blended
+-- catalog.
+
+alter table public.purchasing_materials
+  add column if not exists odoo_company_id integer,
+  add column if not exists odoo_company_name text;
+
+create index if not exists purchasing_materials_odoo_company_id_idx
+  on public.purchasing_materials (odoo_company_id);
 

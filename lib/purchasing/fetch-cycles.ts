@@ -510,3 +510,104 @@ function buildSchedulePlan(
     error: null,
   };
 }
+
+export type LiveSchedulePlan = {
+  fromDate: string;
+  toDate: string;
+  dates: string[];
+  rows: SchedulePlan["rows"];
+  entryCount: number;
+};
+
+/**
+ * The live production schedule for a Master PO's window - what is actually
+ * committed to the floor across every line, not an Excel import snapshot.
+ * Same shape as the legacy import-based plan so PurchasingPlanDialog can show
+ * either without knowing which one it got.
+ */
+export async function fetchLiveSchedulePlan(
+  supabase: SupabaseClient,
+  range: { fromDate: string; toDate: string }
+): Promise<{ data: LiveSchedulePlan | null; error: string | null }> {
+  const { data: liveSchedules, error: scheduleError } = await supabase
+    .from("production_schedules")
+    .select("id")
+    .eq("status", "live");
+  if (scheduleError) return { data: null, error: scheduleError.message };
+
+  const scheduleIds = (liveSchedules ?? []).map((row) => row.id as string);
+  const empty: LiveSchedulePlan = {
+    fromDate: range.fromDate,
+    toDate: range.toDate,
+    dates: [],
+    rows: [],
+    entryCount: 0,
+  };
+  if (scheduleIds.length === 0) return { data: empty, error: null };
+
+  const { data: entryRows, error: entriesError } = await supabase
+    .from("production_schedule_entries")
+    .select(
+      "recipe_id, production_date, quantity, recipe:purchasing_recipes ( wip_code, name, department, uom )"
+    )
+    .in("schedule_id", scheduleIds)
+    .gte("production_date", range.fromDate)
+    .lte("production_date", range.toDate);
+  if (entriesError) return { data: null, error: entriesError.message };
+
+  type EntryRow = {
+    recipe_id: string;
+    production_date: string;
+    quantity: number;
+    recipe:
+      | { wip_code: string; name: string; department: string | null; uom: string | null }
+      | { wip_code: string; name: string; department: string | null; uom: string | null }[]
+      | null;
+  };
+
+  const dateSet = new Set<string>();
+  const byRecipe = new Map<
+    string,
+    {
+      wipCode: string;
+      recipeName: string;
+      department: string;
+      uom: string | null;
+      quantities: Record<string, number>;
+      total: number;
+    }
+  >();
+
+  let entryCount = 0;
+  for (const row of (entryRows ?? []) as EntryRow[]) {
+    if (!row.quantity) continue;
+    entryCount += 1;
+    dateSet.add(row.production_date);
+    const recipe = Array.isArray(row.recipe) ? (row.recipe[0] ?? null) : row.recipe;
+
+    let line = byRecipe.get(row.recipe_id);
+    if (!line) {
+      line = {
+        wipCode: recipe?.wip_code ?? row.recipe_id,
+        recipeName: recipe?.name ?? row.recipe_id,
+        department: (recipe?.department ?? "").trim(),
+        uom: recipe?.uom ?? null,
+        quantities: {},
+        total: 0,
+      };
+      byRecipe.set(row.recipe_id, line);
+    }
+    line.quantities[row.production_date] =
+      (line.quantities[row.production_date] ?? 0) + Number(row.quantity);
+    line.total += Number(row.quantity);
+  }
+
+  const dates = [...dateSet].sort();
+  const rows = [...byRecipe.values()].sort((a, b) => {
+    const dept = a.department.localeCompare(b.department);
+    if (dept !== 0) return dept;
+    return a.wipCode.localeCompare(b.wipCode);
+  });
+
+  return { data: { fromDate: range.fromDate, toDate: range.toDate, dates, rows, entryCount }, error: null };
+}

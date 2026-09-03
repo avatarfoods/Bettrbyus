@@ -12,8 +12,8 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  fetchImportSchedulePlan,
-  type SchedulePlan,
+  fetchLiveSchedulePlan,
+  type LiveSchedulePlan,
 } from "@/lib/purchasing/fetch-cycles";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,7 +27,8 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 type PurchasingPlanDialogProps = {
-  importId: string | null;
+  /** The window this Master PO's demand was computed over. */
+  range: { fromDate: string; toDate: string } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
@@ -126,11 +127,11 @@ function formatPlanQty(value: number | null | undefined) {
 }
 
 export function PurchasingPlanDialog({
-  importId,
+  range,
   open,
   onOpenChange,
 }: PurchasingPlanDialogProps) {
-  const [plan, setPlan] = useState<SchedulePlan | null>(null);
+  const [plan, setPlan] = useState<LiveSchedulePlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState<string | null>(null);
@@ -139,12 +140,12 @@ export function PurchasingPlanDialog({
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!open || !importId) return;
+    if (!open || !range) return;
 
     let active = true;
     startLoad(async () => {
       const supabase = createClient();
-      const result = await fetchImportSchedulePlan(supabase, importId);
+      const result = await fetchLiveSchedulePlan(supabase, range);
       if (!active) return;
       if (result.error) {
         setError(result.error);
@@ -158,7 +159,7 @@ export function PurchasingPlanDialog({
     return () => {
       active = false;
     };
-  }, [open, importId]);
+  }, [open, range]);
 
   /*
     Cleared while rendering, not in an effect.
@@ -237,16 +238,16 @@ export function PurchasingPlanDialog({
             <DialogHeader className="gap-1">
               <DialogTitle className="flex items-center gap-2">
                 <CalendarRange className="size-5" />
-                Uploaded production plan
+                Live production schedule
               </DialogTitle>
               <DialogDescription>
                 {plan
-                  ? `${plan.fileName} · ${plan.rows.length} recipes · ${plan.entryCount} scheduled productions · ${
+                  ? `${plan.rows.length} recipes · ${plan.entryCount} scheduled productions · ${
                       plan.dates.length > 0
                         ? `${formatShortDate(plan.dates[0])}–${formatShortDate(plan.dates[plan.dates.length - 1])}`
                         : "no dates"
                     }`
-                  : "Schedule imported from the master PRODUCTION SCHEDULE sheet."}
+                  : "What is committed to the floor - this is what drove this Master PO's numbers."}
               </DialogDescription>
             </DialogHeader>
 

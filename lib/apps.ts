@@ -109,12 +109,12 @@ export const APPS: AppDefinition[] = [
         // the plan itself, what it needs, what is already thawing, and the
         // paper that comes out of it.
         label: "Planning",
-        href: "/production/schedule",
+        href: "/production/schedule?view=live",
         items: [
           {
             group: "Plan",
             label: "Schedule",
-            href: "/production/schedule",
+            href: "/production/schedule?view=live",
             icon: CalendarRange,
           },
           { group: "Plan", label: "Orders", href: "/orders", icon: CalendarDays },

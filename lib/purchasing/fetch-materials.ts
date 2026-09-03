@@ -13,7 +13,7 @@ export async function fetchMaterialsWithOnHand(
   supabase: SupabaseClient
 ): Promise<{ data: MaterialWithOnHand[]; error: string | null }> {
   const COLUMNS =
-    "id, item_code, name, odoo_product_id, odoo_category, storage_type, lbs_per_case, is_protein, thaw_buffer_days, lead_time_days, price, active, last_synced_at";
+    "id, item_code, name, odoo_product_id, odoo_category, odoo_company_id, odoo_company_name, storage_type, lbs_per_case, is_protein, thaw_buffer_days, lead_time_days, price, active, last_synced_at";
 
   const [materialsResult, inventoryResult] = await Promise.all([
     // Paged: there are more materials than PostgREST returns in one response,

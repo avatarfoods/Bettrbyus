@@ -18,6 +18,7 @@ import {
   STORAGE_TYPES,
 } from "@/lib/validations/purchasing-material";
 import { Button } from "@/components/ui/button";
+import { ButtonTabBar, type TabItem } from "@/components/ui/tab-bar";
 import {
   Card,
   CardContent,
@@ -328,6 +329,7 @@ export function PurchasingMaterialsPage() {
   const [search, setSearch] = useState("");
   const [storageFilter, setStorageFilter] = useState("");
   const [showInactive, setShowInactive] = useState(false);
+  const [companyTab, setCompanyTab] = useState("all");
   const [editingMaterial, setEditingMaterial] =
     useState<MaterialWithOnHand | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -403,9 +405,30 @@ export function PurchasingMaterialsPage() {
     });
   }
 
+  /** Which Odoo company (Yaya's, AvatarNaturalFoods, …) each material was
+   * bought under - materials are purchased per company, not shared. */
+  const companyTabs = useMemo<TabItem[]>(() => {
+    const counts = new Map<string, number>();
+    for (const material of materials) {
+      const key = material.odoo_company_name ?? "Unassigned";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const names = [...counts.keys()].sort((a, b) => a.localeCompare(b));
+    return [
+      { id: "all", label: "All places", count: materials.length },
+      ...names.map((name) => ({ id: name, label: name, count: counts.get(name) })),
+    ];
+  }, [materials]);
+
   const filteredMaterials = useMemo(() => {
     const query = search.trim().toLowerCase();
     return materials.filter((material) => {
+      if (
+        companyTab !== "all" &&
+        (material.odoo_company_name ?? "Unassigned") !== companyTab
+      ) {
+        return false;
+      }
       if (!showInactive && !material.active) return false;
       if (storageFilter && material.storage_type !== storageFilter) return false;
       if (!query) return true;
@@ -414,7 +437,7 @@ export function PurchasingMaterialsPage() {
         material.name.toLowerCase().includes(query)
       );
     });
-  }, [materials, search, storageFilter, showInactive]);
+  }, [materials, search, storageFilter, showInactive, companyTab]);
 
   const lastSyncLabel = useMemo(() => {
     const timestamps = materials
@@ -467,6 +490,15 @@ export function PurchasingMaterialsPage() {
           </div>
         </div>
       </header>
+
+      <div className="flex items-stretch border-b border-border bg-card">
+        <ButtonTabBar
+          items={companyTabs}
+          activeId={companyTab}
+          onSelect={setCompanyTab}
+          className="min-w-0 flex-1 border-b-0"
+        />
+      </div>
 
       <main className="mx-auto flex w-full max-w-none flex-1 flex-col gap-4 px-4 py-6">
         {syncMessage && (

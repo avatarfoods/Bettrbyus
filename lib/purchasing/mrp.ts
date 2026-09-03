@@ -1,50 +1,47 @@
-// MRP engine: explodes the production schedule through the multi-level BOM
-// down to purchasable raw materials.
+// MRP engine: explodes the live production schedule through the multi-level
+// BOM down to purchasable raw materials.
 //
 // Demand units:
 //  - Batch recipes are demanded in LBS (schedule U/M = LBS).
 //  - Per-unit recipes are demanded in units (bowls, cases).
 // Material requirements accumulate as pounds (weight ingredients) or units
 // (packaging). Case conversion happens later using materials.lbs_per_case.
+//
+// Resolution is FK-direct: every purchasing_recipe_lines row already carries
+// material_id or sub_recipe_id, set by the live BOM editor (see
+// lib/recipes/line-actions.ts). There is no ingredient-name matching here -
+// that was the old Excel-import path's job, and it is gone. A line with
+// neither FK set contributes zero and is reported in `unresolvedLines`
+// instead of silently disappearing; see purchasing_recipe_lines_unresolved.
 
-import type {
-  ParsedRecipe,
-  ParsedRecipeLine,
-  ParsedScheduleEntry,
-} from "@/lib/purchasing/master-parser";
+import type { WipRecipe, WipRecipeLine } from "@/lib/production/wip-explode";
 
-// Kept dependency-free (type-only imports) so it can run under plain Node for
-// verification against the real workbook. Same normalization as the parser.
-function normalizeIngredientName(value: string): string {
-  return value.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim().toUpperCase();
-}
-
-export type ResolvedTarget =
-  | { type: "recipe"; wipCode: string }
-  | { type: "material"; itemCode: string }
-  | { type: "ignore" }
-  | { type: "unresolved" };
-
-export type ResolveIngredient = (ingredientName: string) => ResolvedTarget;
+export type ScheduleDemandEntry = {
+  recipeId: string;
+  /** ISO date, yyyy-mm-dd. */
+  date: string;
+  quantity: number;
+};
 
 export type MaterialRequirement = {
-  itemCode: string;
-  /** Ingredient names that contributed to this requirement. */
+  materialId: string;
+  /** Ingredient names that contributed to this requirement, for a tooltip. */
   sourceNames: Set<string>;
   totalLbs: number;
   totalUnits: number;
 };
 
-export type UnresolvedIngredient = {
+export type UnresolvedLine = {
+  recipeId: string;
+  recipeName: string;
   ingredientName: string;
   totalLbs: number;
   totalUnits: number;
-  recipes: Set<string>;
 };
 
 export type MrpResult = {
   requirements: Map<string, MaterialRequirement>;
-  unresolved: Map<string, UnresolvedIngredient>;
+  unresolvedLines: Map<string, UnresolvedLine>;
   warnings: string[];
 };
 
@@ -71,13 +68,18 @@ function lossFactor(lossPct: number | null): number {
 /**
  * Requirement contributed by one BOM line for a given demand of its recipe.
  * Returns lbs for weight lines and units for unit lines.
+ *
+ * Same arithmetic as explodeToNodes() in lib/production/wip-explode.ts and
+ * deriveDemand() in lib/production/schedule/model.ts - all three have to
+ * agree, or purchasing, the WIP calculator and the batch sheet would each be
+ * working from a different number for the same line.
  */
 function lineRequirement(
-  recipe: ParsedRecipe,
-  line: ParsedRecipeLine,
+  recipe: WipRecipe,
+  line: WipRecipeLine,
   demand: number
 ): { lbs: number; units: number } {
-  if (recipe.batchSize !== null) {
+  if (recipe.batchSize !== null && recipe.batchSize !== 0) {
     // Batch recipe: demand is output lbs; line quantity is a share of batch.
     const fraction = line.quantity / recipe.batchSize;
     return { lbs: demand * fraction, units: 0 };
@@ -91,31 +93,29 @@ function lineRequirement(
   return { lbs: 0, units: demand * line.quantity * factor };
 }
 
-export function computeRequirements(
-  recipes: ParsedRecipe[],
-  scheduleEntries: ParsedScheduleEntry[],
-  resolve: ResolveIngredient,
-  range?: { fromDate?: string; toDate?: string }
-): MrpResult {
+export function computeMaterialRequirements(input: {
+  recipesById: Map<string, WipRecipe>;
+  linesByRecipeId: Map<string, WipRecipeLine[]>;
+  scheduleEntries: ScheduleDemandEntry[];
+  fromDate?: string;
+  toDate?: string;
+}): MrpResult {
+  const { recipesById, linesByRecipeId, scheduleEntries, fromDate, toDate } = input;
+
   const warnings: string[] = [];
   const requirements = new Map<string, MaterialRequirement>();
-  const unresolved = new Map<string, UnresolvedIngredient>();
-
-  const recipeByWip = new Map<string, ParsedRecipe>();
-  for (const recipe of recipes) recipeByWip.set(recipe.wipCode, recipe);
-
-  const missingRecipeWarnings = new Set<string>();
+  const unresolvedLines = new Map<string, UnresolvedLine>();
 
   function addMaterial(
-    itemCode: string,
+    materialId: string,
     ingredientName: string,
     lbs: number,
     units: number
   ) {
-    let requirement = requirements.get(itemCode);
+    let requirement = requirements.get(materialId);
     if (!requirement) {
-      requirement = { itemCode, sourceNames: new Set(), totalLbs: 0, totalUnits: 0 };
-      requirements.set(itemCode, requirement);
+      requirement = { materialId, sourceNames: new Set(), totalLbs: 0, totalUnits: 0 };
+      requirements.set(materialId, requirement);
     }
     requirement.sourceNames.add(ingredientName);
     requirement.totalLbs += lbs;
@@ -123,69 +123,86 @@ export function computeRequirements(
   }
 
   function addUnresolved(
+    lineId: string,
+    recipe: WipRecipe,
     ingredientName: string,
-    recipeName: string,
     lbs: number,
     units: number
   ) {
-    const key = normalizeIngredientName(ingredientName);
-    let entry = unresolved.get(key);
+    let entry = unresolvedLines.get(lineId);
     if (!entry) {
-      entry = { ingredientName, totalLbs: 0, totalUnits: 0, recipes: new Set() };
-      unresolved.set(key, entry);
+      entry = {
+        recipeId: recipe.id,
+        recipeName: recipe.name,
+        ingredientName,
+        totalLbs: 0,
+        totalUnits: 0,
+      };
+      unresolvedLines.set(lineId, entry);
     }
     entry.totalLbs += lbs;
     entry.totalUnits += units;
-    entry.recipes.add(recipeName);
   }
 
-  function explode(wipCode: string, demand: number, depth: number, chain: string[]) {
+  /**
+   * Walk one recipe's BOM for a given demand, in either direction: down into
+   * a sub-recipe, or accumulated onto a material.
+   *
+   * Every non-zero schedule entry is exploded as its own root - unlike
+   * deriveDemand(), which only cascades from finished products to avoid
+   * double-counting a subrecipe's own cascaded demand. A subrecipe scheduled
+   * directly (a deliberate top-up) still consumes real ingredients, and
+   * Master PO needs to count that.
+   */
+  function explode(
+    recipeId: string,
+    demand: number,
+    depth: number,
+    chain: string[]
+  ): void {
     if (demand <= 0) return;
     if (depth > MAX_BOM_DEPTH) {
       warnings.push(`BOM too deep (possible cycle): ${chain.join(" -> ")}`);
       return;
     }
 
-    const recipe = recipeByWip.get(wipCode);
-    if (!recipe) {
-      if (!missingRecipeWarnings.has(wipCode)) {
-        missingRecipeWarnings.add(wipCode);
-        warnings.push(`No recipe found for scheduled WIP ${wipCode}.`);
-      }
-      return;
-    }
-    if (chain.includes(wipCode)) {
-      warnings.push(`BOM cycle detected: ${[...chain, wipCode].join(" -> ")}`);
+    const recipe = recipesById.get(recipeId);
+    if (!recipe) return;
+    if (chain.includes(recipeId)) {
+      warnings.push(`BOM cycle detected: ${[...chain, recipeId].join(" -> ")}`);
       return;
     }
 
-    for (const line of recipe.lines) {
+    const lines = linesByRecipeId.get(recipeId) ?? [];
+    for (const line of lines) {
       const { lbs, units } = lineRequirement(recipe, line, demand);
       if (lbs <= 0 && units <= 0) continue;
 
-      const target = resolve(line.ingredientName);
-
-      if (target.type === "ignore") continue;
-
-      if (target.type === "recipe") {
-        const subRecipe = recipeByWip.get(target.wipCode);
+      if (line.subRecipeId) {
+        const subRecipe = recipesById.get(line.subRecipeId);
         if (!subRecipe) {
-          addUnresolved(line.ingredientName, recipe.name, lbs, units);
+          addUnresolved(
+            `${recipeId}:${line.subRecipeId}`,
+            recipe,
+            line.ingredientName,
+            lbs,
+            units
+          );
           continue;
         }
-        if (subRecipe.batchSize !== null) {
-          // Sub-recipe demanded by weight.
+        // Sub-recipe demand carries in whichever unit its own BOM expects -
+        // a line written in the wrong one cannot be converted, only flagged.
+        if (subRecipe.batchSize !== null && subRecipe.batchSize !== 0) {
           if (lbs > 0) {
-            explode(target.wipCode, lbs, depth + 1, [...chain, wipCode]);
+            explode(line.subRecipeId, lbs, depth + 1, [...chain, recipeId]);
           } else {
             warnings.push(
               `"${recipe.name}" references batch recipe "${line.ingredientName}" in units; cannot convert.`
             );
           }
         } else {
-          // Sub-recipe demanded in units.
           if (units > 0) {
-            explode(target.wipCode, units, depth + 1, [...chain, wipCode]);
+            explode(line.subRecipeId, units, depth + 1, [...chain, recipeId]);
           } else {
             warnings.push(
               `"${recipe.name}" references per-unit recipe "${line.ingredientName}" by weight; cannot convert.`
@@ -195,60 +212,27 @@ export function computeRequirements(
         continue;
       }
 
-      if (target.type === "material") {
-        addMaterial(target.itemCode, line.ingredientName, lbs, units);
+      if (line.materialId) {
+        addMaterial(line.materialId, line.ingredientName, lbs, units);
         continue;
       }
 
-      addUnresolved(line.ingredientName, recipe.name, lbs, units);
+      addUnresolved(
+        `${recipeId}:${line.ingredientName}`,
+        recipe,
+        line.ingredientName,
+        lbs,
+        units
+      );
     }
   }
 
   for (const entry of scheduleEntries) {
-    if (range?.fromDate && entry.date < range.fromDate) continue;
-    if (range?.toDate && entry.date > range.toDate) continue;
-    explode(entry.wipCode, entry.quantity, 0, []);
+    if (!entry.quantity) continue;
+    if (fromDate && entry.date < fromDate) continue;
+    if (toDate && entry.date > toDate) continue;
+    explode(entry.recipeId, entry.quantity, 0, []);
   }
 
-  return { requirements, unresolved, warnings };
-}
-
-/**
- * Build the default ingredient-name resolver from parsed matrix data plus
- * saved aliases and the materials catalog.
- */
-export function buildResolver(input: {
-  recipes: ParsedRecipe[];
-  /** normalized name -> WIP code (from matrix subrecipes + parsed recipes) */
-  recipeNames: Map<string, string>;
-  /** normalized name -> item_code (from matrix ingredients + materials catalog) */
-  materialNames: Map<string, string>;
-  /** normalized alias -> item_code (user-maintained) */
-  aliases: Map<string, string>;
-}): ResolveIngredient {
-  const recipeWips = new Set(input.recipes.map((recipe) => recipe.wipCode));
-
-  return (ingredientName: string) => {
-    const key = normalizeIngredientName(ingredientName);
-    if (!key) return { type: "ignore" };
-
-    const wipCode = input.recipeNames.get(key);
-    if (wipCode) return { type: "recipe", wipCode };
-
-    const aliasCode = input.aliases.get(key);
-    if (aliasCode) {
-      // Same code can appear as a WIP and a matrix item (e.g. produce preps).
-      // Prefer exploding the recipe so Master PO buys the raw inputs.
-      if (recipeWips.has(aliasCode)) return { type: "recipe", wipCode: aliasCode };
-      return { type: "material", itemCode: aliasCode };
-    }
-
-    const itemCode = input.materialNames.get(key);
-    if (itemCode) {
-      if (recipeWips.has(itemCode)) return { type: "recipe", wipCode: itemCode };
-      return { type: "material", itemCode };
-    }
-
-    return { type: "unresolved" };
-  };
+  return { requirements, unresolvedLines, warnings };
 }

@@ -7,27 +7,25 @@ import {
   AlertTriangle,
   CalendarRange,
   Columns3,
-  FileUp,
   Loader2,
   Package,
   Plus,
   Printer,
   RefreshCw,
   Send,
-  ShoppingCart,
   Snowflake,
   Trash2,
   Wand2,
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { departmentColor } from "@/lib/production/department-colors";
 import { syncFromOdoo } from "@/lib/purchasing/actions";
+import { defaultDemandRange } from "@/lib/purchasing/demand-range";
 import {
-  generateCycle,
-  importMasterFile,
-  removeMasterImport,
-  type GenerateResult,
-} from "@/lib/purchasing/import-actions";
+  generateCycleLive,
+  type GenerateLiveResult,
+} from "@/lib/purchasing/generate-cycle";
 import {
   buildFinalOrderSnapshot,
   clearFinalOrderLocal,
@@ -42,7 +40,6 @@ import { printFinalOrder } from "@/lib/purchasing/print-final-order";
 import {
   fetchCycles,
   fetchCycleWithLines,
-  fetchLatestImport,
   lineItemCode,
   lineItemName,
   type PurchaseCycle,
@@ -176,15 +173,6 @@ function isProduceBuyLine(line: PurchaseLine): boolean {
   return dept === "PRODUCE";
 }
 
-function formatShortDate(value: string | null) {
-  if (!value) return "—";
-  try {
-    return format(parseISO(value), "MM/dd");
-  } catch {
-    return value;
-  }
-}
-
 function formatSyncedAt(value: string | null) {
   if (!value) return null;
   try {
@@ -194,12 +182,11 @@ function formatSyncedAt(value: string | null) {
   }
 }
 
-type ImportInfo = {
-  id: string;
-  fileName: string;
-  scheduleFrom: string | null;
-  scheduleTo: string | null;
-};
+/** A thin divider between control groups in the toolbar - matches the
+ * production schedule page's own "one bar" convention. */
+function Hairline() {
+  return <span aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-border" />;
+}
 
 type EmergencyDialogProps = {
   cycleId: string;
@@ -442,9 +429,11 @@ function MatrixLineRow({
   return (
     <TableRow
       className={cn(
-        "h-9",
-        line.is_emergency && "bg-destructive/5",
-        line.required_to_order > 0 && "bg-amber-50/60 dark:bg-amber-950/20"
+        "h-9 border-b border-border/60 hover:bg-accent/25",
+        line.is_emergency && "bg-destructive/12 hover:bg-destructive/12",
+        line.required_to_order > 0 &&
+          !line.is_emergency &&
+          "bg-warning-muted/60 hover:bg-warning-muted/60"
       )}
     >
       {visibleColumns.itemCode && (
@@ -552,18 +541,28 @@ type CategorySectionHeaderProps = {
   label: string;
   lineCount: number;
   colSpan: number;
+  /** Picks this section's spine/tint from the shared department palette. */
+  colorIndex: number;
 };
 
 function CategorySectionHeader({
   label,
   lineCount,
   colSpan,
+  colorIndex,
 }: CategorySectionHeaderProps) {
+  const color = departmentColor(null, colorIndex);
   return (
-    <TableRow className="bg-muted/70 hover:bg-muted/70">
-      <TableCell colSpan={colSpan} className="px-2 py-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-wide">
-          {label} ({lineCount})
+    <TableRow className={color.tint}>
+      <TableCell colSpan={colSpan} className="border-b border-border px-2 py-1.5">
+        <span className="flex items-center gap-1.5">
+          <span className={cn("h-3 w-1 shrink-0 rounded-[1px]", color.spine)} />
+          <span className="text-[0.625rem] font-semibold tracking-wider text-primary uppercase">
+            {label}
+          </span>
+          <span className="text-[0.625rem] text-muted-foreground">
+            {lineCount}
+          </span>
         </span>
       </TableCell>
     </TableRow>
@@ -581,7 +580,6 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
   );
   const [cycle, setCycle] = useState<PurchaseCycle | null>(null);
   const [lines, setLines] = useState<PurchaseLine[]>([]);
-  const [latestImport, setLatestImport] = useState<ImportInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -594,18 +592,18 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
   const columnsMenuRef = useRef<HTMLDivElement | null>(null);
   const [showGenerate, setShowGenerate] = useState(false);
   const [requiredDate, setRequiredDate] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [extraPercent, setExtraPercent] = useState("0");
+  const [demandFrom, setDemandFrom] = useState("");
+  const [demandTo, setDemandTo] = useState("");
+  const [extraPercent, setExtraPercent] = useState("10");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [generateResult, setGenerateResult] = useState<GenerateResult | null>(null);
+  const [generateResult, setGenerateResult] = useState<GenerateLiveResult | null>(
+    null
+  );
   const [lastSyncLabel, setLastSyncLabel] = useState<string | null>(null);
   const [emergencyOpen, setEmergencyOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteImportOpen, setDeleteImportOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isDeletingImport, setIsDeletingImport] = useState(false);
   const [detailMaterialId, setDetailMaterialId] = useState<string | null>(null);
   const [planOpen, setPlanOpen] = useState(false);
   const [finalOrderOpen, setFinalOrderOpen] = useState(false);
@@ -613,20 +611,17 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
     useState<FinalOrderSnapshot | null>(null);
   const [groupTracking, setGroupTracking] = useState<GroupTrackingMap>({});
   const [reloadKey, setReloadKey] = useState(0);
-  const [isImporting, startImport] = useTransition();
   const [isGenerating, startGenerate] = useTransition();
   const [isSyncing, startSync] = useTransition();
   const [isFinalizing, startFinalize] = useTransition();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let active = true;
 
     (async () => {
       const supabase = createClient();
-      const [cyclesRes, importRes, materialsRes] = await Promise.all([
+      const [cyclesRes, materialsRes] = await Promise.all([
         fetchCycles(supabase),
-        fetchLatestImport(supabase),
         supabase
           .from("purchasing_materials")
           .select("last_synced_at")
@@ -638,21 +633,6 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
 
       setCycles(cyclesRes.data);
       if (cyclesRes.error) setLoadError(cyclesRes.error);
-
-      if (importRes.data) {
-        const stats = (importRes.data.stats ?? {}) as Record<string, unknown>;
-        const info: ImportInfo = {
-          id: importRes.data.id,
-          fileName: importRes.data.file_name,
-          scheduleFrom: (stats.schedule_from as string) ?? null,
-          scheduleTo: (stats.schedule_to as string) ?? null,
-        };
-        setLatestImport(info);
-        setFromDate((current) => current || info.scheduleFrom || "");
-        setToDate((current) => current || info.scheduleTo || "");
-      } else {
-        setLatestImport(null);
-      }
 
       const syncAt = materialsRes.data?.[0]?.last_synced_at ?? null;
       setLastSyncLabel(formatSyncedAt(syncAt));
@@ -719,6 +699,12 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
       setLines(result.lines);
       if (result.cycle) {
         setRequiredDate(result.cycle.required_date);
+        const match = (result.cycle.week_label ?? "").match(
+          /(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})/i
+        );
+        const fallback = defaultDemandRange(result.cycle.required_date);
+        setDemandFrom(match?.[1] ?? fallback.fromDate);
+        setDemandTo(match?.[2] ?? fallback.toDate);
         setGroupTracking(loadGroupTracking(result.cycle.id));
         setFinalOrderSnapshot(loadFinalOrder(result.cycle.id));
       } else {
@@ -737,6 +723,16 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
     () => (selectedCycleId ? lines : []),
     [selectedCycleId, lines]
   );
+
+  /** The production window this cycle's numbers were computed over. */
+  const activeCycleRange = useMemo(() => {
+    if (!activeCycle) return null;
+    const match = (activeCycle.week_label ?? "").match(
+      /(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})/i
+    );
+    if (!match) return null;
+    return { fromDate: match[1], toDate: match[2] };
+  }, [activeCycle]);
 
   const visibleColumnCount = useMemo(
     () => countVisibleColumns(visibleColumns),
@@ -863,46 +859,17 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
     return map;
   }, [cycles, finalOrderSnapshot]);
 
-  function handleImportFile(file: File | null) {
-    if (!file) return;
-    setActionMessage(null);
-    setActionError(null);
-    setGenerateResult(null);
-    startImport(async () => {
-      const formData = new FormData();
-      formData.set("file", file);
-      const result = await importMasterFile(formData);
-      if (!result.ok) {
-        setActionError(result.message);
-        return;
-      }
-      setActionMessage(result.message);
-      if (result.importId && result.stats) {
-        setLatestImport({
-          id: result.importId,
-          fileName: file.name,
-          scheduleFrom: result.stats.scheduleFrom,
-          scheduleTo: result.stats.scheduleTo,
-        });
-        setFromDate(result.stats.scheduleFrom ?? "");
-        setToDate(result.stats.scheduleTo ?? "");
-      }
-      setShowGenerate(true);
-    });
-  }
-
   function handleGenerate() {
-    if (!latestImport || !requiredDate || !fromDate || !toDate) return;
+    if (!requiredDate || !demandFrom || !demandTo) return;
     setActionMessage(null);
     setActionError(null);
     setGenerateResult(null);
     startGenerate(async () => {
-      const result = await generateCycle({
-        importId: latestImport.id,
+      const result = await generateCycleLive({
         requiredDate,
-        fromDate,
-        toDate,
-        extraPercent: Number(extraPercent) || 0,
+        fromDate: demandFrom,
+        toDate: demandTo,
+        extraPercent: extraPercent.trim() === "" ? undefined : Number(extraPercent),
       });
       setGenerateResult(result);
       if (!result.ok) {
@@ -916,31 +883,24 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
     });
   }
 
+  /** Re-runs this cycle's calculation with the range/buffer typed in the toolbar. */
   function handleApplyExtra() {
-    const importId = activeCycle?.import_id ?? latestImport?.id;
-    if (!activeCycle || !importId) {
-      setActionError("Select a Master PO that was generated from an import.");
+    if (!activeCycle) {
+      setActionError("Select a Master PO to recalculate.");
       return;
     }
-    const label = activeCycle.week_label ?? "";
-    const match = label.match(
-      /(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})/i
-    );
-    const applyFrom = match?.[1] ?? fromDate;
-    const applyTo = match?.[2] ?? toDate;
-    if (!applyFrom || !applyTo) {
-      setActionError("Set production dates, then apply EXTRA %.");
+    if (!demandFrom || !demandTo) {
+      setActionError("Pick a production date range to recalculate from.");
       return;
     }
     setActionMessage(null);
     setActionError(null);
     setGenerateResult(null);
     startGenerate(async () => {
-      const result = await generateCycle({
-        importId,
+      const result = await generateCycleLive({
         requiredDate: activeCycle.required_date,
-        fromDate: applyFrom,
-        toDate: applyTo,
+        fromDate: demandFrom,
+        toDate: demandTo,
         extraPercent: Number(extraPercent) || 0,
       });
       setGenerateResult(result);
@@ -949,7 +909,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
         return;
       }
       setActionMessage(
-        `Applied EXTRA ${Number(extraPercent) || 0}% — ${result.message}`
+        `Applied ${demandFrom}–${demandTo} at EXTRA ${Number(extraPercent) || 0}% — ${result.message}`
       );
       setReloadKey((key) => key + 1);
     });
@@ -1038,218 +998,134 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
     );
   }
 
-  async function handleDeleteImport() {
-    if (!latestImport) return;
-    const previous = latestImport;
-    setIsDeletingImport(true);
-    setActionError(null);
-    // Clear header immediately — DB may already be empty while UI is stale.
-    setLatestImport(null);
-    setPlanOpen(false);
-
-    const result = await removeMasterImport(previous.id);
-    setIsDeletingImport(false);
-    setDeleteImportOpen(false);
-
-    if (!result.ok) {
-      setLatestImport(previous);
-      setActionError(result.message || "Could not remove this plan.");
-      return;
-    }
-
-    setLatestImport(result.nextImport ?? null);
-    if (result.nextImport) {
-      setFromDate(result.nextImport.scheduleFrom || "");
-      setToDate(result.nextImport.scheduleTo || "");
-    } else {
-      setFromDate("");
-      setToDate("");
-    }
-    setActionMessage(result.message || `Removed plan ${previous.fileName}.`);
-    setReloadKey((key) => key + 1);
-  }
-
   return (
-    <div className="flex min-h-full flex-1 flex-col">
-      <header className="sticky top-0 z-10 border-b bg-background/95 px-3 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-4">
-        <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-[1px] bg-primary/10 text-primary">
-              <ShoppingCart className="size-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate text-lg font-semibold tracking-tight">
-                Total Orders
-              </h1>
-              <p className="truncate text-xs text-muted-foreground">
-                {latestImport ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setPlanOpen(true)}
-                      className="font-medium text-foreground underline-offset-2 hover:underline"
-                    >
-                      {latestImport.fileName}
-                    </button>
-                    {` · schedule ${formatShortDate(latestImport.scheduleFrom)}–${formatShortDate(latestImport.scheduleTo)}`}
-                  </>
-                ) : (
-                  "Import the master plan to start"
-                )}
-                {lastSyncLabel ? ` · Odoo last sync ${lastSyncLabel}` : ""}
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsm,.xlsx"
-                className="hidden"
-                onChange={(event) => {
-                  handleImportFile(event.target.files?.[0] ?? null);
-                  event.target.value = "";
-                }}
-              />
-              <Link
-                href="/purchasing/materials"
-                className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
-              >
-                <Package />
-                <span className="hidden md:inline">Materials</span>
-              </Link>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setPlanOpen(true)}
-                disabled={!latestImport}
-                title={
-                  latestImport
-                    ? `View schedule from ${latestImport.fileName}`
-                    : "Import a master plan first"
-                }
-              >
-                <CalendarRange />
-                <span className="hidden sm:inline">View plan</span>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setDeleteImportOpen(true)}
-                disabled={!latestImport || isDeletingImport}
-                title={
-                  latestImport
-                    ? `Remove imported plan ${latestImport.fileName}`
-                    : "No plan imported"
-                }
-              >
-                {isDeletingImport ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <Trash2 />
-                )}
-                <span className="hidden sm:inline">Remove plan</span>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isImporting}
-              >
-                {isImporting ? <Loader2 className="animate-spin" /> : <FileUp />}
-                <span className="hidden sm:inline">Import plan</span>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleSync}
-                disabled={isSyncing}
-              >
-                {isSyncing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-                <span className="hidden sm:inline">Sync Odoo</span>
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={showGenerate ? "secondary" : "default"}
-                onClick={() => setShowGenerate((open) => !open)}
-              >
-                <Wand2 />
-                <span className="hidden sm:inline">
-                  {activeCycle ? "Regenerate Master PO" : "New Master PO"}
-                </span>
-              </Button>
-              {activeCycle && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEmergencyOpen(true)}
-                >
-                  <Plus />
-                  <span className="hidden lg:inline">Emergency</span>
-                </Button>
-              )}
-            </div>
-          </div>
+    <div className="flex flex-col gap-2.5 px-3 py-3 sm:px-4">
+      {/*
+        One bar, the way the schedule page does it - PageShell's own header
+        already carries the "Purchasing / Total orders" breadcrumb, so this
+        is only the controls, not a second page title stacked under it.
+      */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-sm bg-card px-2 py-1.5 ring-1 ring-foreground/10">
+        <span className="text-xs text-muted-foreground">
+          Computed live from the production schedule
+          {lastSyncLabel ? ` · Odoo last sync ${lastSyncLabel}` : ""}
+        </span>
 
-          {/* Sheet-style date tabs */}
-          <div className="-mx-1 flex items-end gap-0.5 overflow-x-auto px-1 pb-0">
-            {sortedTabs.map((tab) => {
-              const active = tab.id === selectedCycleId;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedCycleId(tab.id);
-                    setShowGenerate(false);
-                  }}
-                  className={cn(
-                    "shrink-0 rounded-t-md border border-b-0 px-3 py-1.5 text-xs font-medium transition-colors",
-                    active
-                      ? "border-border bg-background text-foreground shadow-[0_-1px_0_0_hsl(var(--background))]"
-                      : "border-transparent bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                    tab.status === "done" && !active && "opacity-60"
-                  )}
-                >
-                  {formatTabDate(tab.required_date)}
-                  {localOrderByCycle[tab.id] ? (
-                    <span className="ml-1 text-[10px] opacity-70">
-                      {localOrderByCycle[tab.id]}
-                    </span>
-                  ) : tab.po_number != null ? (
-                    <span className="ml-1 text-[10px] opacity-70">#{tab.po_number}</span>
-                  ) : null}
-                </button>
-              );
-            })}
+        <Hairline />
+
+        <Link
+          href="/purchasing/materials"
+          className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+        >
+          <Package />
+          <span className="hidden md:inline">Materials</span>
+        </Link>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setPlanOpen(true)}
+          disabled={!activeCycleRange}
+          title={
+            activeCycleRange
+              ? `View the live schedule this Master PO was computed from`
+              : "Select a Master PO with a computed production window first"
+          }
+        >
+          <CalendarRange />
+          <span className="hidden sm:inline">View plan</span>
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleSync}
+          disabled={isSyncing}
+        >
+          {isSyncing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+          <span className="hidden sm:inline">Sync Odoo</span>
+        </Button>
+
+        <Hairline />
+
+        <Button
+          type="button"
+          size="sm"
+          variant={showGenerate ? "secondary" : "default"}
+          onClick={() => setShowGenerate((open) => !open)}
+        >
+          <Wand2 />
+          <span className="hidden sm:inline">
+            {activeCycle ? "Regenerate Master PO" : "New Master PO"}
+          </span>
+        </Button>
+        {activeCycle && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setEmergencyOpen(true)}
+          >
+            <Plus />
+            <span className="hidden lg:inline">Emergency</span>
+          </Button>
+        )}
+      </div>
+
+      {/* Sheet-style date tabs */}
+      <div className="-mx-1 flex items-end gap-0.5 overflow-x-auto px-1 pb-0">
+        {sortedTabs.map((tab) => {
+          const active = tab.id === selectedCycleId;
+          return (
             <button
+              key={tab.id}
               type="button"
               onClick={() => {
-                setShowGenerate(true);
-                setRequiredDate("");
-                setSelectedCycleId(null);
+                setSelectedCycleId(tab.id);
+                setShowGenerate(false);
               }}
-              className="shrink-0 rounded-t-md border border-b-0 border-dashed border-border/70 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              className={cn(
+                "shrink-0 rounded-t-md border border-b-0 px-3 py-1.5 text-xs font-medium transition-colors",
+                active
+                  ? "border-border bg-background text-foreground shadow-[0_-1px_0_0_hsl(var(--background))]"
+                  : "border-transparent bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                tab.status === "done" && !active && "opacity-60"
+              )}
             >
-              + New
+              {formatTabDate(tab.required_date)}
+              {localOrderByCycle[tab.id] ? (
+                <span className="ml-1 text-[10px] opacity-70">
+                  {localOrderByCycle[tab.id]}
+                </span>
+              ) : tab.po_number != null ? (
+                <span className="ml-1 text-[10px] opacity-70">#{tab.po_number}</span>
+              ) : null}
             </button>
-          </div>
-        </div>
-      </header>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => {
+            setShowGenerate(true);
+            setRequiredDate("");
+            setDemandFrom("");
+            setDemandTo("");
+            setSelectedCycleId(null);
+          }}
+          className="shrink-0 rounded-t-md border border-b-0 border-dashed border-border/70 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          + New
+        </button>
+      </div>
 
-      <main className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-3 px-3 py-4 sm:px-4">
+      <div className="flex w-full flex-1 flex-col gap-3">
         {(actionMessage || actionError) && (
           <div
             className={cn(
               "flex items-start gap-2 rounded-md border px-3 py-2 text-sm",
               actionError
                 ? "border-destructive/30 bg-destructive/10 text-destructive"
-                : "border-green-600/30 bg-green-600/10 text-green-700 dark:text-green-400"
+                : "border-success/30 bg-success/10 text-success"
             )}
           >
             <p className="min-w-0 flex-1">{actionError ?? actionMessage}</p>
@@ -1267,66 +1143,93 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
           </div>
         )}
 
-        {generateResult?.unresolved && generateResult.unresolved.length > 0 && (
-          <p className="rounded-md border border-amber-600/30 bg-amber-600/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
-            {generateResult.unresolved.length} ingredient names still unmatched.
-            Re-import the master plan after syncing the catalog so matrix mappings
-            can be saved, or map them on Materials.
-          </p>
-        )}
-        {generateResult?.warnings && generateResult.warnings.length > 0 && (
-          <p className="rounded-md border border-amber-600/30 bg-amber-600/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+        {generateResult?.ok &&
+          generateResult.unresolvedLines.length > 0 && (
+            <div className="rounded-md bg-warning-muted px-3 py-2 text-sm text-warning-foreground">
+              <p>
+                {generateResult.unresolvedLines.length} recipe line(s) have no
+                material or sub-recipe mapping — demand for these is not
+                counted:
+              </p>
+              <ul className="mt-1 list-inside list-disc">
+                {generateResult.unresolvedLines.slice(0, 8).map((line) => (
+                  <li key={`${line.recipeId}-${line.ingredientName}`}>
+                    <Link
+                      href={`/recipes/${line.recipeId}`}
+                      className="underline underline-offset-2 hover:opacity-80"
+                    >
+                      {line.recipeName}
+                    </Link>
+                    {" — "}
+                    {line.ingredientName}
+                  </li>
+                ))}
+                {generateResult.unresolvedLines.length > 8 && (
+                  <li>and {generateResult.unresolvedLines.length - 8} more…</li>
+                )}
+              </ul>
+            </div>
+          )}
+        {generateResult?.ok && generateResult.warnings.length > 0 && (
+          <p className="rounded-md bg-warning-muted px-3 py-2 text-sm text-warning-foreground">
             {generateResult.warnings.join(" ")}
           </p>
         )}
 
         {showGenerate && (
-          <div className="rounded-md border bg-muted/30 p-3">
+          <div className="rounded-sm bg-card p-3 ring-1 ring-foreground/10">
             <div className="mb-1 text-sm font-medium">
               {activeCycle
                 ? "Regenerate Master PO for this week"
                 : "Generate Master PO"}
             </div>
             <p className="mb-2 text-xs text-muted-foreground">
-              Quantities come from Excel MASTER PICKING ORDER (column QTY
-              ORDER), then netted against on-hand. Rows with QTY ORDER 0 still
-              list. Set EXTRA % if you want a buffer, and you can edit Total
-              case req. on any row after generating.
+              Quantities are computed live from the production schedule and
+              recipe BOM, then netted against on-hand. Every active,
+              non-produce material lists, even at 0 cases needed.
             </p>
             <div className="grid gap-3 sm:grid-cols-5 sm:items-end">
               <div className="flex flex-col gap-1">
                 <Label htmlFor="matrix-required" className="text-xs">
-                  PO / required date
+                  Arrival (Thursday)
                 </Label>
                 <Input
                   id="matrix-required"
                   type="date"
                   value={requiredDate}
-                  onChange={(event) => setRequiredDate(event.target.value)}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setRequiredDate(value);
+                    if (!activeCycle && value) {
+                      const range = defaultDemandRange(value);
+                      setDemandFrom(range.fromDate);
+                      setDemandTo(range.toDate);
+                    }
+                  }}
                   className="h-9"
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <Label htmlFor="matrix-from" className="text-xs">
-                  Production dates from
+                <Label htmlFor="matrix-demand-from" className="text-xs">
+                  Production week from
                 </Label>
                 <Input
-                  id="matrix-from"
+                  id="matrix-demand-from"
                   type="date"
-                  value={fromDate}
-                  onChange={(event) => setFromDate(event.target.value)}
+                  value={demandFrom}
+                  onChange={(event) => setDemandFrom(event.target.value)}
                   className="h-9"
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <Label htmlFor="matrix-to" className="text-xs">
-                  Production dates to
+                <Label htmlFor="matrix-demand-to" className="text-xs">
+                  through
                 </Label>
                 <Input
-                  id="matrix-to"
+                  id="matrix-demand-to"
                   type="date"
-                  value={toDate}
-                  onChange={(event) => setToDate(event.target.value)}
+                  value={demandTo}
+                  onChange={(event) => setDemandTo(event.target.value)}
                   className="h-9"
                 />
               </div>
@@ -1342,31 +1245,22 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                   value={extraPercent}
                   onChange={(event) => setExtraPercent(event.target.value)}
                   className="h-9"
-                  placeholder="0"
                 />
               </div>
               <Button
                 type="button"
                 onClick={handleGenerate}
-                disabled={
-                  !latestImport ||
-                  !requiredDate ||
-                  !fromDate ||
-                  !toDate ||
-                  isGenerating
-                }
+                disabled={!requiredDate || !demandFrom || !demandTo || isGenerating}
               >
                 {isGenerating ? <Loader2 className="animate-spin" /> : <Wand2 />}
                 Generate Master PO
               </Button>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Production dates = schedule days to cover (Excel Production Need).
-              PO / required date = when materials must be on site. Master PO
-              explodes Kitchen AM/PM, Fresh Mixing, and Garde Manger only —
-              Assembly / Finished / Produce schedule rows are skipped so
-              ingredients are not double-counted. Packaging and min/max from
-              Excel Master PO# are not included yet.
+              Arrival = when materials must be on site — POs land on
+              Thursdays for the following week. Production week defaults to
+              that week&apos;s Monday through Saturday, but can be adjusted
+              before or after generating.
             </p>
           </div>
         )}
@@ -1399,6 +1293,24 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
           <div className="flex flex-wrap items-center gap-3">
             {activeCycle && (
               <div className="flex items-center gap-1.5">
+                <Label htmlFor="matrix-demand-from-live" className="text-xs whitespace-nowrap">
+                  Production
+                </Label>
+                <Input
+                  id="matrix-demand-from-live"
+                  type="date"
+                  value={demandFrom}
+                  onChange={(event) => setDemandFrom(event.target.value)}
+                  className="h-8 w-32 text-xs"
+                />
+                <span className="text-xs text-muted-foreground">–</span>
+                <Input
+                  id="matrix-demand-to-live"
+                  type="date"
+                  value={demandTo}
+                  onChange={(event) => setDemandTo(event.target.value)}
+                  className="h-8 w-32 text-xs"
+                />
                 <Label htmlFor="matrix-extra-live" className="text-xs whitespace-nowrap">
                   EXTRA %
                 </Label>
@@ -1418,7 +1330,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                   variant="outline"
                   onClick={handleApplyExtra}
                   disabled={isGenerating}
-                  title="Recalculate cases/lbs from the production schedule with this EXTRA %"
+                  title="Recalculate cases/lbs for this production date range and EXTRA %"
                 >
                   {isGenerating ? <Loader2 className="animate-spin" /> : "Apply"}
                 </Button>
@@ -1445,7 +1357,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
               {columnsOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 z-20 mt-1 w-56 rounded-md border bg-popover p-2 text-popover-foreground shadow-md"
+                  className="absolute right-0 z-20 mt-1 w-56 rounded-md bg-popover p-2 text-popover-foreground shadow-md ring-1 ring-foreground/10"
                 >
                   <p className="mb-1.5 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     Show columns
@@ -1588,42 +1500,41 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
         ) : loadError ? (
           <p className="text-sm text-destructive">{loadError}</p>
         ) : !activeCycle ? (
-          <div className="flex min-h-40 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
-            No Master PO selected. Import the master plan, set production dates,
-            then generate from the schedule.
+          <div className="flex min-h-40 items-center justify-center rounded-md ring-1 ring-foreground/10 text-sm text-muted-foreground">
+            No Master PO selected. Generate one from the production schedule.
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-md border">
+          <div className="overflow-x-auto rounded-md ring-1 ring-foreground/10">
             <Table>
               <TableHeader>
-                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableRow className="bg-brand-muted hover:bg-brand-muted">
                   {visibleColumns.itemCode && (
-                    <TableHead className="h-8 px-2 text-[11px] font-semibold uppercase tracking-wide">
+                    <TableHead className="h-8 border-b border-border px-2 text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">
                       Item #
                     </TableHead>
                   )}
                   {visibleColumns.description && (
-                    <TableHead className="h-8 min-w-48 px-2 text-[11px] font-semibold uppercase tracking-wide">
+                    <TableHead className="h-8 min-w-48 border-b border-border px-2 text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">
                       Description
                     </TableHead>
                   )}
                   {visibleColumns.casesRequired && (
-                    <TableHead className="h-8 px-2 text-right text-[11px] font-semibold uppercase tracking-wide">
+                    <TableHead className="h-8 border-b border-border px-2 text-right text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">
                       Total case req.
                     </TableHead>
                   )}
                   {visibleColumns.onHand && (
-                    <TableHead className="h-8 px-2 text-right text-[11px] font-semibold uppercase tracking-wide">
+                    <TableHead className="h-8 border-b border-border px-2 text-right text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">
                       On hand
                     </TableHead>
                   )}
                   {visibleColumns.requiredToOrder && (
-                    <TableHead className="h-8 px-2 text-right text-[11px] font-semibold uppercase tracking-wide">
+                    <TableHead className="h-8 border-b border-border px-2 text-right text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">
                       Req. to order
                     </TableHead>
                   )}
                   {visibleColumns.totalLbs && (
-                    <TableHead className="h-8 px-2 text-right text-[11px] font-semibold uppercase tracking-wide">
+                    <TableHead className="h-8 border-b border-border px-2 text-right text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">
                       Total lbs
                     </TableHead>
                   )}
@@ -1637,18 +1548,19 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                       className="h-20 text-center text-sm text-muted-foreground"
                     >
                       {activeLines.length === 0
-                        ? "Empty week — hit Regenerate after importing the master plan."
+                        ? "Empty week — hit Regenerate to compute it from the schedule."
                         : "No rows match the filter."}
                     </TableCell>
                   </TableRow>
                 ) : (
                   <>
-                    {categorySections.map((section) => (
+                    {categorySections.map((section, index) => (
                       <Fragment key={section.key}>
                         <CategorySectionHeader
                           label={section.label}
                           lineCount={section.lines.length}
                           colSpan={visibleColumnCount}
+                          colorIndex={index}
                         />
                         {section.lines.map((line) => (
                           <MatrixLineRow
@@ -1661,9 +1573,9 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                         ))}
                       </Fragment>
                     ))}
-                    <TableRow className="border-t-2 bg-muted/60 hover:bg-muted/60">
+                    <TableRow className="border-t-2 border-t-brand/40 bg-muted hover:bg-muted">
                       {visibleColumns.itemCode && (
-                        <TableCell className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide">
+                        <TableCell className="px-2 py-1.5 text-[0.625rem] font-semibold tracking-wider uppercase">
                           Total
                         </TableCell>
                       )}
@@ -1700,7 +1612,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
             </Table>
           </div>
         )}
-      </main>
+      </div>
 
       {activeCycle && (
         <EmergencyDialog
@@ -1754,42 +1666,6 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={deleteImportOpen} onOpenChange={setDeleteImportOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Remove imported plan?</DialogTitle>
-            <DialogDescription>
-              {latestImport
-                ? `This clears all imported master plans (including ${latestImport.fileName}). Existing weeks and buy lists stay. Materials and recipes stay. You can import a new plan afterward.`
-                : "This clears all imported master plans."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setDeleteImportOpen(false)}
-              disabled={isDeletingImport}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => void handleDeleteImport()}
-              disabled={isDeletingImport || !latestImport}
-            >
-              {isDeletingImport ? (
-                <Loader2 className="animate-spin" />
-              ) : (
-                <Trash2 />
-              )}
-              Remove plan
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <PurchasingProductDetailDialog
         materialId={detailMaterialId}
         open={detailMaterialId !== null}
@@ -1799,7 +1675,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
       />
 
       <PurchasingPlanDialog
-        importId={latestImport?.id ?? null}
+        range={activeCycleRange}
         open={planOpen}
         onOpenChange={setPlanOpen}
       />

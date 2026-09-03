@@ -21,6 +21,11 @@ export type OdooProduct = {
   active: boolean;
 };
 
+export type OdooCompany = {
+  id: number;
+  name: string;
+};
+
 export type OdooVendor = {
   id: number;
   name: string;
@@ -161,15 +166,36 @@ async function executeKw(
 }
 
 /**
+ * Every company this Odoo user can see (Tuscany Cookies, AvatarNaturalFoods,
+ * Yaya's, …) - materials are purchased separately per company, so syncing
+ * loops over each of these rather than assuming a single default company.
+ */
+export async function fetchOdooCompanies(): Promise<OdooCompany[]> {
+  const config = getOdooConfig();
+  const uid = await authenticate(config);
+
+  return (await executeKw(config, uid, "res.company", "search_read", [[]], {
+    fields: ["id", "name"],
+    order: "id asc",
+  })) as OdooCompany[];
+}
+
+/**
  * Fetch all products that have an Internal Reference (default_code), including
  * archived ones so we can deactivate materials that were archived in Odoo.
+ *
+ * Scoped to one company via allowed_company_ids so qty_available and
+ * multi-company product visibility both reflect that company's own books,
+ * not whatever the API user's default company happens to be.
  */
-export async function fetchOdooProducts(): Promise<OdooProduct[]> {
+export async function fetchOdooProducts(companyId?: number): Promise<OdooProduct[]> {
   const config = getOdooConfig();
   const uid = await authenticate(config);
 
   const batchSize = 1000;
   const products: OdooProduct[] = [];
+  const context: Record<string, unknown> = { active_test: false };
+  if (companyId != null) context.allowed_company_ids = [companyId];
 
   for (let offset = 0; ; offset += batchSize) {
     const batch = (await executeKw(
@@ -182,7 +208,7 @@ export async function fetchOdooProducts(): Promise<OdooProduct[]> {
         fields: ["id", "default_code", "name", "qty_available", "categ_id", "active"],
         limit: batchSize,
         offset,
-        context: { active_test: false },
+        context,
       }
     )) as OdooProduct[];
 

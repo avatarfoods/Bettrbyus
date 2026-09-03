@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
 import {
+  fetchOdooCompanies,
   fetchOdooProductDetail,
   fetchOdooProducts,
   type OdooProduct,
@@ -38,18 +39,39 @@ export type ProductDetailResult =
 
 const CHUNK_SIZE = 500;
 
-function dedupeByCode(products: OdooProduct[]): Map<string, OdooProduct> {
-  const byCode = new Map<string, OdooProduct>();
+type CompanyProduct = OdooProduct & { companyId: number; companyName: string };
+
+function dedupeByCode(products: CompanyProduct[]): Map<string, CompanyProduct> {
+  const byCode = new Map<string, CompanyProduct>();
   for (const product of products) {
     const code = typeof product.default_code === "string" ? product.default_code.trim() : "";
     if (!code) continue;
-    // Prefer active products when Odoo has duplicate internal references.
+    // Prefer active products when Odoo has duplicate internal references
+    // (including one item code appearing in more than one company).
     const existing = byCode.get(code);
     if (!existing || (!existing.active && product.active)) {
       byCode.set(code, product);
     }
   }
   return byCode;
+}
+
+/**
+ * Every purchased material, tagged with the Odoo company it was bought
+ * under (Tuscany Cookies, AvatarNaturalFoods, Yaya's, …) - materials are
+ * purchased per company, not shared across them, so this is what lets the
+ * Materials page and Master PO filter/select "just this place".
+ */
+async function fetchAllCompanyProducts(): Promise<CompanyProduct[]> {
+  const companies = await fetchOdooCompanies();
+  const allProducts: CompanyProduct[] = [];
+  for (const company of companies) {
+    const products = await fetchOdooProducts(company.id);
+    for (const product of products) {
+      allProducts.push({ ...product, companyId: company.id, companyName: company.name });
+    }
+  }
+  return allProducts;
 }
 
 /**
@@ -66,9 +88,9 @@ export async function syncOdooMaterials(): Promise<SyncResult> {
     return { ok: false, message: "You must be signed in to sync materials." };
   }
 
-  let products: OdooProduct[];
+  let products: CompanyProduct[];
   try {
-    products = await fetchOdooProducts();
+    products = await fetchAllCompanyProducts();
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Odoo sync failed." };
   }
@@ -92,6 +114,8 @@ export async function syncOdooMaterials(): Promise<SyncResult> {
     name: product.name,
     odoo_product_id: product.id,
     odoo_category: Array.isArray(product.categ_id) ? product.categ_id[1] : null,
+    odoo_company_id: product.companyId,
+    odoo_company_name: product.companyName,
     active: product.active,
     last_synced_at: now,
     updated_at: now,
@@ -161,9 +185,9 @@ export async function syncOdooInventory(): Promise<SyncResult> {
     return { ok: false, message: "You must be signed in to sync inventory." };
   }
 
-  let products: OdooProduct[];
+  let products: CompanyProduct[];
   try {
-    products = await fetchOdooProducts();
+    products = await fetchAllCompanyProducts();
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Odoo sync failed." };
   }

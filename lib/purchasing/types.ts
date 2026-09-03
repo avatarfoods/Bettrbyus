@@ -6,6 +6,9 @@ export type Material = {
   name: string;
   odoo_product_id: number | null;
   odoo_category: string | null;
+  /** The Odoo company this material is purchased under (Yaya's, Avatar, …). */
+  odoo_company_id: number | null;
+  odoo_company_name: string | null;
   storage_type: StorageType | null;
   /** Ingredient matrix department (Finished Product, Fresh Mixing, …). */
   department: string | null;
