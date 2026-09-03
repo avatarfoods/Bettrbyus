@@ -81,6 +81,11 @@ type Props = {
   today: string;
   /** The range being looked at, from the URL. */
   from: string;
+  /**
+   * When Clear this range last ran, stamped into the URL by the header menu.
+   * Anything typed before it is gone from the draft, so the grid lets it go.
+   */
+  clearedAt?: string;
   to: string;
   recipes: ScheduleRecipe[];
   entries: ScheduleEntry[];
@@ -137,6 +142,7 @@ export function ScheduleView({
   draftChanges,
   today,
   from,
+  clearedAt,
   to,
   recipes,
   entries: serverEntries,
@@ -232,6 +238,25 @@ export function ScheduleView({
   useEffect(() => {
     setLocalEntries([]);
   }, [serverEntries]);
+
+  /*
+    Clearing a range from the header menu deletes those cells from the draft.
+    Whatever was typed into them would otherwise still win the merge below and
+    paper right back over the clear - the same trap Clear day sidesteps by
+    hand. Letting the typed numbers go is what makes the cells actually empty.
+
+    Adjusted while rendering rather than in an effect: the merge below reads
+    localEntries in the same pass, so a round-trip through the DOM would paint
+    the cleared cells with their old numbers once before emptying them.
+  */
+  const [clearMark, setClearMark] = useState(clearedAt);
+  if (clearMark !== clearedAt) {
+    setClearMark(clearedAt);
+    setLocalEntries([]);
+  }
+
+  /** Clear day is in this component, so it says so directly. */
+  const [clearTick, setClearTick] = useState(0);
 
   const changed = useMemo(() => new Set(draftChanges), [draftChanges]);
   const myDraft = drafts.find((draft) => draft.id === myDraftId);
@@ -849,6 +874,7 @@ export function ScheduleView({
             (e) => e.productionDate < clearFrom || e.productionDate > clearTo
           )
         );
+        setClearTick((tick) => tick + 1);
         router.refresh();
       } else setError(result.message);
     });
@@ -1331,6 +1357,14 @@ export function ScheduleView({
       <div className="flex min-h-0 gap-2.5">
       <div className="min-w-0 flex-1">
       <ScheduleGrid
+        /*
+          A cell's box is uncontrolled, so it keeps what was typed until its
+          stored quantity changes. A typed zero and a cell the clear deleted
+          both arrive here as no value at all, so that never happens and the
+          "0" outlives the row it came from. Remounting on a clear is what
+          empties the box; typing a zero still leaves it reading 0.
+        */
+        key={`${clearedAt ?? ""}:${clearTick}`}
         scheduleId={scheduleId ?? "preview"}
         readOnly={readOnly}
         locked={!editing || !mine}
