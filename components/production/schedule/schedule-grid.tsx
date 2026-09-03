@@ -752,13 +752,26 @@ function Cell({
 
   function commit(raw: string) {
     const trimmed = raw.trim();
-    if (trimmed === "") setTookSuggest(false);
-    if (trimmed === lastSaved.current) return;
     const quantity = trimmed === "" ? null : Number(trimmed);
     if (quantity !== null && !Number.isFinite(quantity)) {
       setError("Not a number");
       return;
     }
+
+    /*
+      0 and empty both mean "nothing planned" everywhere else - the merge
+      with the server drops a 0 entry the same as a missing one, so the box
+      has to show the same thing for both. Without normalising here, typing
+      "0" writes a quantity the rest of the app treats as no entry at all,
+      but cell?.quantity goes from undefined to undefined - nothing for the
+      sync effect above to react to - so the literal "0" just sits in the
+      box forever. Even Clear day/Clear range can't reach it afterward: from
+      the app's side there was never a change to notice.
+    */
+    const cleared = quantity === null || quantity === 0;
+    const displayed = cleared ? "" : trimmed;
+    if (displayed === lastSaved.current) return;
+    if (cleared) setTookSuggest(false);
     setError(null);
 
     // The plan is not open for editing, so nothing is written and nothing is
@@ -766,9 +779,10 @@ function Cell({
     if (locked) return;
 
     onLocalChange?.(recipeId, date, quantity);
+    if (cleared && inputRef.current) inputRef.current.value = "";
 
     if (readOnly) {
-      lastSaved.current = trimmed;
+      lastSaved.current = displayed;
       return;
     }
 
@@ -779,7 +793,7 @@ function Cell({
         productionDate: date,
         quantity,
       });
-      if (result.ok) lastSaved.current = trimmed;
+      if (result.ok) lastSaved.current = displayed;
       else {
         setTookSuggest(false);
         setError(result.message);

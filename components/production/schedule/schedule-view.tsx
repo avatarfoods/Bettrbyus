@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Boxes,
@@ -216,6 +216,22 @@ export function ScheduleView({
 
   /** Typed while there is nowhere to store it - see the banner. */
   const [localEntries, setLocalEntries] = useState<ScheduleEntry[]>([]);
+
+  /*
+    A fresh serverEntries prop means a real round trip just landed - Accept,
+    Confirm, Clear day, or an action from elsewhere entirely, like the plan
+    picker's "Clear this range". Whatever is in localEntries only existed to
+    bridge the gap until that happened, so once it has, it is either already
+    reflected in serverEntries or it was overwritten by something else (a
+    clear, another tab, another person's confirm) - either way, holding onto
+    it would paper back over the fresh data with a stale local guess. This is
+    what "Clear this range" needed: that button lives outside this component
+    and cannot reach into localEntries directly, so without this it looked
+    like nothing happened even though the database was actually cleared.
+  */
+  useEffect(() => {
+    setLocalEntries([]);
+  }, [serverEntries]);
 
   const changed = useMemo(() => new Set(draftChanges), [draftChanges]);
   const myDraft = drafts.find((draft) => draft.id === myDraftId);
