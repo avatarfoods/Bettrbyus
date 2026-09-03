@@ -117,7 +117,6 @@ export function SchedulePrintSheet({
                     <p className="text-xs text-neutral-600">
                       Avatar Foods · Weekly schedule
                       {department.line && ` · ${department.line}`}
-                      {department.breakHours > 0 && ` · ${department.breakHours} h unpaid break, take it during the shift`}
                     </p>
                   </div>
                   <div className="text-right">

@@ -1,9 +1,22 @@
 "use client";
 
-import { useMemo, useSyncExternalStore } from "react";
+import { useMemo, useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, ChevronLeft, ChevronRight, Clock, DollarSign, LayoutGrid, Users, X } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  DollarSign,
+  GripVertical,
+  LayoutGrid,
+  Loader2,
+  Save,
+  Users,
+} from "lucide-react";
+import { saveDepartmentOrder } from "@/lib/hr/actions";
 import {
   DAY_NAMES,
   addDays,
@@ -15,13 +28,13 @@ import {
   money,
   monthDay,
   shiftHours,
+  sortPeople,
   sumCosts,
   timeToHours,
   weekCost,
   weekStartOf,
   paidAbsenceMap,
   type AbsenceType,
-  type ApprovalStep,
   type Department,
   type Employee,
   type PaySettings,
@@ -29,6 +42,8 @@ import {
   type Shift,
 } from "@/lib/hr/model";
 import { departmentColor } from "@/lib/hr/colors";
+import { beginDrag, dataOf, moveItem } from "@/components/hr/drag";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Hint } from "@/components/production/settings/shared";
 import { StaffingTab } from "@/components/hr/staffing-tab";
 import { cn } from "@/lib/utils";
@@ -37,26 +52,33 @@ import { cn } from "@/lib/utils";
  * The plant, laid out like the production dashboard.
  *
  * One centred control bar - Day, Week or Range; which line; which department -
- * then the days as tiles you can tap, then the work. Two tabs: Overview, which
- * everyone gets and never shows money, and Cost, which only people allowed to
- * see money get. Approved schedules only. A draft is somebody thinking, and
- * the dashboard does not report thinking.
+ * then the departments as rows across the days. The table is the front page.
+ * Tap a department's number under a date and the table gives way to that
+ * department alone: its people down, the dates across, the day you tapped lit
+ * up. Tap a date at the top and it gives way to that day for the whole plant,
+ * by shift. Both have Back. With twenty departments, one thing at a time.
+ *
+ * Three tabs: Overview, which everyone gets and never shows money; Staffing,
+ * the headcount sheet; and Cost, only for people allowed to see money.
+ * Approved schedules only - a draft is somebody thinking.
  */
 export function HrDashboard({
   span,
   from,
   to,
   day,
+  dept,
   today,
   departments,
   allDepartments,
   employees,
+  allPeople,
   schedules,
   shifts,
   settings,
   seesCost,
-  approvalSteps,
   canEditStaffing,
+  canArrange,
   absenceTypes,
 }: {
   /** Week or range - what the dates mean. A day sits on top of either. */
@@ -65,22 +87,31 @@ export function HrDashboard({
   to: string;
   /** Set when looking at one day. */
   day: string | null;
+  /** Set when looking at one department. */
+  dept: string | null;
   today: string;
   /** Departments this person may see. */
   departments: Department[];
   /** Every department, so colour indexes stay stable. */
   allDepartments: Department[];
+  /** People on the schedule: active, switched on, not contractors. */
   employees: Employee[];
+  /** Every active person, for choosing a supervisor. */
+  allPeople: Employee[];
   schedules: Schedule[];
   shifts: Shift[];
   settings: PaySettings;
   seesCost: boolean;
-  approvalSteps: ApprovalStep[];
   canEditStaffing: boolean;
+  /** May drag departments into a new order. Administrators. */
+  canArrange: boolean;
   absenceTypes: AbsenceType[];
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
+  const [pending, startTransition] = useTransition();
   const paidAbsence = useMemo(() => paidAbsenceMap(absenceTypes), [absenceTypes]);
+  const codeOf = useMemo(() => new Map(absenceTypes.map((t) => [t.id, t])), [absenceTypes]);
   const days = useMemo(() => dateRange(from, to), [from, to]);
   const isWeek = span === "week";
   /** The URL says what the dates mean; a picked day sits on top. */
@@ -94,9 +125,17 @@ export function HrDashboard({
   const setDept = (next: string) => writeView({ ...view, dept: next });
   const setTab = (next: "overview" | "cost" | "staffing") => writeView({ ...view, tab: next });
 
-  const go = (nextFrom: string, nextTo: string, nextDay: string | null, nextSpan: "week" | "range" = span) =>
+  const go = (
+    nextFrom: string,
+    nextTo: string,
+    nextDay: string | null,
+    nextSpan: "week" | "range" = span,
+    nextDept: string | null = dept
+  ) =>
     router.push(
-      `/hr?span=${nextSpan}&from=${nextFrom}&to=${nextTo < nextFrom ? nextFrom : nextTo}${nextDay ? `&day=${nextDay}` : ""}`
+      `/hr?span=${nextSpan}&from=${nextFrom}&to=${nextTo < nextFrom ? nextFrom : nextTo}${nextDay ? `&day=${nextDay}` : ""}${
+        nextDept ? `&dept=${nextDept}` : ""
+      }`
     );
 
   /** Switching mode keeps the day you were looking at as the anchor. */
@@ -125,13 +164,16 @@ export function HrDashboard({
     [departments]
   );
   const deptChoices = useMemo(() => departments.filter((d) => !view.line || d.line === view.line), [departments, view.line]);
-  const shown = useMemo(() => deptChoices.filter((d) => !view.dept || d.id === view.dept), [deptChoices, view.dept]);
+  const shownIds = useMemo(
+    () => new Set(deptChoices.filter((d) => !view.dept || d.id === view.dept).map((d) => d.id)),
+    [deptChoices, view.dept]
+  );
 
   const look = (d: Department) => departmentColor(d.color, allDepartments.indexOf(d));
   const empById = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
 
   /** Everything worked out once per department, for the range. */
-  const rows = useMemo(() => {
+  const allRows = useMemo(() => {
     const inRange = new Set(days);
     const shiftsBySchedule = new Map<string, Shift[]>();
     for (const shift of shifts) {
@@ -140,7 +182,7 @@ export function HrDashboard({
       list.push(shift);
       shiftsBySchedule.set(shift.scheduleId, list);
     }
-    return shown.map((department) => {
+    return departments.map((department) => {
       const home = employees.filter((e) => e.departmentId === department.id);
       const deptSchedules = schedules.filter((s) => s.departmentId === department.id);
       const deptShifts = deptSchedules.flatMap((s) => shiftsBySchedule.get(s.id) ?? []);
@@ -178,9 +220,61 @@ export function HrDashboard({
 
       // Weeks in range that have an approved schedule, out of weeks in range.
       const weeksInRange = new Set(days.map(weekStartOf)).size;
-      return { department, home, schedules: deptSchedules, approvedWeeks: deptSchedules.length, weeksInRange, total, peopleScheduled, perDay };
+      return { department, home, schedules: deptSchedules, deptShifts, approvedWeeks: deptSchedules.length, weeksInRange, total, peopleScheduled, perDay };
     });
-  }, [shown, employees, schedules, shifts, settings, days, empById, paidAbsence]);
+  }, [departments, employees, schedules, shifts, settings, days, empById, paidAbsence]);
+
+  const rows = useMemo(() => allRows.filter((row) => shownIds.has(row.department.id)), [allRows, shownIds]);
+
+  /* ---- arranging: drag departments into a new order, then save ---- */
+  const [arranging, setArranging] = useState(false);
+  const [order, setOrder] = useState<string[] | null>(null);
+  const [dropOn, setDropOn] = useState<string | null>(null);
+  const orderedRows = useMemo(() => {
+    if (!arranging || !order) return rows;
+    const byId = new Map(rows.map((r) => [r.department.id, r]));
+    return order.map((id) => byId.get(id)).filter(Boolean) as typeof rows;
+  }, [arranging, order, rows]);
+
+  function startArranging() {
+    setOrder(rows.map((r) => r.department.id));
+    setArranging(true);
+  }
+  function stopArranging() {
+    setArranging(false);
+    setOrder(null);
+    setDropOn(null);
+  }
+  function dragDepartment(event: React.PointerEvent<HTMLElement>, id: string) {
+    const cell = (event.currentTarget as HTMLElement).closest("td") as HTMLElement | null;
+    beginDrag(event, {
+      hit: "[data-dept-row]",
+      ghost: cell,
+      onMove: (target) => setDropOn(dataOf(target, "deptRow")),
+      onDrop: (target) => {
+        const to = dataOf(target, "deptRow");
+        if (!to || to === id || !order) return;
+        setOrder(moveItem(order, order.indexOf(id), order.indexOf(to)));
+      },
+      onEnd: () => setDropOn(null),
+    });
+  }
+  function saveArrangement() {
+    if (!order) return;
+    // The rows on screen may be a selection: they take their new order in the
+    // slots they already occupy, and every other department keeps its place.
+    const queue = [...order];
+    const ids = allDepartments.map((d) => (shownIds.has(d.id) ? (queue.shift() ?? d.id) : d.id));
+    startTransition(async () => {
+      const result = await saveDepartmentOrder({ ids });
+      if (!result.ok) {
+        await confirm({ title: result.message, cancelLabel: false });
+        return;
+      }
+      stopArranging();
+      router.refresh();
+    });
+  }
 
   const plant = rows.reduce(
     (sum, row) => ({
@@ -201,6 +295,8 @@ export function HrDashboard({
   const dayRows = rows.filter((row) => row.perDay[dayIndex]?.people > 0);
   const dayPeople = plantPerDay[dayIndex] ?? 0;
   const dayHours = rows.reduce((sum, row) => sum + (row.perDay[dayIndex]?.hours ?? 0), 0);
+
+  const deptRow = dept ? allRows.find((row) => row.department.id === dept) ?? null : null;
 
   const rangeLabel =
     mode === "day"
@@ -290,7 +386,6 @@ export function HrDashboard({
 
           {mode !== "day" && <span className="text-[0.625rem] text-muted-foreground tabular-nums">{days.length}d</span>}
 
-
           {!days.includes(today) && (
             <button
               type="button"
@@ -347,7 +442,7 @@ export function HrDashboard({
         <Tab active={tab === "overview"} onClick={() => setTab("overview")} icon={<LayoutGrid />} label="Overview" />
         <Tab active={tab === "staffing"} onClick={() => setTab("staffing")} icon={<Users />} label="Staffing" />
         {seesCost && <Tab active={tab === "cost"} onClick={() => setTab("cost")} icon={<DollarSign />} label="Cost" />}
-        <span className="ml-auto flex items-center gap-2 pb-1 text-xs">
+        <span className="ml-auto flex flex-wrap items-center gap-2 pb-1 text-xs">
           <span className="text-sm font-bold">{rangeLabel}</span>
           <span
             className={cn(
@@ -358,19 +453,50 @@ export function HrDashboard({
             {plant.approved === rows.length && rows.length > 0 ? <CheckCircle2 className="size-3" /> : <Clock className="size-3" />}
             {plant.approved} of {rows.length} approved
           </span>
+          {tab === "overview" && canArrange && !day && !dept && rows.length > 1 && (
+            arranging ? (
+              <>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={saveArrangement}
+                  className="inline-flex h-7 items-center gap-1.5 rounded-sm bg-success px-2.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                >
+                  {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+                  Save order
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={stopArranging}
+                  className="inline-flex h-7 items-center rounded-sm px-2 text-xs text-muted-foreground hover:bg-muted"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={startArranging}
+                title="Drag departments into the order you want. It holds everywhere: here, staffing, the schedule's list."
+                className="inline-flex h-7 items-center gap-1.5 rounded-sm bg-card px-2.5 text-xs font-semibold ring-1 ring-foreground/15 hover:bg-muted"
+              >
+                <GripVertical className="size-3.5" />
+                Arrange
+              </button>
+            )
+          )}
         </span>
       </div>
 
       {tab === "staffing" ? (
-        <StaffingTab
-          departments={shown}
-          allDepartments={allDepartments}
-          employees={employees}
-          approvalSteps={approvalSteps}
-          canEdit={canEditStaffing}
-        />
+        <StaffingTab departments={rows.map((r) => r.department)} allDepartments={allDepartments} employees={allPeople} canEdit={canEditStaffing} />
       ) : tab === "cost" ? (
         <CostTab rows={rows} plant={plant} look={look} from={from} to={to} settings={settings} />
+      ) : deptRow ? (
+        <DepartmentPage row={deptRow} />
+      ) : mode === "day" ? (
+        <DayPage />
       ) : (
         <>
           {/* What is being looked at, said once: the whole span. */}
@@ -381,99 +507,12 @@ export function HrDashboard({
               <span className="text-xs font-semibold text-warning-foreground tabular-nums">{plant.overtime.toFixed(1)} h overtime</span>
             )}
             <span className="ml-auto flex items-center gap-1 text-[0.6875rem] text-muted-foreground">
-              Tap a date or a number to see who is in
-              <Hint text="The table is the dashboard. Tapping a date at the top, or a number under it, opens that day under the table - who is in, by shift. Tap it again to close." />
+              {arranging ? "Drag a department by its grip, then Save order" : "Tap a number to open a department, a date to open the day"}
+              <Hint text="A number under a date opens that department alone: its people down, the dates across, that day lit up. A date at the top opens the whole plant for that day, by shift. Back returns here." />
             </span>
           </div>
 
-          {rows.length === 0 ? (
-            <Empty text="No departments to show." />
-          ) : (
-            <DepartmentTable />
-          )}
-
-          {/* The picked day, under the table, not instead of it. */}
-          {mode === "day" && rows.length > 0 && (
-            <section className="flex flex-col gap-2 border-t-2 border-primary/40 pt-2">
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-                <h3 className="text-sm font-bold">{longDate(picked)}</h3>
-                <Total value={dayPeople} unit="people in" />
-                <Total value={Math.round(dayHours)} unit="hours" />
-                <button
-                  type="button"
-                  onClick={() => go(from, to, null)}
-                  className="ml-auto inline-flex h-7 items-center gap-1 rounded-sm px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                >
-                  <X className="size-3.5" />
-                  Close day
-                </button>
-              </div>
-              {dayRows.length === 0 ? (
-                <Empty text={`Nobody is scheduled on ${longDate(picked)}${view.dept || view.line ? " in this selection" : ""}.`} />
-              ) : (
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                {dayRows.map(({ department, perDay }) => {
-                  const style = look(department);
-                  const d = perDay[dayIndex];
-                  return (
-                    <section key={department.id} className="relative overflow-hidden rounded-sm bg-card ring-1 ring-foreground/10">
-                      <span aria-hidden className={cn("absolute inset-y-0 left-0 w-1", style.dot)} />
-                      <header className={cn("flex items-baseline justify-between gap-2 py-1 pr-2 pl-3", style.tint)}>
-                        <Link href={`/hr/schedule?dept=${department.id}&week=${weekStartOf(picked)}`} className="min-w-0 truncate text-[0.6875rem] font-bold tracking-wide uppercase hover:underline">
-                          {department.name}
-                        </Link>
-                        <span className="shrink-0 text-sm font-bold tabular-nums">
-                          {d.people}
-                          <span className="ml-0.5 text-[0.5625rem] font-normal">people</span>
-                          <span className="ml-2 text-xs font-semibold">{d.hours.toFixed(0)} h</span>
-                        </span>
-                      </header>
-                      {/* The day by shift: first shift, its time and headcount,
-                          then the second, and who is on each. */}
-                      <ul className="flex flex-col">
-                        {groupByShift(d.shifts).map((group, index) => (
-                          <li key={`${group.start}-${group.end}`} className="border-b border-border/40 last:border-b-0">
-                            <p className="flex items-baseline gap-2 bg-surface-sunk py-0.5 pr-2 pl-3 text-[0.625rem]">
-                              <span className="font-semibold tracking-wider text-muted-foreground uppercase">
-                                {ordinal(index)} shift
-                              </span>
-                              <span className="font-bold tabular-nums">
-                                {displayTime(group.start)}
-                                <span className="mx-1 font-normal text-muted-foreground">–</span>
-                                {displayTime(group.end)}
-                              </span>
-                              <span className="ml-auto font-bold tabular-nums">
-                                {group.shifts.length}
-                                <span className="ml-0.5 font-normal text-muted-foreground">people</span>
-                              </span>
-                            </p>
-                            <ul className="grid grid-cols-1 gap-x-3 sm:grid-cols-2">
-                              {group.shifts.map((s) => {
-                                const person = empById.get(s.employeeId);
-                                const foreign = person && person.departmentId !== department.id;
-                                return (
-                                  <li key={s.id} className="truncate py-0.5 pr-2 pl-3 text-xs">
-                                    {person ? displayName(person) : "?"}
-                                    {foreign && (
-                                      <span className="ml-1 text-[0.5625rem] font-semibold text-primary">
-                                        from {allDepartments.find((x) => x.id === person.departmentId)?.name ?? "elsewhere"}
-                                        {s.isFloat && !s.floatApprovedAt && " ?"}
-                                      </span>
-                                    )}
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-                  );
-                })}
-              </div>
-              )}
-            </section>
-          )}
+          {rows.length === 0 ? <Empty text="No departments to show." /> : <DepartmentTable />}
         </>
       )}
 
@@ -490,139 +529,413 @@ export function HrDashboard({
   /** The department rows across the days on screen. Defined inside so it shares the page's state. */
   function DepartmentTable() {
     return (
-            <div className="overflow-x-auto rounded-sm bg-card ring-1 ring-foreground/10">
-              <table className="w-full border-collapse text-sm" style={{ minWidth: `${28 + days.length * 3.5}rem` }}>
-                <thead>
-                  <tr className="bg-surface-sunk">
-                    <th className="sticky left-0 z-10 bg-surface-sunk px-3 py-1.5 text-left text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">Department</th>
-                    <th className="px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">People</th>
-                    {days.map((date, i) => {
-                      const active = mode === "day" && date === picked;
-                      const isToday = date === today;
+      <div className={cn("overflow-x-auto rounded-sm bg-card ring-1 ring-foreground/10", arranging && "select-none [-webkit-touch-callout:none] ring-2 ring-primary/40")}>
+        <table className="w-full border-collapse text-sm" style={{ minWidth: `${28 + days.length * 3.5}rem` }}>
+          <thead>
+            <tr className="bg-surface-sunk">
+              <th className="sticky left-0 z-10 bg-surface-sunk px-3 py-1.5 text-left text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">Department</th>
+              <th className="px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">People</th>
+              {days.map((date, i) => {
+                const isToday = date === today;
+                return (
+                  <th key={date} className={cn("border-l border-border/60 p-0 text-center", isWeekend(date) && "bg-surface-sunk/60", isToday && "bg-brand-muted")}>
+                    {/* The date is the button: tap to open the day for the whole plant. */}
+                    <button
+                      type="button"
+                      disabled={arranging}
+                      onClick={() => go(from, to, date)}
+                      title={`Who is in on ${longDate(date)}`}
+                      className="flex w-full flex-col items-center px-1 py-1 transition-colors hover:bg-brand-muted disabled:hover:bg-transparent"
+                    >
+                      <span className={cn("text-[0.5625rem] font-semibold tracking-wider uppercase", isToday ? "text-primary" : "text-muted-foreground")}>
+                        {isToday ? "Today" : dayShort(date)}
+                      </span>
+                      <span className="text-xs font-bold tabular-nums">{monthDay(date)}</span>
+                      <span className="text-[0.5625rem] text-muted-foreground tabular-nums">{plantPerDay[i] > 0 ? `${plantPerDay[i]} in` : "—"}</span>
+                    </button>
+                  </th>
+                );
+              })}
+              <th className="border-l border-border px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">Hours</th>
+              <th className="w-8" />
+            </tr>
+          </thead>
+          <tbody>
+            {orderedRows.map(({ department, home, approvedWeeks, weeksInRange, total, peopleScheduled, perDay }) => {
+              const style = look(department);
+              const isDrop = arranging && dropOn === department.id;
+              return (
+                <tr
+                  key={department.id}
+                  data-dept-row={arranging ? department.id : undefined}
+                  className={cn("group border-b border-border/50 last:border-b-0 hover:bg-muted/40", isDrop && "border-t-2 border-t-primary bg-brand-muted")}
+                >
+                  <td className={cn("sticky left-0 z-10 py-1 pr-3 pl-0", isDrop ? "bg-brand-muted" : "bg-card group-hover:bg-muted/40")}>
+                    {arranging ? (
+                      <span className="flex items-center gap-1.5">
+                        <span
+                          role="button"
+                          aria-label={`Move ${department.name}`}
+                          title="Drag to change the order"
+                          onPointerDown={(event) => dragDepartment(event, department.id)}
+                          className="inline-flex h-7 w-6 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing"
+                        >
+                          <GripVertical className="size-4" />
+                        </span>
+                        <span className={cn("block h-7 w-1.5 shrink-0", style.dot)} />
+                        <span className="truncate text-xs font-semibold">{department.name}</span>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => go(from, to, null, span, department.id)}
+                        title={`Open ${department.name}: its people across these dates`}
+                        className="flex w-full items-center gap-2 text-left hover:underline"
+                      >
+                        {/* The department's colour, full height, so a column of rows reads as areas. */}
+                        <span className={cn("block h-7 w-1.5 shrink-0", style.dot)} />
+                        <span className="flex min-w-0 flex-col leading-tight">
+                          <span className="truncate text-xs font-semibold">{department.name}</span>
+                          <span className="flex items-center gap-1 text-[0.5625rem] text-muted-foreground">
+                            {department.line}
+                            <span
+                              aria-hidden
+                              className={cn("inline-block size-1.5 rounded-[1px]", approvedWeeks >= weeksInRange ? "bg-success" : "bg-warning-foreground")}
+                            />
+                            {approvedWeeks >= weeksInRange ? "approved" : approvedWeeks === 0 ? "not approved" : `${approvedWeeks} of ${weeksInRange} weeks`}
+                          </span>
+                        </span>
+                      </button>
+                    )}
+                  </td>
+                  <td className="px-2 py-1 text-right text-xs tabular-nums">
+                    <span className="font-semibold">{peopleScheduled}</span>
+                    <span className="text-muted-foreground"> / {home.length}</span>
+                    {/* How much of the department is in, as a bar. */}
+                    <span className="mt-0.5 block h-1 w-full rounded-sm bg-muted">
+                      <span className={cn("block h-1 rounded-sm", style.dot)} style={{ width: `${home.length ? Math.min(100, (peopleScheduled / home.length) * 100) : 0}%` }} />
+                    </span>
+                  </td>
+                  {perDay.map((d) => (
+                    <td
+                      key={d.date}
+                      title={d.hours > 0 ? `${d.hours.toFixed(1)} hours` : undefined}
+                      className={cn(
+                        "border-l border-border/60 px-1 py-1 text-center text-xs tabular-nums",
+                        isWeekend(d.date) && "bg-surface-sunk/60",
+                        d.date === today && "bg-brand-muted/50",
+                        d.people === 0 && "text-muted-foreground/40"
+                      )}
+                    >
+                      {d.people > 0 ? (
+                        <button
+                          type="button"
+                          disabled={arranging}
+                          // The number opens the department with this day lit up.
+                          onClick={() => go(from, to, d.date, span, department.id)}
+                          title={`${department.name} on ${longDate(d.date)}: who is in`}
+                          className={cn("inline-block min-w-6 rounded-sm px-1 font-semibold hover:ring-1 hover:ring-primary", style.tint)}
+                        >
+                          {d.people}
+                        </button>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  ))}
+                  <td className="border-l border-border px-2 py-1 text-right text-xs tabular-nums">
+                    {total.hours > 0 ? total.hours.toFixed(0) : ""}
+                    {total.overtimeHours > 0.01 && (
+                      <span className="ml-1 text-[0.5625rem] font-semibold text-warning-foreground">+{total.overtimeHours.toFixed(1)} OT</span>
+                    )}
+                  </td>
+                  <td className="px-1 py-1 text-right">
+                    <Link href={`/hr/schedule?dept=${department.id}&from=${weekStartOf(from)}`} aria-label={`Open ${department.name} in the schedule`} title="Open in the schedule" className="inline-flex text-primary">
+                      <ChevronRight className="size-4" />
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-t-foreground/20 bg-surface-sunk text-xs">
+              <td className="sticky left-0 z-10 bg-surface-sunk px-3 py-1 text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                {view.line || view.dept ? "Selection" : "Whole plant"}
+              </td>
+              <td className="px-2 py-1 text-right font-semibold tabular-nums">
+                {plant.people}
+                <span className="font-normal text-muted-foreground"> / {plant.headcount}</span>
+              </td>
+              {plantPerDay.map((count, i) => (
+                <td key={days[i]} className="border-l border-border/60 px-1 py-1 text-center font-semibold tabular-nums">
+                  {count > 0 ? count : <span className="text-muted-foreground/40">—</span>}
+                </td>
+              ))}
+              <td className="border-l border-border px-2 py-1 text-right font-semibold tabular-nums">{plant.hours.toFixed(0)}</td>
+              <td />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    );
+  }
+
+  /** One day, the whole plant, by shift. The second page inside Overview. */
+  function DayPage() {
+    return (
+      <section className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <BackButton label="All departments" onClick={() => go(from, to, null, span, null)} />
+          <h3 className="text-sm font-bold">{longDate(picked)}</h3>
+          <Total value={dayPeople} unit="people in" />
+          <Total value={Math.round(dayHours)} unit="hours" />
+          <span className="ml-auto flex items-center gap-1 text-[0.6875rem] text-muted-foreground">
+            Tap a department to see its week
+            <Hint text="Each card is one department on this day, grouped by shift. The department's name opens it across the dates, with this day lit up." />
+          </span>
+        </div>
+        {dayRows.length === 0 ? (
+          <Empty text={`Nobody is scheduled on ${longDate(picked)}${view.dept || view.line ? " in this selection" : ""}.`} />
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {dayRows.map(({ department, perDay }) => {
+              const style = look(department);
+              const d = perDay[dayIndex];
+              return (
+                <section key={department.id} className="relative overflow-hidden rounded-sm bg-card ring-1 ring-foreground/10">
+                  <span aria-hidden className={cn("absolute inset-y-0 left-0 w-1", style.dot)} />
+                  <header className={cn("flex items-baseline justify-between gap-2 py-1 pr-2 pl-3", style.tint)}>
+                    <button
+                      type="button"
+                      onClick={() => go(from, to, picked, span, department.id)}
+                      className="min-w-0 truncate text-left text-[0.6875rem] font-bold tracking-wide uppercase hover:underline"
+                    >
+                      {department.name}
+                    </button>
+                    <span className="shrink-0 text-sm font-bold tabular-nums">
+                      {d.people}
+                      <span className="ml-0.5 text-[0.5625rem] font-normal">people</span>
+                      <span className="ml-2 text-xs font-semibold">{d.hours.toFixed(0)} h</span>
+                    </span>
+                  </header>
+                  {/* The day by shift: first shift, its time and headcount,
+                      then the second, and who is on each. */}
+                  <ul className="flex flex-col">
+                    {groupByShift(d.shifts).map((group, index) => (
+                      <li key={`${group.start}-${group.end}`} className="border-b border-border/40 last:border-b-0">
+                        <p className="flex items-baseline gap-2 bg-surface-sunk py-0.5 pr-2 pl-3 text-[0.625rem]">
+                          <span className="font-semibold tracking-wider text-muted-foreground uppercase">{ordinal(index)} shift</span>
+                          <span className="font-bold tabular-nums">
+                            {displayTime(group.start)}
+                            <span className="mx-1 font-normal text-muted-foreground">–</span>
+                            {displayTime(group.end)}
+                          </span>
+                          <span className="ml-auto font-bold tabular-nums">
+                            {group.shifts.length}
+                            <span className="ml-0.5 font-normal text-muted-foreground">people</span>
+                          </span>
+                        </p>
+                        <ul className="grid grid-cols-1 gap-x-3 sm:grid-cols-2">
+                          {group.shifts.map((s) => {
+                            const person = empById.get(s.employeeId);
+                            const foreign = person && person.departmentId !== department.id;
+                            return (
+                              <li key={s.id} className="truncate py-0.5 pr-2 pl-3 text-xs">
+                                {person ? displayName(person) : "?"}
+                                {foreign && (
+                                  <span className="ml-1 text-[0.5625rem] font-semibold text-primary">
+                                    from {allDepartments.find((x) => x.id === person.departmentId)?.name ?? "elsewhere"}
+                                    {s.isFloat && !s.floatApprovedAt && " ?"}
+                                  </span>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  /**
+   * One department across the dates on screen: its people down, the days
+   * across, a tapped day lit up. What the schedule shows, read-only, without
+   * leaving the dashboard.
+   */
+  function DepartmentPage({ row }: { row: (typeof allRows)[number] }) {
+    const { department, home, deptShifts, perDay, peopleScheduled, total, approvedWeeks, weeksInRange } = row;
+    const style = look(department);
+    const byKey = new Map(deptShifts.map((s) => [`${s.employeeId}|${s.workDate}`, s]));
+    const homeIds = new Set(home.map((e) => e.id));
+    const foreign = [...new Set(deptShifts.filter((s) => !homeIds.has(s.employeeId) && !isOff(s)).map((s) => s.employeeId))]
+      .map((id) => empById.get(id))
+      .filter(Boolean) as Employee[];
+    const people = [...sortPeople(home), ...foreign];
+    const dayGroups = day ? groupByShift(perDay[dayIndex]?.shifts ?? []) : [];
+
+    return (
+      <section className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <BackButton label="All departments" onClick={() => go(from, to, null, span, null)} />
+          <span className={cn("inline-flex items-center gap-1.5 rounded-sm py-0.5 pr-2 pl-1.5 text-xs font-bold tracking-wide uppercase", style.tint)}>
+            <span className={cn("block h-4 w-1", style.dot)} />
+            {department.name}
+          </span>
+          <span className="flex items-center gap-1 text-[0.6875rem] text-muted-foreground">
+            {department.line}
+            <span aria-hidden className={cn("inline-block size-1.5 rounded-[1px]", approvedWeeks >= weeksInRange ? "bg-success" : "bg-warning-foreground")} />
+            {approvedWeeks >= weeksInRange ? "approved" : approvedWeeks === 0 ? "not approved" : `${approvedWeeks} of ${weeksInRange} weeks`}
+          </span>
+          <Total value={peopleScheduled} unit={`of ${home.length} scheduled`} />
+          <Total value={Math.round(total.hours)} unit="hours" />
+          <Link
+            href={`/hr/schedule?dept=${department.id}&from=${weekStartOf(day ?? from)}`}
+            className="ml-auto inline-flex h-7 items-center gap-1 rounded-sm px-2 text-xs font-medium text-primary hover:bg-primary/10"
+          >
+            Open in the schedule
+            <ChevronRight className="size-3.5" />
+          </Link>
+        </div>
+
+        {day && dayGroups.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 text-[0.6875rem]">
+            <span className="font-semibold">{longDate(day)}:</span>
+            {dayGroups.map((group, index) => (
+              <span key={`${group.start}-${group.end}`} className={cn("inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5", style.tint)}>
+                <span className="font-semibold tracking-wider text-muted-foreground uppercase">{ordinal(index)} shift</span>
+                <span className="font-bold tabular-nums">
+                  {displayTime(group.start)} – {displayTime(group.end)}
+                </span>
+                <span className="tabular-nums">· {group.shifts.length} people</span>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="overflow-x-auto rounded-sm bg-card ring-1 ring-foreground/10">
+          <table className="w-full border-collapse text-xs" style={{ minWidth: `${14 + days.length * 6}rem` }}>
+            <thead>
+              <tr className="bg-surface-sunk">
+                <th className="sticky left-0 z-10 w-44 bg-surface-sunk px-2 py-1.5 text-left text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">Person</th>
+                {days.map((date, i) => {
+                  const lit = date === day;
+                  const isToday = date === today;
+                  return (
+                    <th key={date} className={cn("border-l border-border/60 p-0 text-center", isWeekend(date) && "bg-surface-sunk/60", isToday && !lit && "bg-brand-muted")}>
+                      <button
+                        type="button"
+                        onClick={() => go(from, to, lit ? null : date, span, department.id)}
+                        aria-pressed={lit}
+                        title={lit ? "Unlight the day" : `Light up ${longDate(date)}`}
+                        className={cn("flex w-full flex-col items-center px-1 py-1 transition-colors hover:bg-brand-muted", lit && "bg-primary text-primary-foreground hover:bg-primary")}
+                      >
+                        <span className={cn("text-[0.5625rem] font-semibold tracking-wider uppercase", lit ? "text-primary-foreground/80" : isToday ? "text-primary" : "text-muted-foreground")}>
+                          {isToday ? "Today" : dayShort(date)}
+                        </span>
+                        <span className="text-xs font-bold tabular-nums">{monthDay(date)}</span>
+                        <span className={cn("text-[0.5625rem] tabular-nums", lit ? "text-primary-foreground/80" : "text-muted-foreground")}>
+                          {perDay[i].people > 0 ? `${perDay[i].people} in` : "—"}
+                        </span>
+                      </button>
+                    </th>
+                  );
+                })}
+                <th className="w-16 border-l border-border px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">Hours</th>
+              </tr>
+            </thead>
+            <tbody>
+              {people.map((person) => {
+                const away = person.departmentId !== department.id;
+                const hours = days.reduce((sum, date) => {
+                  const s = byKey.get(`${person.id}|${date}`);
+                  return sum + (s ? shiftHours(s, department.breakHours) : 0);
+                }, 0);
+                return (
+                  <tr key={person.id} className="group border-b border-border/50 last:border-b-0 hover:bg-muted/40">
+                    <td className="sticky left-0 z-10 bg-card px-2 py-0.5 group-hover:bg-muted/40">
+                      <span className="flex items-center gap-1.5">
+                        <span className={cn("block h-3.5 w-0.5 shrink-0", style.dot)} />
+                        <span className="min-w-0 truncate font-medium">{displayName(person)}</span>
+                        {away && (
+                          <span className="shrink-0 text-[0.5625rem] font-semibold text-primary">
+                            from {allDepartments.find((x) => x.id === person.departmentId)?.name ?? "elsewhere"}
+                          </span>
+                        )}
+                      </span>
+                    </td>
+                    {days.map((date) => {
+                      const s = byKey.get(`${person.id}|${date}`);
+                      const off = isOff(s);
+                      const absence = s?.absenceTypeId ? codeOf.get(s.absenceTypeId) : undefined;
+                      const absenceLook = absence ? departmentColor(absence.color, absenceTypes.indexOf(absence)) : null;
                       return (
-                        <th key={date} className={cn("border-l border-border/60 p-0 text-center", isWeekend(date) && "bg-surface-sunk/60", isToday && "bg-brand-muted")}>
-                          {/* The date is the button: tap to open the day under the table, tap again to close. */}
-                          <button
-                            type="button"
-                            onClick={() => go(from, to, active ? null : date)}
-                            aria-pressed={active}
-                            title={active ? "Close the day" : `Who is in on ${longDate(date)}`}
+                        <td
+                          key={date}
+                          className={cn(
+                            "border-l border-border/60 p-0.5 text-center tabular-nums",
+                            isWeekend(date) && "bg-surface-sunk/60",
+                            date === day && "bg-brand-muted"
+                          )}
+                        >
+                          <span
                             className={cn(
-                              "flex w-full flex-col items-center px-1 py-1 transition-colors hover:bg-brand-muted",
-                              active && "bg-primary text-primary-foreground hover:bg-primary"
+                              "flex min-h-7 flex-col items-center justify-center rounded-sm px-1 text-[0.6875rem] leading-tight",
+                              !off && cn("font-semibold", style.tint),
+                              off && absenceLook?.tint
                             )}
                           >
-                            <span className={cn("text-[0.5625rem] font-semibold tracking-wider uppercase", active ? "text-primary-foreground/80" : isToday ? "text-primary" : "text-muted-foreground")}>
-                              {isToday ? "Today" : DAY_NAMES[(new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7].slice(0, 3)}
-                            </span>
-                            <span className="text-xs font-bold tabular-nums">{monthDay(date)}</span>
-                            <span className={cn("text-[0.5625rem] tabular-nums", active ? "text-primary-foreground/80" : "text-muted-foreground")}>
-                              {plantPerDay[i] > 0 ? `${plantPerDay[i]} in` : "—"}
-                            </span>
-                          </button>
-                        </th>
-                      );
-                    })}
-                    <th className="border-l border-border px-2 py-1.5 text-right text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">Hours</th>
-                    <th className="w-8" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map(({ department, home, approvedWeeks, weeksInRange, total, peopleScheduled, perDay }) => {
-                    const style = look(department);
-                    return (
-                      <tr key={department.id} className="group border-b border-border/50 last:border-b-0 hover:bg-muted/40">
-                        <td className="sticky left-0 z-10 bg-card py-1 pr-3 pl-0 group-hover:bg-muted/40">
-                          <Link href={`/hr/schedule?dept=${department.id}&week=${weekStartOf(from)}`} className="flex items-center gap-2">
-                            {/* The department's colour, full height, so a column of rows reads as areas. */}
-                            <span className={cn("block h-7 w-1.5 shrink-0", style.dot)} />
-                            <span className="flex min-w-0 flex-col leading-tight">
-                              <span className="truncate text-xs font-semibold">{department.name}</span>
-                              <span className="flex items-center gap-1 text-[0.5625rem] text-muted-foreground">
-                                {department.line}
-                                <span
-                                  aria-hidden
-                                  className={cn("inline-block size-1.5 rounded-[1px]", approvedWeeks >= weeksInRange ? "bg-success" : "bg-warning-foreground")}
-                                />
-                                {approvedWeeks >= weeksInRange ? "approved" : approvedWeeks === 0 ? "not approved" : `${approvedWeeks} of ${weeksInRange} weeks`}
-                              </span>
-                            </span>
-                          </Link>
-                        </td>
-                        <td className="px-2 py-1 text-right text-xs tabular-nums">
-                          <span className="font-semibold">{peopleScheduled}</span>
-                          <span className="text-muted-foreground"> / {home.length}</span>
-                          {/* How much of the department is in, as a bar. */}
-                          <span className="mt-0.5 block h-1 w-full rounded-sm bg-muted">
-                            <span className={cn("block h-1 rounded-sm", style.dot)} style={{ width: `${home.length ? Math.min(100, (peopleScheduled / home.length) * 100) : 0}%` }} />
+                            {off ? (
+                              absence ? (
+                                <span title={absence.name} className="font-black tracking-wider">
+                                  {absence.code}
+                                </span>
+                              ) : (
+                                <span className="font-semibold text-muted-foreground/50">OFF</span>
+                              )
+                            ) : (
+                              <>
+                                <span>{displayTime(s!.startTime!)}</span>
+                                <span className="font-medium opacity-80">{displayTime(s!.endTime!)}</span>
+                              </>
+                            )}
                           </span>
                         </td>
-                        {perDay.map((d) => (
-                          <td
-                            key={d.date}
-                            title={d.hours > 0 ? `${d.hours.toFixed(1)} hours` : undefined}
-                            className={cn(
-                              "border-l border-border/60 px-1 py-1 text-center text-xs tabular-nums",
-                              isWeekend(d.date) && "bg-surface-sunk/60",
-                              d.date === today && "bg-brand-muted/50",
-                              mode === "day" && d.date === picked && "bg-brand-muted",
-                              d.people === 0 && "text-muted-foreground/40"
-                            )}
-                          >
-                            {d.people > 0 ? (
-                              <button
-                                type="button"
-                                // Tap to open the day underneath; tap again to close it.
-                                onClick={() => go(from, to, mode === "day" && picked === d.date ? null : d.date)}
-                                title={mode === "day" && picked === d.date ? "Close the day" : `Who is in on ${longDate(d.date)}`}
-                                className={cn(
-                                  "inline-block min-w-6 rounded-sm px-1 font-semibold hover:ring-1 hover:ring-primary",
-                                  style.tint,
-                                  mode === "day" && picked === d.date && "ring-2 ring-primary"
-                                )}
-                              >
-                                {d.people}
-                              </button>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
-                        ))}
-                        <td className="border-l border-border px-2 py-1 text-right text-xs tabular-nums">
-                          {total.hours > 0 ? total.hours.toFixed(0) : ""}
-                          {total.overtimeHours > 0.01 && (
-                            <span className="ml-1 text-[0.5625rem] font-semibold text-warning-foreground">+{total.overtimeHours.toFixed(1)} OT</span>
-                          )}
-                        </td>
-                        <td className="px-1 py-1 text-right">
-                          <Link href={`/hr/schedule?dept=${department.id}&week=${weekStartOf(from)}`} aria-label={`Open ${department.name}`} className="inline-flex text-primary">
-                            <ChevronRight className="size-4" />
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-t-foreground/20 bg-surface-sunk text-xs">
-                    <td className="sticky left-0 z-10 bg-surface-sunk px-3 py-1 text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">
-                      {view.line || view.dept ? "Selection" : "Whole plant"}
-                    </td>
-                    <td className="px-2 py-1 text-right font-semibold tabular-nums">
-                      {plant.people}
-                      <span className="font-normal text-muted-foreground"> / {plant.headcount}</span>
-                    </td>
-                    {plantPerDay.map((count, i) => (
-                      <td key={days[i]} className="border-l border-border/60 px-1 py-1 text-center font-semibold tabular-nums">
-                        {count > 0 ? count : <span className="text-muted-foreground/40">—</span>}
-                      </td>
-                    ))}
-                    <td className="border-l border-border px-2 py-1 text-right font-semibold tabular-nums">{plant.hours.toFixed(0)}</td>
-                    <td />
+                      );
+                    })}
+                    <td className="border-l border-border px-2 py-0.5 text-right font-semibold tabular-nums">{hours > 0 ? hours.toFixed(1) : ""}</td>
                   </tr>
-                </tfoot>
-              </table>
-            </div>
+                );
+              })}
+              {people.length === 0 && (
+                <tr>
+                  <td colSpan={days.length + 2} className="px-3 py-8 text-center text-muted-foreground">
+                    Nobody in {department.name}{approvedWeeks === 0 ? ", or nothing approved for these dates" : ""}.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-t-foreground/20 bg-surface-sunk">
+                <td className="sticky left-0 z-10 bg-surface-sunk px-2 py-1 text-[0.5625rem] font-semibold tracking-wider text-muted-foreground uppercase">People in</td>
+                {perDay.map((d) => (
+                  <td key={d.date} className={cn("border-l border-border/60 px-1 py-1 text-center font-semibold tabular-nums", d.date === day && "bg-brand-muted")}>
+                    {d.people > 0 ? d.people : <span className="text-muted-foreground/40">—</span>}
+                  </td>
+                ))}
+                <td className="border-l border-border px-2 py-1 text-right font-semibold tabular-nums">{total.hours.toFixed(0)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
     );
   }
 }
@@ -690,7 +1003,7 @@ function CostTab({
                 return (
                   <tr key={department.id} className="border-b border-border/50 last:border-b-0 hover:bg-muted/40">
                     <td className="px-3 py-1">
-                      <Link href={`/hr/schedule?dept=${department.id}&week=${weekStartOf(from)}`} className="flex items-center gap-2 text-xs font-semibold hover:underline">
+                      <Link href={`/hr/schedule?dept=${department.id}&from=${weekStartOf(from)}`} className="flex items-center gap-2 text-xs font-semibold hover:underline">
                         <span className={cn("block h-4 w-1 shrink-0", style.dot)} />
                         {department.name}
                       </Link>
@@ -704,7 +1017,7 @@ function CostTab({
                       {total.overtimeHours > 0.01 ? total.overtimeHours.toFixed(1) : "—"}
                     </td>
                     <td className="px-2 py-1 text-right text-xs tabular-nums">{money(total.wages)}</td>
-                    <td className="px-2 py-1 text-right text-xs tabular-nums text-muted-foreground">{money(total.burden)}</td>
+                    <td className="px-2 py-1 text-right text-xs text-muted-foreground tabular-nums">{money(total.burden)}</td>
                     <td className="px-2 py-1 text-right text-xs font-bold tabular-nums">{money(total.total)}</td>
                     <td className="px-2 py-1">
                       <span className="block h-2 rounded-sm bg-muted">
@@ -760,8 +1073,25 @@ function isWeekend(date: string): boolean {
   return day === 0 || day === 6;
 }
 
+function dayShort(date: string): string {
+  return DAY_NAMES[(new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7].slice(0, 3);
+}
+
 function ordinal(index: number): string {
   return ["First", "Second", "Third", "Fourth", "Fifth"][index] ?? `${index + 1}th`;
+}
+
+function BackButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex h-7 items-center gap-1 rounded-sm bg-card px-2 text-xs font-medium text-muted-foreground ring-1 ring-foreground/10 hover:bg-muted hover:text-foreground"
+    >
+      <ArrowLeft className="size-3.5" />
+      {label}
+    </button>
+  );
 }
 
 function Tab({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {

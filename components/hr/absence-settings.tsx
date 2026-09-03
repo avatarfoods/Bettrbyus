@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { deleteAbsenceType, saveAbsenceType } from "@/lib/hr/actions";
 import type { AbsenceType } from "@/lib/hr/model";
-import { HR_COLORS as DEPARTMENT_COLORS, departmentColor } from "@/lib/hr/colors";
+import { departmentColor } from "@/lib/hr/colors";
+import { ColorGrid } from "@/components/hr/color-grid";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Switch, SwitchThumb } from "@/components/ui/switch";
 import { DataTable, TBody, TD, THead, TR, TableEmpty } from "@/components/ui/data-table";
@@ -186,21 +187,7 @@ function TypeEditor({
       </div>
 
       <Labelled label="Colour" hint="How the day looks on the schedule.">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {DEPARTMENT_COLORS.map((option) => (
-            <button
-              key={option.key}
-              type="button"
-              onClick={() => setColor(option.key)}
-              aria-label={option.label}
-              aria-pressed={color === option.key}
-              title={option.label}
-              className={cn("size-7 rounded-sm ring-1 transition", option.tint, color === option.key ? "ring-2 ring-primary" : "ring-border hover:ring-foreground/30")}
-            >
-              <span className={cn("mx-auto block h-3.5 w-1.5", option.dot)} />
-            </button>
-          ))}
-        </div>
+        <ColorGrid value={color} onChange={setColor} />
       </Labelled>
 
       <EditorActions

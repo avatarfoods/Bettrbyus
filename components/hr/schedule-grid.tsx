@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRightLeft, CheckCircle2, Loader2, MailX, Trash2, X } from "lucide-react";
-import { approveFloats, removeFloater, saveShifts } from "@/lib/hr/actions";
+import { ArrowRightLeft, CheckCircle2, GripVertical, Loader2, MailX, Trash2, X } from "lucide-react";
+import { approveFloats, removeFloater, saveEmployeeOrder, saveShifts } from "@/lib/hr/actions";
 import type { AwayShift, WeekOnScreen } from "@/lib/hr/fetch";
 import {
   DAY_NAMES,
@@ -29,6 +29,7 @@ import {
   type Shift,
 } from "@/lib/hr/model";
 import { departmentColor } from "@/lib/hr/colors";
+import { beginDrag, dataOf, moveItem } from "@/components/hr/drag";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Hint } from "@/components/production/settings/shared";
 import { cn } from "@/lib/utils";
@@ -41,6 +42,11 @@ import { cn } from "@/lib/utils";
  * who do not much like computers: a day is a button, tapping it opens one
  * card with big choices, and the card writes the day the moment Save is
  * pressed. Arrow keys walk the grid; Enter opens a day; Delete makes it OFF.
+ *
+ * While editing, a day with hours on it can be picked up and dropped on
+ * another day, or on another person, and the hours move there. Rows can be
+ * picked up by the grip beside the name and dropped where they belong, so
+ * the grid sits in the order the floor does.
  *
  * Locked until Edit is pressed, like the production plan. Tapping a locked
  * day says so instead of doing nothing.
@@ -63,6 +69,7 @@ export function ScheduleGrid({
   editing,
   seesCost,
   canApproveFloat,
+  canArrange,
 }: {
   departmentId: string;
   departmentName: string;
@@ -72,7 +79,7 @@ export function ScheduleGrid({
   dates: string[];
   /** The weeks those days fall in, with what is on screen for each. */
   weeks: WeekOnScreen[];
-  /** This department's own people. */
+  /** This department's own people, in their order. */
   employees: Employee[];
   /** People from other departments with a shift in what is on screen. */
   floaters: Employee[];
@@ -87,12 +94,29 @@ export function ScheduleGrid({
   editing: boolean;
   seesCost: boolean;
   canApproveFloat: boolean;
+  /** May drag rows into a new order. Administrators. */
+  canArrange: boolean;
 }) {
+  const router = useRouter();
+  const confirm = useConfirm();
+  const [, startTransition] = useTransition();
   const look = departmentColor(departmentColorKey, departmentIndex);
   const deptById = useMemo(() => new Map(departments.map((d) => [d.id, d])), [departments]);
   const weekByStart = useMemo(() => new Map(weeks.map((w) => [w.weekStart, w])), [weeks]);
   const absenceById = useMemo(() => new Map(absenceTypes.map((t) => [t.id, t])), [absenceTypes]);
   const paidAbsence = useMemo(() => paidAbsenceMap(absenceTypes), [absenceTypes]);
+
+  /*
+    A row order arranged here, kept until the server comes back with the
+    saved one. Tied to the employees array it was made from, so a refresh
+    with a new list simply shows the server's order.
+  */
+  const [arranged, setArranged] = useState<{ base: Employee[]; ids: string[] } | null>(null);
+  const ordered = useMemo(() => {
+    if (!arranged || arranged.base !== employees) return employees;
+    const byId = new Map(employees.map((e) => [e.id, e]));
+    return arranged.ids.map((id) => byId.get(id)).filter(Boolean) as Employee[];
+  }, [arranged, employees]);
 
   const byKey = useMemo(() => {
     const map = new Map<string, Shift>();
@@ -106,7 +130,7 @@ export function ScheduleGrid({
     return map;
   }, [away]);
 
-  const everyone = useMemo(() => [...employees, ...floaters], [employees, floaters]);
+  const everyone = useMemo(() => [...ordered, ...floaters], [ordered, floaters]);
   const usual = useMemo(() => commonShifts(shifts), [shifts]);
 
   /**
@@ -158,8 +182,142 @@ export function ScheduleGrid({
   const [openCell, setOpen] = useState<{ employeeId: string; date: string } | null>(null);
   const open = editing ? openCell : null;
 
+  /* ---- dragging: the cell under the pointer, the row under the pointer ---- */
+  const [dropCell, setDropCell] = useState<{ row: number; day: number } | null>(null);
+  const [dragFrom, setDragFrom] = useState<{ row: number; day: number } | null>(null);
+  const [dropRow, setDropRow] = useState<string | null>(null);
+
+  function cellOf(target: HTMLElement | null): { row: number; day: number } | null {
+    const row = dataOf(target, "row");
+    const day = dataOf(target, "day");
+    return row !== null && day !== null ? { row: Number(row), day: Number(day) } : null;
+  }
+
+  /** Pick up a day's hours; drop them on another day or another person. */
+  function dragCell(event: React.PointerEvent<HTMLElement>, row: number, day: number) {
+    if (!editing) return;
+    const employee = everyone[row];
+    const date = dates[day];
+    const shift = employee ? byKey.get(`${employee.id}|${date}`) : undefined;
+    if (!employee || !shift || (isOff(shift) && !shift.absenceTypeId)) return;
+    beginDrag(event, {
+      hit: "[data-hr-cell]",
+      onStart: () => {
+        setOpen(null);
+        setDragFrom({ row, day });
+      },
+      onMove: (target) => setDropCell(cellOf(target)),
+      onDrop: (target) => {
+        const to = cellOf(target);
+        if (to && (to.row !== row || to.day !== day)) void moveShift(employee, date, shift, row >= ordered.length, to);
+      },
+      onEnd: () => {
+        setDropCell(null);
+        setDragFrom(null);
+      },
+    });
+  }
+
+  async function moveShift(employee: Employee, date: string, shift: Shift, fromFloat: boolean, to: { row: number; day: number }) {
+    const target = everyone[to.row];
+    const targetDate = dates[to.day];
+    if (!target || !targetDate) return;
+    const targetFloat = to.row >= ordered.length;
+    const existing = byKey.get(`${target.id}|${targetDate}`);
+    if (existing && !isOff(existing)) {
+      const ok = await confirm({
+        title: `Replace ${displayName(target)}'s ${dayName(targetDate)} ${monthDay(targetDate)}?`,
+        description: `${shiftLabel(existing.startTime!, existing.endTime!)} is there now. It becomes ${
+          shift.startTime && shift.endTime ? shiftLabel(shift.startTime, shift.endTime) : (absenceById.get(shift.absenceTypeId ?? "")?.name ?? "OFF")
+        }, and ${displayName(employee)}'s ${dayName(date)} ${monthDay(date)} becomes OFF.`,
+        confirmLabel: "Replace",
+        cancelLabel: "Cancel",
+        tone: "danger",
+      });
+      if (!ok) return;
+    }
+    startTransition(async () => {
+      const placed = await saveShifts({
+        departmentId,
+        weekStart: weekStartOf(targetDate),
+        employeeId: target.id,
+        isFloat: targetFloat,
+        days: [{ workDate: targetDate, startTime: shift.startTime, endTime: shift.endTime, absenceTypeId: shift.absenceTypeId ?? null }],
+      });
+      if (!placed.ok) {
+        await confirm({ title: placed.message, cancelLabel: false });
+        return;
+      }
+      const cleared = await saveShifts({
+        departmentId,
+        weekStart: weekStartOf(date),
+        employeeId: employee.id,
+        isFloat: fromFloat,
+        days: [{ workDate: date, startTime: null, endTime: null, absenceTypeId: null }],
+      });
+      if (!cleared.ok) await confirm({ title: cleared.message, cancelLabel: false });
+      router.refresh();
+    });
+  }
+
+  /** Pick up a row by its grip; drop it where it should sit. */
+  function dragRow(event: React.PointerEvent<HTMLElement>, employeeId: string) {
+    if (!editing || !canArrange) return;
+    const cell = (event.currentTarget as HTMLElement).closest("td") as HTMLElement | null;
+    beginDrag(event, {
+      hit: "[data-hr-row]",
+      ghost: cell,
+      onStart: () => setOpen(null),
+      onMove: (target) => setDropRow(dataOf(target, "hrRow")),
+      onDrop: (target) => {
+        const to = dataOf(target, "hrRow");
+        if (!to || to === employeeId) return;
+        const ids = ordered.map((e) => e.id);
+        const next = moveItem(ids, ids.indexOf(employeeId), ids.indexOf(to));
+        setArranged({ base: employees, ids: next });
+        startTransition(async () => {
+          const result = await saveEmployeeOrder({ departmentId, ids: next });
+          if (!result.ok) {
+            setArranged(null);
+            await confirm({ title: result.message, cancelLabel: false });
+          }
+          router.refresh();
+        });
+      },
+      onEnd: () => setDropRow(null),
+    });
+  }
+
   const columns = 2 + dates.length + 1 + (seesCost ? 1 : 0);
   const multiWeek = weeks.length > 1;
+
+  const rowProps = (employee: Employee, row: number, floater?: FloaterInfo) => ({
+    rowIndex: row,
+    employee,
+    cost: costs[row],
+    dates,
+    byKey,
+    awayByKey,
+    deptById,
+    weekByStart,
+    departments,
+    look,
+    departmentId,
+    editing,
+    settings,
+    seesCost,
+    usual,
+    absenceTypes,
+    absenceById,
+    open,
+    setOpen,
+    floater,
+    dragCell,
+    dragRow: canArrange && !floater ? dragRow : null,
+    dropCell,
+    dragFrom,
+    isDropRow: dropRow === employee.id,
+  });
 
   return (
     <div className="flex flex-col gap-2">
@@ -191,7 +349,10 @@ export function ScheduleGrid({
       </div>
 
       <div className="overflow-x-auto rounded-sm bg-card ring-1 ring-foreground/10">
-        <table className="w-full border-collapse text-sm" style={{ minWidth: `${22 + dates.length * 6.5}rem` }}>
+        <table
+          className={cn("w-full border-collapse text-sm", editing && "select-none [-webkit-touch-callout:none]")}
+          style={{ minWidth: `${22 + dates.length * 6.5}rem` }}
+        >
           <thead>
             {/* Across more than one week, a band over each week says what it is. */}
             {multiWeek && (
@@ -220,7 +381,13 @@ export function ScheduleGrid({
                 <span className="flex items-center gap-1.5">
                   Person
                   {editing && (
-                    <Hint text="Tap a day to set it. Arrow keys move between days and people, Enter opens the day, Delete makes it OFF." />
+                    <Hint
+                      text={
+                        canArrange
+                          ? "Tap a day to set it. Drag a day with hours onto another day or another person to move it. Drag the grip beside a name to change the order. On a phone, hold for a moment first. Arrow keys move, Enter opens, Delete makes it OFF."
+                          : "Tap a day to set it. Drag a day with hours onto another day or another person to move it - on a phone, hold for a moment first. Arrow keys move, Enter opens, Delete makes it OFF."
+                      }
+                    />
                   )}
                 </span>
               </th>
@@ -244,29 +411,8 @@ export function ScheduleGrid({
           </thead>
 
           <tbody>
-            {employees.map((employee, row) => (
-              <PersonRow
-                key={employee.id}
-                rowIndex={row}
-                employee={employee}
-                cost={costs[row]}
-                dates={dates}
-                byKey={byKey}
-                awayByKey={awayByKey}
-                deptById={deptById}
-                weekByStart={weekByStart}
-                departments={departments}
-                look={look}
-                departmentId={departmentId}
-                editing={editing}
-                settings={settings}
-                seesCost={seesCost}
-                usual={usual}
-                absenceTypes={absenceTypes}
-                absenceById={absenceById}
-                open={open}
-                setOpen={setOpen}
-              />
+            {ordered.map((employee, row) => (
+              <PersonRow key={employee.id} {...rowProps(employee, row)} />
             ))}
 
             {floaters.length > 0 && (
@@ -282,26 +428,7 @@ export function ScheduleGrid({
             {floaters.map((employee, index) => (
               <PersonRow
                 key={employee.id}
-                rowIndex={employees.length + index}
-                employee={employee}
-                cost={costs[employees.length + index]}
-                dates={dates}
-                byKey={byKey}
-                awayByKey={awayByKey}
-                deptById={deptById}
-                weekByStart={weekByStart}
-                departments={departments}
-                look={look}
-                departmentId={departmentId}
-                editing={editing}
-                settings={settings}
-                seesCost={seesCost}
-                usual={usual}
-                absenceTypes={absenceTypes}
-                absenceById={absenceById}
-                open={open}
-                setOpen={setOpen}
-                floater={{
+                {...rowProps(employee, ordered.length + index, {
                   home: employee.departmentId ? deptById.get(employee.departmentId) : undefined,
                   homeIndex: employee.departmentId ? departments.findIndex((d) => d.id === employee.departmentId) : 0,
                   pending: dates.some((date) => {
@@ -310,7 +437,7 @@ export function ScheduleGrid({
                   }),
                   canApprove: canApproveFloat,
                   scheduleIds: [...new Set(dates.map((d) => byKey.get(`${employee.id}|${d}`)?.scheduleId).filter(Boolean))] as string[],
-                }}
+                })}
               />
             ))}
 
@@ -395,6 +522,7 @@ type FloaterInfo = {
 
 type Usual = ReturnType<typeof commonShifts>;
 type OpenCell = { employeeId: string; date: string } | null;
+type CellRef = { row: number; day: number } | null;
 
 function PersonRow({
   rowIndex,
@@ -417,6 +545,11 @@ function PersonRow({
   open,
   setOpen,
   floater,
+  dragCell,
+  dragRow,
+  dropCell,
+  dragFrom,
+  isDropRow,
 }: {
   rowIndex: number;
   employee: Employee;
@@ -438,21 +571,43 @@ function PersonRow({
   open: OpenCell;
   setOpen: (next: OpenCell) => void;
   floater?: FloaterInfo;
+  dragCell: (event: React.PointerEvent<HTMLElement>, row: number, day: number) => void;
+  /** Set when this row may be picked up and re-ordered. */
+  dragRow: ((event: React.PointerEvent<HTMLElement>, employeeId: string) => void) | null;
+  dropCell: CellRef;
+  dragFrom: CellRef;
+  isDropRow: boolean;
 }) {
   const router = useRouter();
   const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
   const homeLook = floater?.home ? departmentColor(floater.home.color, floater.homeIndex) : null;
   const noEmail = !sendTo(employee);
+  const stickyBg = isDropRow ? "bg-brand-muted" : "bg-card group-hover:bg-muted/40";
 
   return (
-    <tr className="group border-b border-border/50 last:border-b-0">
-      <td className="sticky left-0 z-10 bg-card px-2 py-0 font-mono text-[0.625rem] text-muted-foreground group-hover:bg-muted/40">
+    <tr
+      data-hr-row={floater ? undefined : employee.id}
+      className={cn("group border-b border-border/50 last:border-b-0", isDropRow && "border-t-2 border-t-primary bg-brand-muted")}
+    >
+      <td className={cn("sticky left-0 z-10 px-2 py-0 font-mono text-[0.625rem] text-muted-foreground", stickyBg)}>
         {employee.paychexId}
       </td>
-      <td className="sticky left-12 z-10 bg-card px-2 py-0 group-hover:bg-muted/40">
+      <td className={cn("sticky left-12 z-10 px-2 py-0", stickyBg)}>
         <span className="flex items-center gap-1.5">
-          <span className={cn("block h-3.5 w-0.5 shrink-0", floater && homeLook ? homeLook.dot : look.dot)} />
+          {editing && dragRow ? (
+            <span
+              role="button"
+              aria-label={`Move ${displayName(employee)}`}
+              title="Drag to change the order"
+              onPointerDown={(event) => dragRow(event, employee.id)}
+              className="-ml-1 inline-flex size-5 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm text-muted-foreground/60 hover:bg-muted hover:text-foreground active:cursor-grabbing"
+            >
+              <GripVertical className="size-3.5" />
+            </span>
+          ) : (
+            <span className={cn("block h-3.5 w-0.5 shrink-0", floater && homeLook ? homeLook.dot : look.dot)} />
+          )}
           <span className="min-w-0 truncate text-xs font-medium">{displayName(employee)}</span>
           {employee.payType === "salary" && (
             <span title="Salaried: paid by the week" className="shrink-0 rounded-sm bg-primary/15 px-1 text-[0.5625rem] font-bold text-primary">S</span>
@@ -545,6 +700,9 @@ function PersonRow({
           isOpen={open?.employeeId === employee.id && open.date === date}
           onOpen={() => setOpen({ employeeId: employee.id, date })}
           onClose={() => setOpen(null)}
+          onDragStart={(event) => dragCell(event, rowIndex, dayIndex)}
+          isDropTarget={dropCell?.row === rowIndex && dropCell.day === dayIndex}
+          isDragSource={dragFrom?.row === rowIndex && dragFrom.day === dayIndex}
         />
       ))}
 
@@ -573,8 +731,9 @@ function PersonRow({
  * One person, one day.
  *
  * A button. Locked, it reads "6:00 AM / 4:00 PM" or OFF and explains itself
- * if tapped. Editing, tapping opens the card. Arrow keys move to the next
- * day or person, Enter opens, Delete makes the day OFF.
+ * if tapped. Editing, tapping opens the card, and a day with hours can be
+ * dragged to another day or person. Arrow keys move to the next day or
+ * person, Enter opens, Delete makes the day OFF.
  */
 function DayCell({
   rowIndex,
@@ -596,6 +755,9 @@ function DayCell({
   isOpen,
   onOpen,
   onClose,
+  onDragStart,
+  isDropTarget,
+  isDragSource,
 }: {
   rowIndex: number;
   dayIndex: number;
@@ -617,6 +779,9 @@ function DayCell({
   isOpen: boolean;
   onOpen: () => void;
   onClose: () => void;
+  onDragStart: (event: React.PointerEvent<HTMLElement>) => void;
+  isDropTarget: boolean;
+  isDragSource: boolean;
 }) {
   const router = useRouter();
   const confirm = useConfirm();
@@ -627,6 +792,7 @@ function DayCell({
   const absence = shift?.absenceTypeId ? absenceById.get(shift.absenceTypeId) : undefined;
   const absenceLook = absence ? departmentColor(absence.color, absenceTypes.indexOf(absence)) : null;
   const weekend = [0, 6].includes(new Date(`${date}T00:00:00Z`).getUTCDay());
+  const draggable = editing && !!shift && (!off || !!absence) && !away;
 
   function focusCell(dr: number, dd: number) {
     const target = document.querySelector<HTMLButtonElement>(`[data-hr-cell][data-row="${rowIndex + dr}"][data-day="${dayIndex + dd}"]`);
@@ -703,7 +869,8 @@ function DayCell({
       className={cn(
         "relative border-l border-border/60 p-0.5 text-center text-xs tabular-nums",
         weekend && "bg-surface-sunk/60",
-        pending && "opacity-50"
+        pending && "opacity-50",
+        isDropTarget && "bg-brand-muted"
       )}
     >
       <button
@@ -713,6 +880,7 @@ function DayCell({
         data-day={dayIndex}
         aria-label={`${displayName(employee)}, ${dayName(date)} ${monthDay(date)}`}
         onKeyDown={onKey}
+        onPointerDown={draggable ? onDragStart : undefined}
         onClick={async () => {
           if (!editing) {
             await confirm({
@@ -734,7 +902,10 @@ function DayCell({
           off && !absence && awayLook && awayLook.tint,
           off && absenceLook && absenceLook.tint,
           editing ? "hover:ring-1 hover:ring-primary" : "cursor-default",
-          isOpen && "ring-2 ring-primary"
+          draggable && "cursor-grab active:cursor-grabbing",
+          isOpen && "ring-2 ring-primary",
+          isDropTarget && "ring-2 ring-primary ring-inset",
+          isDragSource && "opacity-40"
         )}
       >
         {label}

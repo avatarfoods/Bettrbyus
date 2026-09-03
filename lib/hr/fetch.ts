@@ -73,6 +73,7 @@ function toEmployee(row: Row): Employee {
     hiredOn: str(row.hired_on),
     active: bool(row.active, true),
     showOnSchedule: bool(row.show_on_schedule, true),
+    sortOrder: num(row.sort_order),
   };
 }
 
@@ -252,10 +253,13 @@ export async function fetchWeeks(
   weeks: WeekOnScreen[];
   shifts: Shift[];
   away: AwayShift[];
-  /** Every department's approved schedule for the first week, for sending. */
-  approvedForWeek: { departmentId: string; scheduleId: string }[];
+  /**
+   * Where every department stands for the first week on screen: approved, or
+   * only a draft so far. A department with no entry has not started.
+   */
+  statusForWeek: { departmentId: string; status: "approved" | "draft"; scheduleId: string }[];
 }> {
-  if (weekStarts.length === 0) return { weeks: [], shifts: [], away: [], approvedForWeek: [] };
+  if (weekStarts.length === 0) return { weeks: [], shifts: [], away: [], statusForWeek: [] };
 
   const { data: allRowsForWeeks } = await supabase
     .from("hr_schedules")
@@ -355,11 +359,20 @@ export async function fetchWeeks(
       }));
   }
 
-  const approvedForWeek = weekRows
-    .filter((row) => row.week_start === weekStarts[0] && row.status === "approved")
-    .map((row) => ({ departmentId: row.department_id as string, scheduleId: row.id as string }));
+  // Approved beats draft; one entry per department.
+  const statusForWeek: { departmentId: string; status: "approved" | "draft"; scheduleId: string }[] = [];
+  const placed = new Set<string>();
+  const firstWeek = weekRows.filter((row) => row.week_start === weekStarts[0]);
+  for (const status of ["approved", "draft"] as const) {
+    for (const row of firstWeek) {
+      const dept = row.department_id as string;
+      if (row.status !== status || placed.has(dept)) continue;
+      placed.add(dept);
+      statusForWeek.push({ departmentId: dept, status, scheduleId: row.id as string });
+    }
+  }
 
-  return { weeks, shifts, away, approvedForWeek };
+  return { weeks, shifts, away, statusForWeek };
 }
 
 /** Every approved week in a range, for the dashboard. */

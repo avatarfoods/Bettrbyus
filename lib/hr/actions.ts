@@ -16,6 +16,7 @@ import {
   isSchedulable,
   monthDay,
   sendTo,
+  sortPeople,
   weekDates,
   type PaySettings,
 } from "@/lib/hr/model";
@@ -254,16 +255,27 @@ export async function saveDepartment(input: {
   return { ok: true };
 }
 
+/** A System administrator, or a login whose HR level is Administrator. */
+async function isHrAdmin(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  profile: NonNullable<Awaited<ReturnType<typeof getCurrentUserProfile>>>
+): Promise<boolean> {
+  if (isAdminProfile(profile)) return true;
+  const { data } = await supabase.from("hr_user_access").select("level").eq("profile_id", profile.id).maybeSingle();
+  return data?.level === "admin";
+}
+
 /**
  * The staffing sheet: how many a department should have, the hours it usually
- * runs, who checks its timecards. Administrators only.
+ * runs, and who supervises it - chosen from the Paychex list. Administrators
+ * only; the button that opens the fields is theirs alone.
  */
 export async function saveStaffing(input: {
   departmentId: string;
   requiredHeadcount: number;
   usualStart: string | null;
   usualEnd: string | null;
-  timecardCheck: string | null;
+  supervisorId: string | null;
 }): Promise<HrResult> {
   if (!input.departmentId) return fail("Missing department");
   if (!Number.isInteger(input.requiredHeadcount) || input.requiredHeadcount < 0 || input.requiredHeadcount > 999) {
@@ -275,7 +287,7 @@ export async function saveStaffing(input: {
   const supabase = await createClient();
   const profile = await getCurrentUserProfile(supabase);
   if (!profile) return fail("You are signed out");
-  if (!isAdminProfile(profile)) return fail("Only an administrator can change staffing");
+  if (!(await isHrAdmin(supabase, profile))) return fail("Only an administrator can change staffing");
 
   const { error } = await supabase
     .from("hr_departments")
@@ -283,7 +295,7 @@ export async function saveStaffing(input: {
       required_headcount: input.requiredHeadcount,
       usual_start: input.usualStart,
       usual_end: input.usualEnd,
-      timecard_check: input.timecardCheck?.trim() || null,
+      supervisor_id: input.supervisorId,
       updated_at: new Date().toISOString(),
     })
     .eq("id", input.departmentId);
@@ -291,6 +303,68 @@ export async function saveStaffing(input: {
 
   revalidatePath(HR);
   revalidatePath(`${HR}/settings/departments`);
+  return { ok: true };
+}
+
+/**
+ * The order departments sit in, everywhere they are listed: the dashboard,
+ * staffing, the schedule's department list. Dragging rows on the dashboard
+ * ends here. Administrators only.
+ */
+export async function saveDepartmentOrder(input: { ids: string[] }): Promise<HrResult> {
+  if (input.ids.length === 0) return fail("Nothing to arrange");
+  const supabase = await createClient();
+  const profile = await getCurrentUserProfile(supabase);
+  if (!profile) return fail("You are signed out");
+  if (!(await isHrAdmin(supabase, profile))) return fail("Only an administrator can arrange departments");
+
+  const now = new Date().toISOString();
+  const results = await Promise.all(
+    input.ids.map((id, index) =>
+      supabase.from("hr_departments").update({ sort_order: index + 1, updated_at: now }).eq("id", id)
+    )
+  );
+  const error = results.find((r) => r.error)?.error;
+  if (error) return fail(missing(error));
+
+  revalidateAll();
+  return { ok: true };
+}
+
+/**
+ * The order people sit in on one department's schedule, from dragging rows
+ * while editing. Only that department's own people are touched. Administrators
+ * only, since it is written on the person.
+ */
+export async function saveEmployeeOrder(input: { departmentId: string; ids: string[] }): Promise<HrResult> {
+  if (!input.departmentId || input.ids.length === 0) return fail("Nothing to arrange");
+  const supabase = await createClient();
+  const profile = await getCurrentUserProfile(supabase);
+  if (!profile) return fail("You are signed out");
+  if (!(await isHrAdmin(supabase, profile))) return fail("Only an administrator can arrange people");
+
+  const now = new Date().toISOString();
+  const results = await Promise.all(
+    input.ids.map((id, index) =>
+      supabase
+        .from("hr_employees")
+        .update({ sort_order: index + 1, updated_at: now })
+        .eq("id", id)
+        .eq("department_id", input.departmentId)
+    )
+  );
+  const error = results.find((r) => r.error)?.error;
+  if (error) {
+    return fail(
+      /sort_order/i.test(error.message)
+        ? "Arranging people needs the 20260903_hr_arrange migration. Run it in the Supabase SQL editor."
+        : missing(error)
+    );
+  }
+
+  revalidatePath(`${HR}/schedule`);
+  revalidatePath(`${HR}/schedule/print`);
+  revalidatePath(HR);
   return { ok: true };
 }
 
@@ -840,6 +914,125 @@ export async function discardSchedule(input: { scheduleId: string }): Promise<Hr
  * mail program with everyone in Bcc. People with no email are listed so
  * nobody is silently missed. Marks the week sent when the message is opened.
  */
+/** One line of the week as it will be read: a name and seven short day labels. */
+export type SendPreviewRow = {
+  name: string;
+  /** Set when the person's home is another department. */
+  from: string | null;
+  days: { label: string; off: boolean }[];
+};
+
+type SendPackage =
+  | { ok: false; message: string }
+  | {
+      ok: true;
+      scheduleId: string;
+      departmentName: string;
+      weekStart: string;
+      dates: string[];
+      rows: SendPreviewRow[];
+      recipients: string[];
+      missing: string[];
+      subject: string;
+      body: string;
+    };
+
+/**
+ * Everything about sending one approved week, worked out once: who gets it,
+ * who cannot, the subject, the plain-text body, and the same week as rows for
+ * the preview in the dialog. Nothing is written here.
+ */
+async function buildSendPackage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  scheduleId: string
+): Promise<SendPackage> {
+  const { data: schedule } = await supabase
+    .from("hr_schedules")
+    .select("id, department_id, week_start, status")
+    .eq("id", scheduleId)
+    .maybeSingle();
+  if (!schedule) return { ok: false, message: "That schedule no longer exists" };
+  if (schedule.status !== "approved") return { ok: false, message: "Only the approved week is sent" };
+
+  const data = await fetchHrData(supabase);
+  const department = data.departments.find((d) => d.id === schedule.department_id);
+  if (!department) return { ok: false, message: "Department not found" };
+
+  const { data: shiftRows } = await supabase.from("hr_shifts").select("*").eq("schedule_id", schedule.id);
+
+  const shifts = (shiftRows ?? []) as Record<string, unknown>[];
+  const byEmployee = new Map<string, Record<string, unknown>[]>();
+  for (const s of shifts) {
+    const list = byEmployee.get(s.employee_id as string) ?? [];
+    list.push(s);
+    byEmployee.set(s.employee_id as string, list);
+  }
+
+  const people = sortPeople(
+    data.employees.filter((e) => isSchedulable(e) && (e.departmentId === department.id || byEmployee.has(e.id)))
+  );
+
+  const weekStart = schedule.week_start as string;
+  const dates = weekDates(weekStart);
+  const codeOf = new Map(data.absenceTypes.map((t) => [t.id, t.code]));
+  const nameOfDept = (id: string | null) => data.departments.find((d) => d.id === id)?.name ?? null;
+
+  const rows: SendPreviewRow[] = people.map((person) => {
+    const mine = byEmployee.get(person.id) ?? [];
+    return {
+      name: displayName(person),
+      from: person.departmentId !== department.id ? nameOfDept(person.departmentId) : null,
+      days: dates.map((date) => {
+        const s = mine.find((row) => row.work_date === date);
+        const start = typeof s?.start_time === "string" ? s.start_time.slice(0, 5) : null;
+        const end = typeof s?.end_time === "string" ? s.end_time.slice(0, 5) : null;
+        const reason = typeof s?.absence_type_id === "string" ? codeOf.get(s.absence_type_id) : null;
+        return start && end
+          ? { label: `${displayTime(start)}-${displayTime(end)}`, off: false }
+          : { label: reason ?? "OFF", off: true };
+      }),
+    };
+  });
+
+  const lines: string[] = [`${department.name} - week of ${monthDay(weekStart)} to ${monthDay(addDays(weekStart, 6))}`, ""];
+  for (const row of rows) {
+    lines.push(row.name, `  ${row.days.map((d, i) => `${DAY_NAMES[i].slice(0, 3)} ${d.label}`).join("  |  ")}`, "");
+  }
+
+  return {
+    ok: true,
+    scheduleId: schedule.id as string,
+    departmentName: department.name,
+    weekStart,
+    dates,
+    rows,
+    recipients: [...new Set(people.map(sendTo).filter(Boolean) as string[])],
+    missing: people.filter((p) => !sendTo(p)).map(displayName),
+    subject: `${department.name} schedule ${monthDay(weekStart)} - ${monthDay(addDays(weekStart, 6))}`,
+    body: lines.join("\n"),
+  };
+}
+
+/** The week as it will be sent, for looking at before saying yes. Writes nothing. */
+export async function previewSend(input: { scheduleId: string }): Promise<
+  HrResult & { departmentName?: string; dates?: string[]; rows?: SendPreviewRow[]; recipients?: number; missing?: string[] }
+> {
+  const supabase = await createClient();
+  const profile = await getCurrentUserProfile(supabase);
+  if (!profile) return fail("You are signed out");
+  const pack = await buildSendPackage(supabase, input.scheduleId);
+  if (!pack.ok) return pack;
+  return {
+    ok: true,
+    departmentName: pack.departmentName,
+    dates: pack.dates,
+    rows: pack.rows,
+    recipients: pack.recipients.length,
+    missing: pack.missing,
+  };
+}
+
+/** The addresses, subject and body for the mail program, and the week marked as sent. */
 export async function prepareSend(input: { scheduleId: string }): Promise<
   HrResult & {
     recipients?: string[];
@@ -852,70 +1045,13 @@ export async function prepareSend(input: { scheduleId: string }): Promise<
   const profile = await getCurrentUserProfile(supabase);
   if (!profile) return fail("You are signed out");
 
-  const { data: schedule } = await supabase
-    .from("hr_schedules")
-    .select("id, department_id, week_start, status")
-    .eq("id", input.scheduleId)
-    .maybeSingle();
-  if (!schedule) return fail("That schedule no longer exists");
-  if (schedule.status !== "approved") return fail("Only the approved week is sent");
+  const pack = await buildSendPackage(supabase, input.scheduleId);
+  if (!pack.ok) return pack;
 
-  const data = await fetchHrData(supabase);
-  const department = data.departments.find((d) => d.id === schedule.department_id);
-  if (!department) return fail("Department not found");
-
-  const { data: shiftRows } = await supabase
-    .from("hr_shifts")
-    .select("*")
-    .eq("schedule_id", schedule.id);
-
-  const shifts = (shiftRows ?? []) as Record<string, unknown>[];
-  const byEmployee = new Map<string, Record<string, unknown>[]>();
-  for (const s of shifts) {
-    const list = byEmployee.get(s.employee_id as string) ?? [];
-    list.push(s);
-    byEmployee.set(s.employee_id as string, list);
-  }
-
-  const people = data.employees.filter(
-    (e) => isSchedulable(e) && (e.departmentId === department.id || byEmployee.has(e.id))
-  );
-
-  const weekStart = schedule.week_start as string;
-  const dates = weekDates(weekStart);
-  const codeOf = new Map(data.absenceTypes.map((t) => [t.id, t.code]));
-  const lines: string[] = [
-    `${department.name} - week of ${monthDay(weekStart)} to ${monthDay(addDays(weekStart, 6))}`,
-    "",
-  ];
-  for (const person of people) {
-    const mine = byEmployee.get(person.id) ?? [];
-    const days = dates.map((date, i) => {
-      const s = mine.find((row) => row.work_date === date);
-      const start = typeof s?.start_time === "string" ? s.start_time.slice(0, 5) : null;
-      const end = typeof s?.end_time === "string" ? s.end_time.slice(0, 5) : null;
-      const reason = typeof s?.absence_type_id === "string" ? codeOf.get(s.absence_type_id) : null;
-      return `${DAY_NAMES[i].slice(0, 3)} ${start && end ? `${displayTime(start)}-${displayTime(end)}` : (reason ?? "OFF")}`;
-    });
-    lines.push(displayName(person), `  ${days.join("  |  ")}`, "");
-  }
-
-  const recipients = people.map(sendTo).filter(Boolean) as string[];
-  const missingPeople = people.filter((p) => !sendTo(p)).map(displayName);
-
-  await supabase
-    .from("hr_schedules")
-    .update({ sent_at: new Date().toISOString() })
-    .eq("id", schedule.id);
+  await supabase.from("hr_schedules").update({ sent_at: new Date().toISOString() }).eq("id", pack.scheduleId);
   revalidatePath(`${HR}/schedule`);
 
-  return {
-    ok: true,
-    recipients: [...new Set(recipients)],
-    missing: missingPeople,
-    subject: `${department.name} schedule ${monthDay(weekStart)} - ${monthDay(addDays(weekStart, 6))}`,
-    body: lines.join("\n"),
-  };
+  return { ok: true, recipients: pack.recipients, missing: pack.missing, subject: pack.subject, body: pack.body };
 }
 
 /* ---------------- access ---------------- */

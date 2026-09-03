@@ -143,6 +143,7 @@ export function WeekControls({
   canSignNext,
   isAdmin,
   sendOptions,
+  statusOf,
 }: {
   departments: Department[];
   departmentId: string;
@@ -159,8 +160,10 @@ export function WeekControls({
   chainNames: [string, string][];
   canSignNext: boolean;
   isAdmin: boolean;
-  /** Departments with an approved week to email, for the send dialog. */
+  /** Every department you can see, with where it stands this week, for the send dialog. */
   sendOptions: SendOption[];
+  /** Where each department stands for the week on screen, for the list. */
+  statusOf: Record<string, "approved" | "draft" | "none">;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -270,19 +273,38 @@ export function WeekControls({
 
   return (
     <span className="relative flex flex-wrap items-center gap-2">
-      <select
-        value={departmentId}
-        onChange={(event) => go({ dept: event.target.value, view: null, edit: null })}
-        aria-label="Department"
-        className="h-7 max-w-48 rounded-sm bg-card px-1.5 text-xs font-semibold ring-1 ring-foreground/15 focus:ring-primary focus:outline-none"
-      >
-        {departments.map((department) => (
-          <option key={department.id} value={department.id}>
-            {department.line ? `${department.line} › ` : ""}
-            {department.name}
-          </option>
-        ))}
-      </select>
+      {/* The department, with where every department stands this week right in
+          the list: a tick for approved, a pencil for a draft, a ring for
+          nothing yet - so the whole plant can be read without leaving the page. */}
+      <span className="flex items-center gap-1">
+        <select
+          value={departmentId}
+          onChange={(event) => go({ dept: event.target.value, view: null, edit: null })}
+          aria-label="Department"
+          title="✓ approved · ✎ draft, not approved yet · ○ not started"
+          className={cn(
+            "h-7 max-w-56 rounded-sm bg-card px-1.5 text-xs font-semibold ring-1 focus:ring-primary focus:outline-none",
+            statusOf[departmentId] === "approved"
+              ? "ring-success/60"
+              : statusOf[departmentId] === "draft"
+                ? "ring-warning-foreground/60"
+                : "ring-foreground/15"
+          )}
+        >
+          {departments.map((department) => {
+            const status = statusOf[department.id] ?? "none";
+            return (
+              <option key={department.id} value={department.id}>
+                {status === "approved" ? "✓ " : status === "draft" ? "✎ " : "○ "}
+                {department.line ? `${department.line} › ` : ""}
+                {department.name}
+                {status === "approved" ? " · Approved" : status === "draft" ? " · Draft" : " · Not started"}
+              </option>
+            );
+          })}
+        </select>
+        <Hint text="The list shows where every department stands for the week on screen. ✓ approved, ✎ a draft that still needs approval, ○ nothing typed yet." />
+      </span>
 
       {/* Day, Week or Range, and the dates. The same control as the dashboard. */}
       <span className="flex items-center overflow-hidden rounded-sm ring-1 ring-foreground/15">
@@ -419,7 +441,7 @@ export function WeekControls({
         </span>
       )}
 
-      {week && sendOptions.length > 0 && (
+      {week && (
         <button
           type="button"
           onClick={() => setSendOpen(true)}

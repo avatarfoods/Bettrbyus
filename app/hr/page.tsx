@@ -15,7 +15,7 @@ const ISO = /^\d{4}-\d{2}-\d{2}$/;
 export default async function HrDashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ span?: string; from?: string; to?: string; day?: string; week?: string }>;
+  searchParams: Promise<{ span?: string; from?: string; to?: string; day?: string; dept?: string; week?: string }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
@@ -33,6 +33,7 @@ export default async function HrDashboardPage({
         ? params.to
         : addDays(from, 13);
   const day = params.day && ISO.test(params.day) ? params.day : null;
+  const dept = params.dept && /^[0-9a-f-]{36}$/i.test(params.dept) ? params.dept : null;
 
   const [data, approved, profile] = await Promise.all([
     fetchHrData(supabase),
@@ -67,16 +68,18 @@ export default async function HrDashboardPage({
               from={from}
               to={to}
               day={day}
+              dept={dept && departments.some((d) => d.id === dept) ? dept : null}
               today={today}
               departments={departments}
               allDepartments={data.departments}
               employees={data.employees.filter(isSchedulable)}
+              allPeople={data.employees.filter((e) => e.active)}
               schedules={approved.schedules.filter((s) => departments.some((d) => d.id === s.departmentId))}
               shifts={approved.shifts}
               settings={data.settings}
               seesCost={access.seesCost}
-              approvalSteps={data.approvalSteps}
               canEditStaffing={access.isAdmin && !data.missingTable}
+              canArrange={access.isAdmin && !data.missingTable}
               absenceTypes={data.absenceTypes}
             />
           </>

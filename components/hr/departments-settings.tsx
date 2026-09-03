@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { saveDepartment } from "@/lib/hr/actions";
 import type { Department, Employee } from "@/lib/hr/model";
-import { HR_COLORS as DEPARTMENT_COLORS, departmentColor } from "@/lib/hr/colors";
+import { departmentColor } from "@/lib/hr/colors";
+import { ColorGrid } from "@/components/hr/color-grid";
 import { DataTable, TBody, TD, THead, TR, TableEmpty } from "@/components/ui/data-table";
 import {
   ActiveDot,
@@ -186,29 +187,7 @@ function DepartmentEditor({
       </div>
 
       <Labelled label="Colour" hint="The band people scan for before they read the name. Automatic hands out the palette in order.">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {DEPARTMENT_COLORS.map((option) => (
-            <button
-              key={option.key}
-              type="button"
-              onClick={() => setColor(option.key)}
-              aria-label={option.label}
-              aria-pressed={color === option.key}
-              title={option.label}
-              className={cn("size-7 rounded-sm ring-1 transition", option.tint, color === option.key ? "ring-2 ring-primary" : "ring-border hover:ring-foreground/30")}
-            >
-              <span className={cn("mx-auto block h-3.5 w-1.5", option.dot)} />
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setColor(null)}
-            aria-pressed={color === null}
-            className={cn("h-7 rounded-sm px-2 text-xs ring-1 transition", color === null ? "text-foreground ring-2 ring-primary" : "text-muted-foreground ring-border hover:ring-foreground/30")}
-          >
-            Automatic
-          </button>
-        </div>
+        <ColorGrid value={color} onChange={setColor} allowAutomatic index={Math.max(0, (Number(sortOrder) || 1) - 1)} />
       </Labelled>
 
       <EditorActions

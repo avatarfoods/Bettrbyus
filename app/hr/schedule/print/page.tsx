@@ -1,7 +1,7 @@
 import { SchedulePrintSheet, type PrintDepartment } from "@/components/hr/print-sheet";
 import { fetchApprovedWeeks, fetchHrData } from "@/lib/hr/fetch";
 import { resolveAccess, visibleDepartments } from "@/lib/hr/access";
-import { isSchedulable, weekStartOf } from "@/lib/hr/model";
+import { isSchedulable, sortPeople, weekStartOf } from "@/lib/hr/model";
 import { getCurrentUserProfile } from "@/lib/auth/profile";
 import { createClient } from "@/lib/supabase/server";
 
@@ -43,7 +43,7 @@ export default async function HrPrintPage({
     return {
       department,
       schedule,
-      employees: schedulable.filter((e) => e.departmentId === department.id || borrowed.has(e.id)),
+      employees: sortPeople(schedulable.filter((e) => e.departmentId === department.id || borrowed.has(e.id))),
       shifts,
     };
   });

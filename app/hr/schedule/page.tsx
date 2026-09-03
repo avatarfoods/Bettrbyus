@@ -10,10 +10,12 @@ import {
   dateRange,
   displayName,
   isSchedulable,
+  sortPeople,
   weekDates,
   weekStartOf,
   weekStartsIn,
 } from "@/lib/hr/model";
+import type { SendOption } from "@/components/hr/send-dialog";
 import { getCurrentUserProfile } from "@/lib/auth/profile";
 import { createClient } from "@/lib/supabase/server";
 
@@ -77,7 +79,7 @@ export default async function HrSchedulePage({
   const editing = params.edit === "1" && !!profile;
 
   const schedulable = data.employees.filter(isSchedulable);
-  const people = schedulable.filter((e) => e.departmentId === department?.id);
+  const people = sortPeople(schedulable.filter((e) => e.departmentId === department?.id));
 
   const range = department
     ? await fetchWeeks(supabase, department.id, weekStarts, {
@@ -85,31 +87,36 @@ export default async function HrSchedulePage({
         editingBy: editing ? profile!.id : null,
         homeEmployeeIds: people.map((e) => e.id),
       })
-    : { weeks: [], shifts: [], away: [], approvedForWeek: [] };
+    : { weeks: [], shifts: [], away: [], statusForWeek: [] };
 
   // The single week on screen, when there is exactly one.
   const single = range.weeks.length === 1 ? range.weeks[0] : null;
   const viewing = single?.viewing ?? null;
 
-  // Departments with an approved week to email: the ones this person can
-  // see, with who would and would not receive it.
-  const sendOptions = single
-    ? range.approvedForWeek
-        .map((entry) => {
-          const dept = departments.find((d) => d.id === entry.departmentId);
-          if (!dept) return null;
-          const members = schedulable.filter((e) => e.departmentId === dept.id);
-          return {
-            departmentId: dept.id,
-            name: dept.name,
-            colorKey: dept.color,
-            colorIndex: data.departments.indexOf(dept),
-            scheduleId: entry.scheduleId,
-            recipients: members.filter((e) => e.personalEmail || e.email).length,
-            missing: members.filter((e) => !e.personalEmail && !e.email).map(displayName),
-          };
-        })
-        .filter(Boolean) as import("@/components/hr/send-dialog").SendOption[]
+  // Where every department stands for the first week on screen, for the
+  // department list and the send dialog.
+  const standing = new Map(range.statusForWeek.map((entry) => [entry.departmentId, entry]));
+  const statusOf: Record<string, "approved" | "draft" | "none"> = {};
+  for (const d of departments) statusOf[d.id] = standing.get(d.id)?.status ?? "none";
+
+  // Every department this person can see, with who would and would not
+  // receive its week. Only approved ones can actually be sent.
+  const sendOptions: SendOption[] = single
+    ? departments.map((dept) => {
+        const entry = standing.get(dept.id);
+        const members = schedulable.filter((e) => e.departmentId === dept.id);
+        return {
+          departmentId: dept.id,
+          name: dept.name,
+          line: dept.line,
+          colorKey: dept.color,
+          colorIndex: data.departments.indexOf(dept),
+          status: entry?.status ?? "none",
+          scheduleId: entry?.status === "approved" ? entry.scheduleId : null,
+          recipients: members.filter((e) => e.personalEmail || e.email).length,
+          missing: members.filter((e) => !e.personalEmail && !e.email).map(displayName),
+        };
+      })
     : [];
 
   // People from elsewhere with a shift in what is on screen.
@@ -195,6 +202,7 @@ export default async function HrSchedulePage({
             canSignNext={canSignNext}
             isAdmin={access.isAdmin}
             sendOptions={sendOptions}
+            statusOf={statusOf}
           />
         )
       }
@@ -260,6 +268,7 @@ export default async function HrSchedulePage({
             editing={editing && !data.missingTable}
             seesCost={access.seesCost}
             canApproveFloat={canApproveFloat(access, chain)}
+            canArrange={access.isAdmin}
           />
         )}
       </div>

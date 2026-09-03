@@ -56,6 +56,8 @@ export type Employee = {
   active: boolean;
   /** The manual off switch. */
   showOnSchedule: boolean;
+  /** Where the person sits on the department's schedule. Null: after the ordered ones, by name. */
+  sortOrder: number | null;
 };
 
 /** Who appears on a schedule at all. */
@@ -65,6 +67,24 @@ export function isSchedulable(e: Employee): boolean {
 
 export function displayName(e: Pick<Employee, "firstName" | "lastName" | "preferredName">): string {
   return `${e.preferredName || e.firstName} ${e.lastName}`.trim();
+}
+
+/**
+ * The order people appear in on a schedule: the ones someone has arranged
+ * first, in that order, then everyone else by last name.
+ */
+export function sortPeople<T extends Pick<Employee, "sortOrder" | "lastName" | "firstName">>(people: T[]): T[] {
+  return [...people].sort((a, b) => {
+    if (a.sortOrder !== null && b.sortOrder !== null && a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    if (a.sortOrder !== null && b.sortOrder === null) return -1;
+    if (a.sortOrder === null && b.sortOrder !== null) return 1;
+    return a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
+  });
+}
+
+/** Usual hours stored as the same start and end mean the department runs around the clock. */
+export function runsAllDay(d: Pick<Department, "usualStart" | "usualEnd">): boolean {
+  return !!d.usualStart && !!d.usualEnd && d.usualStart === d.usualEnd;
 }
 
 /** The address the schedule goes to, if any. */

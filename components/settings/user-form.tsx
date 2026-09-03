@@ -245,7 +245,7 @@ export function UserForm({
               />
               <AccessRow
                 app="HR"
-                description="Schedules, people, labour cost. Administrators see every department and the money."
+                description="Schedules and people. Users see their departments, no money. Administrators see every department and the cost, import from Paychex, set staffing - required people, usual hours, supervisor - and arrange the dashboard and the schedules."
                 value={isAdmin ? "admin" : hr}
                 disabled={isSelf || isAdmin}
                 options={[
