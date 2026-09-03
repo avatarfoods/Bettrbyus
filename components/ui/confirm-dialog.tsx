@@ -47,9 +47,12 @@ type Pending = ConfirmRequest & {
 
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [pending, setPending] = useState<Pending | null>(null);
+  /** Keep the last request so text doesn't flash to defaults during the close animation. */
+  const [snapshot, setSnapshot] = useState<ConfirmRequest | null>(null);
 
   const confirm = useCallback<ConfirmFn>((request) => {
     return new Promise((resolve) => {
+      setSnapshot(request);
       setPending((current) => {
         current?.resolve(false);
         return { ...request, resolve };
@@ -63,9 +66,11 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       current.resolve(ok);
       return null;
     });
+    // snapshot stays so the close animation keeps showing the right labels
   }
 
-  const showCancel = pending != null && pending.cancelLabel !== false;
+  const display = pending ?? snapshot;
+  const showCancel = display != null && display.cancelLabel !== false;
 
   return (
     <ConfirmContext.Provider value={confirm}>
@@ -82,10 +87,10 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           overlayClassName="z-[80]"
         >
           <DialogTitle className="text-base font-semibold leading-snug">
-            {pending?.title}
+            {display?.title}
           </DialogTitle>
-          {pending?.description ? (
-            <DialogDescription>{pending.description}</DialogDescription>
+          {display?.description ? (
+            <DialogDescription>{display.description}</DialogDescription>
           ) : (
             <DialogDescription className="sr-only">
               Confirm this action.
@@ -99,20 +104,20 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 className="rounded-sm"
                 onClick={() => settle(false)}
               >
-                {pending?.cancelLabel || "Cancel"}
+                {display?.cancelLabel || "Cancel"}
               </Button>
             )}
             <Button
               type="button"
-              variant={pending?.tone === "danger" ? "destructive" : "default"}
+              variant={display?.tone === "danger" ? "destructive" : "default"}
               className={cn(
                 "rounded-sm",
-                pending?.tone === "danger" &&
+                display?.tone === "danger" &&
                   "bg-destructive text-destructive-foreground hover:bg-destructive/90"
               )}
               onClick={() => settle(true)}
             >
-              {pending?.confirmLabel ?? "OK"}
+              {display?.confirmLabel ?? "OK"}
             </Button>
           </div>
         </DialogContent>

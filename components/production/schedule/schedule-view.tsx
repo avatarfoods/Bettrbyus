@@ -37,6 +37,7 @@ import {
   type GridRow,
 } from "@/components/production/schedule/schedule-grid";
 import { RecipePanel } from "@/components/production/schedule/recipe-panel";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import type { DateScope } from "@/lib/date-scope";
 import { SearchPanel } from "@/components/ui/search-panel";
 import { departmentColor } from "@/lib/production/department-colors";
@@ -150,6 +151,7 @@ export function ScheduleView({
   wipOnHand: wipList,
 }: Props) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   /**
@@ -732,15 +734,21 @@ export function ScheduleView({
   }
 
   /** Clears the selected day, or the selected span. */
-  function clearDay() {
+  async function clearDay() {
     if (!scheduleId || !selection) return;
     const span =
       selection.from === selection.to
         ? selection.from
         : `${selection.from} to ${selection.to}`;
-    if (!confirm(`Clear everything planned on ${span}? It goes into your draft, so the floor keeps working from the confirmed plan until you confirm.`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: `Clear everything planned on ${span}?`,
+      description:
+        "It goes into your draft, so the floor keeps working from the confirmed plan until you confirm.",
+      confirmLabel: "Clear",
+      cancelLabel: "Cancel",
+      tone: "danger",
+    });
+    if (!ok) return;
     setError(null);
     startTransition(async () => {
       const result = await clearRange({
@@ -778,7 +786,7 @@ export function ScheduleView({
   const myChangeCount = changed.size;
 
   return (
-    <div className="flex flex-col gap-2.5 px-3 py-3 sm:px-4">
+    <div className="flex h-full min-h-0 flex-col gap-2.5 overflow-hidden px-3 py-3 sm:px-4">
       {/*
         One bar, the way the dashboard does it.
 
@@ -1193,8 +1201,8 @@ export function ScheduleView({
         </div>
       )}
 
-      <div className="flex min-h-0 gap-2.5">
-      <div className="min-w-0 flex-1">
+      <div className="flex min-h-0 flex-1 gap-2.5">
+      <div className="min-h-0 min-w-0 flex-1">
       <ScheduleGrid
         scheduleId={scheduleId ?? "preview"}
         readOnly={readOnly}

@@ -153,6 +153,7 @@ export default async function PlanningPage({
 
   return (
     <PageShell
+      fillViewport
       breadcrumbs={[
         { label: "Production" },
         { label: line ? `Planning · ${line.name}` : "Planning" },

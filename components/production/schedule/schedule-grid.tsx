@@ -162,7 +162,7 @@ export function ScheduleGrid({
   const LEAD = 7; // item, recipe, dept, allergen, wip, open, u/m
 
   return (
-    <div className="overflow-auto rounded-md ring-1 ring-foreground/10">
+    <div className="h-full overflow-auto rounded-md ring-1 ring-foreground/10">
       <table className="w-max min-w-full border-separate border-spacing-0 text-sm">
         <thead>
           <tr>

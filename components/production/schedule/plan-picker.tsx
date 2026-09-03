@@ -18,6 +18,7 @@ import {
   newEmptyDraft,
 } from "@/lib/production/schedule/actions";
 import type { DraftSummary } from "@/lib/production/schedule/ensure";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Hint } from "@/components/production/settings/shared";
 import { cn } from "@/lib/utils";
 
@@ -64,6 +65,7 @@ export function PlanPicker({
   const [menu, setMenu] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   const openDrafts = drafts.filter((draft) => draft.status === "draft");
   const viewed = drafts.find((draft) => draft.id === viewingId) ?? null;
@@ -77,14 +79,15 @@ export function PlanPicker({
   }
 
   /** A draft with nothing in it, for planning a week from scratch. */
-  function startFresh() {
-    if (
-      !confirm(
-        "Start a new draft with nothing in it? Any draft you have open now is thrown away, and the grid opens blank for this range — the live plan is untouched."
-      )
-    ) {
-      return;
-    }
+  async function startFresh() {
+    const ok = await confirm({
+      title: "Start a new draft with nothing in it?",
+      description:
+        "Any draft you have open now is thrown away, and the grid opens blank for this range — the live plan is untouched.",
+      confirmLabel: "Start fresh",
+      cancelLabel: "Cancel",
+    });
+    if (!ok) return;
     setError(null);
     startTransition(async () => {
       const result = await newEmptyDraft({ scheduleId, from, to });
@@ -97,14 +100,16 @@ export function PlanPicker({
     });
   }
 
-  function makeLive(draftId: string, name: string) {
-    if (
-      !confirm(
-        `Merge "${name}" into the live plan? Its numbers become what the floor works from, and the printed sheets and dashboard change with it.`
-      )
-    ) {
-      return;
-    }
+  async function makeLive(draftId: string, name: string) {
+    const ok = await confirm({
+      title: `Merge "${name}" into the live plan?`,
+      description:
+        "Its numbers become what the floor works from, and the printed sheets and dashboard change with it.",
+      confirmLabel: "Merge into live",
+      cancelLabel: "Cancel",
+      tone: "danger",
+    });
+    if (!ok) return;
     setError(null);
     startTransition(async () => {
       const result = await confirmDraft({ draftId });
@@ -253,8 +258,16 @@ export function PlanPicker({
                   danger
                   hint={`Zeroes everything between ${from} and ${to} in your draft. The live plan is untouched until you merge.`}
                   disabled={pending}
-                  onClick={() => {
-                    if (!confirm(`Clear everything planned between ${from} and ${to}?`)) return;
+                  onClick={async () => {
+                    const clearOk = await confirm({
+                      title: `Clear everything planned between ${from} and ${to}?`,
+                      description:
+                        "Zeroes everything in your draft for this range. The live plan is untouched until you merge.",
+                      confirmLabel: "Clear",
+                      cancelLabel: "Cancel",
+                      tone: "danger",
+                    });
+                    if (!clearOk) return;
                     setMenu(false);
                     startTransition(async () => {
                       const result = await clearRange({ scheduleId, from, to });
@@ -268,9 +281,17 @@ export function PlanPicker({
                   danger
                   hint="Throws away every change in your draft and puts you back where the live plan is."
                   disabled={pending || !myDraftId}
-                  onClick={() => {
+                  onClick={async () => {
                     if (!myDraftId) return;
-                    if (!confirm("Throw away every change in your draft?")) return;
+                    const discardOk = await confirm({
+                      title: "Throw away every change in your draft?",
+                      description:
+                        "Puts you back where the live plan is. Nothing the floor sees will change.",
+                      confirmLabel: "Throw away",
+                      cancelLabel: "Cancel",
+                      tone: "danger",
+                    });
+                    if (!discardOk) return;
                     setMenu(false);
                     startTransition(async () => {
                       const result = await discardDraft({ draftId: myDraftId });

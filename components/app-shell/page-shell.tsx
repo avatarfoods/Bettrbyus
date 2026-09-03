@@ -39,6 +39,12 @@ type PageShellProps = {
   /** Full-bleed content; supply your own padding via contentClassName. */
   children: React.ReactNode;
   contentClassName?: string;
+  /**
+   * Fill the window under the app bar and keep the page from growing.
+   * Used by the planning grid so its date headers can freeze while the
+   * rows scroll.
+   */
+  fillViewport?: boolean;
 };
 
 export function PageShell({
@@ -49,9 +55,17 @@ export function PageShell({
   meta,
   children,
   contentClassName,
+  fillViewport,
 }: PageShellProps) {
   return (
-    <div className="flex min-h-full flex-1 flex-col">
+    <div
+      className={cn(
+        "flex flex-1 flex-col",
+        fillViewport
+          ? "h-[calc(100dvh-var(--app-bar-height))] min-h-0 overflow-hidden"
+          : "min-h-full"
+      )}
+    >
       {/*
         Above the grid, below the app bar.
 
@@ -96,7 +110,15 @@ export function PageShell({
         </div>
       </div>
 
-      <div className={cn("flex-1", contentClassName)}>{children}</div>
+      <div
+        className={cn(
+          "flex-1",
+          fillViewport && "min-h-0 overflow-hidden",
+          contentClassName
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }
