@@ -52,6 +52,19 @@ import { departmentColor } from "@/lib/production/department-colors";
 import { cn } from "@/lib/utils";
 
 /**
+ * MAIN KITCHEN AM and MAIN KITCHEN PM are one kitchen.
+ *
+ * The shift suffix is how the recipes file the work; the header filter asks
+ * about the room. Anything without a suffix is its own family.
+ */
+function departmentFamily(name: string | null | undefined): string {
+  return (name ?? "Unassigned")
+    .trim()
+    .replace(/\s*[-\u2013/]?\s*\b(?:AM|PM|A\.M\.|P\.M\.)$/i, "")
+    .trim();
+}
+
+/**
  * Planning.
  *
  * One rolling plan that is always open. You choose the date range you want to
@@ -83,11 +96,18 @@ type Props = {
   editing: boolean;
   drafts: DraftSummary[];
   readOnly: boolean;
+  /** Administrators plan; everyone else reads. */
+  canEdit?: boolean;
   setupError: string | null;
   draftChanges: string[];
   today: string;
   /** The range being looked at, from the URL. */
   from: string;
+  /**
+   * When Clear this range last ran, stamped into the URL by the header menu.
+   * Anything typed before it is gone from the draft, so the grid lets it go.
+   */
+  clearedAt?: string;
   to: string;
   recipes: ScheduleRecipe[];
   entries: ScheduleEntry[];
@@ -140,10 +160,12 @@ export function ScheduleView({
   editing,
   drafts,
   readOnly,
+  canEdit = false,
   setupError,
   draftChanges,
   today,
   from,
+  clearedAt,
   to,
   recipes,
   entries: serverEntries,
@@ -185,13 +207,21 @@ export function ScheduleView({
   const [query, setQuery] = useState(initialQuery ?? "");
 
   /**
+   * The little arrow on the Dept column: rows gathered by department.
+   *
+   * Build order puts Produce wherever a bowl needs it - twice in the middle,
+   * once at the end. Grouped, every Produce row sits together, every kitchen
+   * row together, with MAIN KITCHEN AM and PM as one kitchen. It is a way of
+   * reading the same rows, not a filter: the area select already narrows.
+   */
+  const [groupByDept, setGroupByDept] = useState(false);
+
+  /**
    * Line, department and the two view switches, all as one list of ids -
    * which is what the pills in the search field are. Decoded back into the
    * values the grid already reads, so only the control changed.
    */
-  const [filters, setFilters] = useState<string[]>(() => [
-    `view:${initialDept ?? "__finished__"}`,
-  ]);
+  const [filters, setFilters] = useState<string[]>([]);
 
   /**
    * The line whose plan this is.
@@ -217,28 +247,59 @@ export function ScheduleView({
    * of what to make, rather than a tree read eleven times over.
    */
   const working = hideEmpty && expandAll;
-  const [selection, setSelection] = useState<{ from: string; to: string } | null>(
-    null
-  );
-
-  /** Typed while there is nowhere to store it - see the banner. */
-  const [localEntries, setLocalEntries] = useState<ScheduleEntry[]>([]);
 
   /*
+    The selected days belong to the range on screen. Paging to next week
+    keeps this component mounted, so plain state carried a selection for
+    dates no longer visible - and Open, the change dots and "Clear day" all
+    kept working against it.
+  */
+  const rangeKey = `${from}|${to}`;
+  const [picked, setPicked] = useState<{
+    key: string;
+    value: { from: string; to: string } | null;
+  }>({ key: rangeKey, value: null });
+  const selection = picked.key === rangeKey ? picked.value : null;
+  const setSelection = useCallback(
+    (value: { from: string; to: string } | null) =>
+      setPicked({ key: rangeKey, value }),
+    [rangeKey]
+  );
+
+  /*
+    Typed, but not yet back from the server.
+
     A fresh serverEntries prop means a real round trip just landed - Accept,
     Confirm, Clear day, or an action from elsewhere entirely, like the plan
-    picker's "Clear this range". Whatever is in localEntries only existed to
-    bridge the gap until that happened, so once it has, it is either already
-    reflected in serverEntries or it was overwritten by something else (a
-    clear, another tab, another person's confirm) - either way, holding onto
-    it would paper back over the fresh data with a stale local guess. This is
-    what "Clear this range" needed: that button lives outside this component
-    and cannot reach into localEntries directly, so without this it looked
-    like nothing happened even though the database was actually cleared.
+    picker's "Clear this range". Whatever was typed only existed to bridge the
+    gap until that happened, so once it has, it is either already reflected in
+    serverEntries or it was overwritten by something else (a clear, another
+    tab, another person's confirm) - either way, holding onto it would paper
+    back over the fresh data with a stale local guess. So the typed entries
+    remember which serverEntries they were typed over, and count for nothing
+    once a newer list arrives. Done as derived state rather than an effect so
+    there is never a render where the stale guess is still on screen.
   */
-  useEffect(() => {
-    setLocalEntries([]);
-  }, [serverEntries]);
+  const [local, setLocal] = useState<{
+    base: ScheduleEntry[];
+    entries: ScheduleEntry[];
+  }>(() => ({ base: serverEntries, entries: [] }));
+  const localEntries = useMemo(
+    () => (local.base === serverEntries ? local.entries : []),
+    [local, serverEntries]
+  );
+  const setLocalEntries = useCallback(
+    (next: ScheduleEntry[] | ((prev: ScheduleEntry[]) => ScheduleEntry[])) => {
+      setLocal((prev) => {
+        const current = prev.base === serverEntries ? prev.entries : [];
+        return {
+          base: serverEntries,
+          entries: typeof next === "function" ? next(current) : next,
+        };
+      });
+    },
+    [serverEntries]
+  );
 
   /*
     The pinned band's height, published so the grid header can sit under it.
@@ -287,10 +348,39 @@ export function ScheduleView({
     [viewingId, router]
   );
 
+  /*
+    Clearing a range from the header menu deletes those cells from the draft.
+    Whatever was typed into them would otherwise still win the merge below and
+    paper right back over the clear - the same trap Clear day sidesteps by
+    hand. Letting the typed numbers go is what makes the cells actually empty.
+
+    Adjusted while rendering rather than in an effect: the merge below reads
+    localEntries in the same pass, so a round-trip through the DOM would paint
+    the cleared cells with their old numbers once before emptying them.
+  */
+  const [clearMark, setClearMark] = useState(clearedAt);
+  if (clearMark !== clearedAt) {
+    setClearMark(clearedAt);
+    setLocalEntries([]);
+  }
+
+  /** Clear day is in this component, so it says so directly. */
+  const [clearTick, setClearTick] = useState(0);
+
   const changed = useMemo(() => new Set(draftChanges), [draftChanges]);
   const myDraft = drafts.find((draft) => draft.id === myDraftId);
   /** True when what is on screen is yours to change. */
   const mine = viewingId === null || viewingId === myDraftId;
+  /**
+   * Whether this person can change the plan at all.
+   *
+   * Only administrators can write schedules - the database says so - and the
+   * buttons have to agree, or every cell save fails with a policy error in a
+   * tooltip. Only your own draft counts: standing on someone else's, the
+   * banner used to count their changes and confirm yours.
+   */
+  const canWrite = !readOnly && canEdit;
+  const onOwnDraft = canWrite && mine && myDraftId !== null;
   const viewed = drafts.find((draft) => draft.id === viewingId) ?? null;
   const viewingLabel = viewed
     ? `${viewed.name} — ${viewed.createdByName}`
@@ -431,13 +521,22 @@ export function ScheduleView({
     const byRecipe = new Map<string, Map<string, number>>();
     for (const [recipeId, recipeDemand] of demand) {
       const own = entriesByRecipe.get(recipeId) ?? [];
-      if (own.reduce((s, e) => s + e.quantity, 0) > 0.0001) continue;
-
       const lots = wip.get(recipeId) ?? [];
-      // No runs to allocate - nothing is scheduled yet, that is exactly why
-      // there is a suggestion - so what is left after stock is the whole
-      // answer, day by day.
-      const { unmetByNeed } = allocateRecipe([], recipeDemand, undefined, lots);
+      /*
+        What is still uncovered after the runs already planned and the stock
+        already counted. Skipping any recipe with a run anywhere in the plan
+        meant a stew made last week never got a suggestion again, however
+        much a new bowl needed this week - and Accept quietly covered fewer
+        rows as the plan aged. Same arithmetic as the row's Open column.
+      */
+      const supplying =
+        lots.length > 0 ? own.filter((e) => e.productionDate > wipDate) : own;
+      const { unmetByNeed } = allocateRecipe(
+        supplying.map((e) => ({ date: e.productionDate, quantity: e.quantity })),
+        recipeDemand,
+        undefined,
+        lots
+      );
 
       const perDate = new Map<string, number>();
       for (const [date, quantity] of unmetByNeed) {
@@ -447,13 +546,28 @@ export function ScheduleView({
       if (perDate.size > 0) byRecipe.set(recipeId, perDate);
     }
     return byRecipe;
-  }, [demand, entriesByRecipe, wip]);
+  }, [demand, entriesByRecipe, wip, wipDate]);
 
-    const rows: GridRow[] = useMemo(() => {
+  const rows: GridRow[] = useMemo(() => {
     const rangeFrom = selection?.from ?? from;
     const rangeTo = selection?.to ?? to;
     const needle = query.trim().toLowerCase();
     const recipeById = new Map(recipes.map((r) => [r.id, r]));
+    const sameDept = (a: string | null, b: string) =>
+      (a ?? "").trim().toUpperCase() === b.trim().toUpperCase();
+
+    /*
+      The finished products planned in this range. A bowl on Monday needs its
+      stew on Saturday - before the range starts - so "what is running" judged
+      by need dates alone showed the bowls and nothing under them. What the
+      range's plan asks for is running, whichever day it has to be ready by.
+    */
+    const rootsInRange = new Set<string>();
+    for (const entry of entries) {
+      if (!entry.quantity) continue;
+      if (entry.productionDate < rangeFrom || entry.productionDate > rangeTo) continue;
+      if (recipeById.get(entry.recipeId)?.isFinished) rootsInRange.add(entry.recipeId);
+    }
 
     const pendingIds = new Set<string>();
     for (const [recipeId, perDate] of suggestions) {
@@ -645,14 +759,32 @@ export function ScheduleView({
         whole: pick Main Kitchen and you got the entire plan back. Same trap
         the empty-row filter below already had to climb out of.
       */
-      const unfolded = !expandAll && isExpandedChild(node.path);
+      /*
+        A row opened by hand shows what is under it - but only while its
+        parent is actually on screen. Filtered to a department or a search
+        the list is flat, so a bowl opened earlier must not leak its kitchen
+        steps into the Assembly view with nothing above them.
+      */
+      const unfolded =
+        !expandAll &&
+        needle === "" &&
+        dept === "__finished__" &&
+        isExpandedChild(node.path);
       if (!unfolded) {
-        if (dept === "__finished__" && !recipe.isFinished) continue;
-        if (dept === "__all__" && node.depth > 0) continue;
+        /*
+          Finished products is the tree's front door: opening the whole tree
+          from there means every bowl open, so what hangs under them comes
+          through. All areas is every recipe once, in tree order - the list
+          is flattened further down. Only a real department keeps the filter
+          strict.
+        */
+        if (dept === "__finished__" && !recipe.isFinished && !expandAll) {
+          continue;
+        }
         if (
           dept !== "__finished__" &&
           dept !== "__all__" &&
-          recipe.department !== dept
+          !sameDept(recipe.department, dept)
         ) {
           continue;
         }
@@ -670,16 +802,40 @@ export function ScheduleView({
       );
     }
 
-    // Anything no finished product reaches still has to be plannable.
+    /*
+      Anything no finished product reaches still has to be plannable.
+
+      It has no place in the tree, so it borrows its department's: the level
+      the rest of that department sits at, rounded. A broccoli nobody's bowl
+      uses yet lists with the produce, not above the bowls as if it were one.
+      Whatever cannot be placed goes after everything that can.
+    */
     const inTree = new Set(tree.map((node) => node.recipeId));
+    const levelSum = new Map<string, { total: number; count: number }>();
+    let deepest = 0;
+    for (const node of tree) {
+      const key = departmentFamily(recipeById.get(node.recipeId)?.department);
+      const entry = levelSum.get(key) ?? { total: 0, count: 0 };
+      entry.total += node.depth;
+      entry.count += 1;
+      levelSum.set(key, entry);
+      deepest = Math.max(deepest, node.depth);
+    }
+    const borrowedDepth = (recipe: ScheduleRecipe) => {
+      if (recipe.isFinished) return 0;
+      const entry = levelSum.get(departmentFamily(recipe.department));
+      return entry ? Math.round(entry.total / entry.count) : deepest + 1;
+    };
     for (const recipe of recipes) {
       if (inTree.has(recipe.id)) continue;
       if (line && recipe.lineName !== line) continue;
-      if (dept === "__finished__" && !recipe.isFinished) continue;
+      if (dept === "__finished__" && !recipe.isFinished && !expandAll) {
+        continue;
+      }
       if (
         dept !== "__finished__" &&
         dept !== "__all__" &&
-        recipe.department !== dept
+        !sameDept(recipe.department, dept)
       ) {
         continue;
       }
@@ -687,7 +843,7 @@ export function ScheduleView({
         build(recipe, {
           path: recipe.id,
           parentPath: null,
-          depth: 0,
+          depth: borrowedDepth(recipe),
           perRoot: null,
           rootName: null,
           hasChildren: false,
@@ -698,10 +854,8 @@ export function ScheduleView({
     return out
       .filter((row) => {
         if (!needle) return true;
-        // Anything unfolded from a matching row stays, or searching an item
-        // number and then expanding it would find nothing: the children do
-        // not carry the parent's code in their names.
-        if (isExpandedChild(row.path)) return true;
+        // No exemption for opened rows: with the whole tree open every row
+        // is an opened child, and the search matched nothing at all.
         return `${row.recipe.wipCode} ${row.recipe.name}`
           .toLowerCase()
           .includes(needle);
@@ -719,12 +873,27 @@ export function ScheduleView({
         // planned or something needed in the range being looked at.
         if (row.scheduledInRange > 0.01) return true;
         if (row.openBalance > 0.01) return true;
-        return (row.demand?.days ?? []).some(
-          (day) => day.date >= from && day.date <= to && day.quantity > 0.01
+        const days = row.demand?.days ?? [];
+        if (
+          days.some(
+            (day) =>
+              day.date >= rangeFrom && day.date <= rangeTo && day.quantity > 0.01
+          )
+        ) {
+          return true;
+        }
+        // The whole tree open: a step is running if a bowl planned in this
+        // range needs it, even when it has to be ready the day before.
+        return (
+          expandAll &&
+          days.some((day) =>
+            day.drivers.some((driver) => rootsInRange.has(driver.recipeId))
+          )
         );
       });
   }, [
     recipes,
+    entries,
     tree,
     wip,
     wipScope,
@@ -785,14 +954,17 @@ export function ScheduleView({
       tree - no filter - still repeats, because there the parents are right
       there above it.
     */
+    // All areas is every recipe once, top of the tree to the bottom - not
+    // the bowls with whatever nothing reaches trailing underneath them.
     const parentsHidden =
       working ||
-      (dept !== "__finished__" && dept !== "__all__") ||
+      groupByDept ||
+      dept !== "__finished__" ||
       query.trim() !== "";
     if (!parentsHidden) return withDepth;
 
     const seen = new Set<string>();
-    return withDepth
+    const flat = withDepth
       .filter((row) => {
         if (seen.has(row.recipe.id)) return false;
         seen.add(row.recipe.id);
@@ -816,13 +988,71 @@ export function ScheduleView({
         mixed from, down to the produce that gets cut.
       */
       .sort((a, b) => a.treeOrder[0] - b.treeOrder[0] || a.treeOrder[1] - b.treeOrder[1]);
-  }, [rows, working, dept, query]);
+    if (!groupByDept) return flat;
+
+    /*
+      Gathered by department, departments by tree level.
+
+      Finished products on top, then assembly, then the kitchen, produce
+      last - the order the plan is explained in. A department's level is how
+      deep its rows sit on average, with the two ends pinned: whatever is
+      finished is first and produce is always last, however shallow one
+      onion happens to sit. Inside a group the rows keep build order.
+    */
+    const depthSum = new Map<
+      string,
+      { total: number; count: number; first: number; finished: boolean }
+    >();
+    flat.forEach((row, index) => {
+      const key = departmentFamily(row.recipe.department);
+      const entry = depthSum.get(key) ?? {
+        total: 0,
+        count: 0,
+        first: index,
+        finished: false,
+      };
+      entry.total += row.treeDepth ?? 0;
+      entry.count += 1;
+      entry.finished = entry.finished || row.recipe.isFinished;
+      depthSum.set(key, entry);
+    });
+    // One level per department, so a group never splits in two.
+    const level = (row: (typeof flat)[number]) => {
+      const key = departmentFamily(row.recipe.department);
+      const entry = depthSum.get(key);
+      if (entry?.finished) return -1;
+      if (/produce/i.test(key)) return Number.POSITIVE_INFINITY;
+      return entry ? entry.total / entry.count : 0;
+    };
+    return flat
+      .map((row, index) => ({ row, index }))
+      .sort((a, b) => {
+        const la = level(a.row);
+        const lb = level(b.row);
+        if (la !== lb) return la - lb;
+        const fa = depthSum.get(departmentFamily(a.row.recipe.department))?.first ?? 0;
+        const fb = depthSum.get(departmentFamily(b.row.recipe.department))?.first ?? 0;
+        return fa - fb || a.index - b.index;
+      })
+      .map(({ row }) => row);
+  }, [rows, working, dept, groupByDept, query]);
 
   const styles = useMemo(() => {
     const map = new Map<
       string,
       { unit: "lb" | "ea" | "cs"; spine: string; tint: string }
     >();
+    // The unit a department counts in is the one most of its rows use, not
+    // whichever row happened to sort first - that flipped lb to ea between
+    // two views of the same kitchen.
+    const uoms = new Map<string, Map<string, number>>();
+    for (const row of shown) {
+      const dept = row.recipe.department ?? "Unassigned";
+      const perUom = uoms.get(dept) ?? new Map<string, number>();
+      const uom = (row.recipe.uom ?? "LB").trim().toUpperCase();
+      perUom.set(uom, (perUom.get(uom) ?? 0) + 1);
+      uoms.set(dept, perUom);
+    }
     let i = 0;
     for (const row of shown) {
       const dept = row.recipe.department ?? "Unassigned";
@@ -832,8 +1062,10 @@ export function ScheduleView({
       // did before any of this was configurable.
       const look = departmentColor(departmentColors.get(dept), i);
       i += 1;
+      const common = [...(uoms.get(dept) ?? new Map<string, number>()).entries()]
+        .sort((a, b) => b[1] - a[1])[0]?.[0];
       map.set(dept, {
-        unit: unitFor(dept, row.recipe.uom),
+        unit: unitFor(dept, common ?? row.recipe.uom),
         spine: look.spine,
         tint: look.tint,
       });
@@ -850,7 +1082,11 @@ export function ScheduleView({
   const selectionTotals = useMemo(() => {
     if (!selection) return null;
     const byDept = new Map<string, number>();
+    const seen = new Set<string>();
     for (const row of shown) {
+      // A step under six bowls is six rows and one number.
+      if (seen.has(row.recipe.id)) continue;
+      seen.add(row.recipe.id);
       const dept = row.recipe.department ?? "Unassigned";
       for (const [date, cell] of row.cells) {
         if (date < selection.from || date > selection.to) continue;
@@ -863,7 +1099,10 @@ export function ScheduleView({
   }, [selection, shown]);
 
   const openInRange = useMemo(
-    () => shown.filter((row) => row.openBalance > 0.01).length,
+    () =>
+      new Set(
+        shown.filter((row) => row.openBalance > 0.01).map((row) => row.recipe.id)
+      ).size,
     [shown]
   );
 
@@ -883,27 +1122,34 @@ export function ScheduleView({
   }, [suggestions, from, to]);
 
   /** Keeps the plan range while moving what the WIP column reads. */
-  function goWip(next: DateScope) {
-    const search = new URLSearchParams({ from, to });
-    if (next.kind === "day") search.set("wip", next.date);
+  /**
+   * Moves the dates and nothing else.
+   *
+   * Building the URL from scratch dropped the line, the draft being viewed,
+   * edit mode, the area and the search: clicking "Later" on Pizza Cupcake's
+   * draft landed on Bettr Bowl's live plan, locked, with nothing saying so.
+   */
+  function withDates(nextFrom: string, nextTo: string, wip: DateScope) {
+    const search = new URLSearchParams(window.location.search);
+    search.set("from", nextFrom);
+    search.set("to", nextTo < nextFrom ? nextFrom : nextTo);
+    search.delete("wip");
+    search.delete("wipFrom");
+    search.delete("wipTo");
+    if (wip.kind === "day") search.set("wip", wip.date);
     else {
-      search.set("wipFrom", next.from);
-      search.set("wipTo", next.to);
+      search.set("wipFrom", wip.from);
+      search.set("wipTo", wip.to);
     }
-    router.push(`/production/schedule?${search}`);
+    return search;
+  }
+
+  function goWip(next: DateScope) {
+    router.push(`/production/schedule?${withDates(from, to, next)}`);
   }
 
   function goRange(nextFrom: string, nextTo: string) {
-    const search = new URLSearchParams({
-      from: nextFrom,
-      to: nextTo < nextFrom ? nextFrom : nextTo,
-    });
-    if (wipScope.kind === "day") search.set("wip", wipScope.date);
-    else {
-      search.set("wipFrom", wipScope.from);
-      search.set("wipTo", wipScope.to);
-    }
-    router.push(`/production/schedule?${search}`);
+    router.push(`/production/schedule?${withDates(nextFrom, nextTo, wipScope)}`);
   }
 
   /** Clears the selected day, or the selected span. */
@@ -940,6 +1186,10 @@ export function ScheduleView({
             (e) => e.productionDate < clearFrom || e.productionDate > clearTo
           )
         );
+        setClearTick((tick) => tick + 1);
+        // The clear landed in the draft; a live view has to follow it there
+        // or the refresh shows the numbers still standing.
+        if (result.draftId) followDraft(result.draftId);
         router.refresh();
       } else setError(result.message);
     });
@@ -982,8 +1232,10 @@ export function ScheduleView({
     });
     startTransition(async () => {
       const result = await applySuggestions({ scheduleId, entries: payload });
-      if (result.ok) router.refresh();
-      else {
+      if (result.ok) {
+        if (result.draftId) followDraft(result.draftId);
+        router.refresh();
+      } else {
         setLocalEntries(snapshot);
         setError(result.message);
       }
@@ -1079,7 +1331,10 @@ export function ScheduleView({
         plan that had just become live. So: back to live, locked.
       */
       setLocalEntries([]);
-      router.replace("/production/schedule?view=live");
+      const search = new URLSearchParams(window.location.search);
+      search.set("view", "live");
+      search.delete("edit");
+      router.replace(`/production/schedule?${search}`);
       router.refresh();
     });
   }
@@ -1231,17 +1486,8 @@ export function ScheduleView({
           onQueryChange={setQuery}
           placeholder="Find a recipe…"
           aria-label="Search recipes"
-          filters={filters.filter(
-            (id) => !id.startsWith("line:") && !id.startsWith("view:")
-          )}
-          onFiltersChange={(next) =>
-            setFilters([
-              ...filters.filter(
-                (id) => id.startsWith("line:") || id.startsWith("view:")
-              ),
-              ...next,
-            ])
-          }
+          filters={filters}
+          onFiltersChange={setFilters}
           filterGroups={[
             {
               items: [
@@ -1316,7 +1562,7 @@ export function ScheduleView({
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="ml-auto flex items-center gap-2">
-          {editing && !readOnly && (
+          {editing && canWrite && (
             <button
               type="button"
               onClick={clearDay}
@@ -1333,7 +1579,7 @@ export function ScheduleView({
             </button>
           )}
 
-          {suggestionCount > 0 && !readOnly && editing && (
+          {suggestionCount > 0 && canWrite && editing && mine && (
             <button
               type="button"
               onClick={acceptAll}
@@ -1350,7 +1596,7 @@ export function ScheduleView({
             </button>
           )}
 
-          {!readOnly && <EditPlanButton editing={editing} />}
+          {canWrite && <EditPlanButton editing={editing} />}
 
           {/*
             Two ways out of a set of changes, side by side at the moment you
@@ -1358,7 +1604,7 @@ export function ScheduleView({
             it live. Keeping the draft option down in the banner made live
             look like the only thing Confirm could mean.
           */}
-          {!readOnly && myChangeCount > 0 && (
+          {onOwnDraft && myChangeCount > 0 && (
             <button
               type="button"
               onClick={() => void parkAsDraft()}
@@ -1371,7 +1617,7 @@ export function ScheduleView({
             </button>
           )}
 
-          {!readOnly && myChangeCount > 0 && (
+          {onOwnDraft && myChangeCount > 0 && (
             <button
               type="button"
               onClick={() => void confirmToPlan()}
@@ -1425,7 +1671,7 @@ export function ScheduleView({
         </div>
       )}
 
-      {!readOnly && myChangeCount > 0 && (
+      {onOwnDraft && myChangeCount > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-md bg-warning-muted px-3 py-1.5">
           <span className="text-xs text-warning-foreground">
             <strong>{myChangeCount}</strong>{" "}
@@ -1475,14 +1721,25 @@ export function ScheduleView({
             </button>
             <button
               type="button"
-              onClick={() =>
-                myDraftId &&
+              onClick={async () => {
+                if (!myDraftId) return;
+                const ok = await confirm({
+                  title: `Throw away ${myChangeCount} change${myChangeCount === 1 ? "" : "s"}?`,
+                  description:
+                    "Your draft is deleted and the grid goes back to the confirmed plan. Nothing the floor sees will change.",
+                  confirmLabel: "Throw away",
+                  cancelLabel: "Keep them",
+                  tone: "danger",
+                });
+                if (!ok) return;
                 startTransition(async () => {
                   const r = await discardDraft({ draftId: myDraftId });
-                  if (r.ok) router.refresh();
-                  else setError(r.message);
-                })
-              }
+                  if (r.ok) {
+                    setLocalEntries([]);
+                    router.refresh();
+                  } else setError(r.message);
+                });
+              }}
               disabled={pending}
               className="inline-flex h-7 items-center gap-1.5 rounded-sm bg-card ring-1 ring-foreground/10 px-2.5 text-xs text-muted-foreground hover:bg-muted disabled:opacity-60"
             >
@@ -1535,9 +1792,18 @@ export function ScheduleView({
       <div className="flex min-h-0 gap-2.5">
       <div className="min-w-0 flex-1">
       <ScheduleGrid
+        /*
+          A cell's box is uncontrolled, so it keeps what was typed until its
+          stored quantity changes. A typed zero and a cell the clear deleted
+          both arrive here as no value at all, so that never happens and the
+          "0" outlives the row it came from. Remounting on a clear is what
+          empties the box; typing a zero still leaves it reading 0.
+        */
+        key={`${clearedAt ?? ""}:${clearTick}`}
         scheduleId={scheduleId ?? "preview"}
         readOnly={readOnly}
-        locked={!editing || !mine}
+        locked={!editing || !mine || !canEdit}
+        onSaveError={setError}
         onLocalChange={(recipeId, date, quantity) =>
           setLocalEntries((prev) => [
             ...prev.filter(
@@ -1551,6 +1817,8 @@ export function ScheduleView({
         dates={dates}
         rows={shown}
         styles={styles}
+        deptGrouped={groupByDept}
+        onToggleDeptGroup={() => setGroupByDept((value) => !value)}
         expanded={openPaths}
         onToggle={toggle}
         onSelectionChange={setSelection}
