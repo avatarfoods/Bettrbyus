@@ -5,7 +5,7 @@ The day-to-day commands for working on Bettrbyus through lanes: open a lane, sta
 ## 1. Before you start
 
 - Docker Desktop must be running (`open -a Docker`, wait for the whale icon to settle). Agents must not start it themselves; they will ask you.
-- The main checkout must be on `seasoned` and current: `git switch seasoned && git pull`. New lanes are cut from whatever the main checkout has checked out.
+- The main checkout must be on `seasoned` and current: `git switch seasoned && git pull`. New lanes are cut from whatever the main checkout has checked out. If you forget, `scripts/lane.sh up` resets a new lane onto the latest `origin/seasoned` for you.
 
 ## 2. Open a lane
 
