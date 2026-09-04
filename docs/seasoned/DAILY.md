@@ -24,7 +24,7 @@ scripts/lane.sh up      # port, own Supabase stack, dependencies, admin user, de
 scripts/lane.sh list    # what is running, on which ports (works from anywhere)
 ```
 
-A new lane takes a few minutes the first time, most of it `npm ci` and the Supabase stack replaying every migration. Re-running `up` in an existing lane is quick; it restarts the stack if it was stopped, applies new migrations, keeps the data, and leaves a running dev server alone.
+A new lane takes about a minute the first time: the Supabase stack replaying every migration is most of it, and `npm ci` runs without the audit report because npm's advisory request can hang for minutes. Re-running `up` in an existing lane is quick; it restarts the stack if it was stopped, applies new migrations, keeps the data, and leaves a running dev server alone.
 
 ## 3. The application
 
