@@ -16,6 +16,7 @@ Bettrbyus is a Next.js 16 app (React 19, TypeScript, Tailwind CSS 4) that uses S
 | npm | 10.9 | yes | Ships with Node; the repo has a `package-lock.json`, so use npm, not pnpm or yarn |
 | Supabase CLI | 2.116.0 | yes | Runs the local Supabase stack (step 8) |
 | Docker Desktop | any | yes | Hosts the local Supabase containers (step 8) |
+| Claude Code | 2.1.260 | for Seasoned | Runs the agent workflow; step 11 points it at the Seasoned instructions |
 
 ## 1. Xcode Command Line Tools
 
@@ -85,7 +86,7 @@ git clone git@github.com:avatarfoods/Bettrbyus.git
 cd Bettrbyus
 ```
 
-If you are working on the Seasoned effort, switch to its branch and read `docs/seasoned/AGENTS.md` and `docs/seasoned/README.md` for the branch conventions.
+If you are working on the Seasoned effort, switch to its branch and read `docs/seasoned/AGENTS.md` and `docs/seasoned/README.md` for the branch conventions. Step 11 sets up Claude Code for it.
 
 ```bash
 git checkout seasoned
@@ -203,6 +204,55 @@ npm run lint       # ESLint (warnings only, no errors)
 npm run build      # production build
 npm run start      # serve the production build on :3000
 ```
+
+## 11. Set up Claude Code for Seasoned
+
+The Seasoned work is done with Claude Code, following instructions that apply only to this project (`docs/seasoned/AGENTS.md`) and a workflow in which every task runs in a Claude Code worktree with its own Supabase stack (`docs/seasoned/LANES.md`). Claude Code does not discover those instructions on its own, so this step points it at them. Skip it if you only work on `main`.
+
+Install Claude Code with the native installer (Homebrew's `brew install --cask claude-code` also works), then confirm it runs:
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+claude --version
+```
+
+The Seasoned instructions must load only when you open this project, so give Claude Code a config directory dedicated to it rather than editing your global `~/.claude`. Either export `CLAUDE_CONFIG_DIR` in the shell you use for this project, or use a per-project config tool such as ccsw, which does the same thing per directory. The rest of this step writes two files into that directory.
+
+```bash
+export CLAUDE_CONFIG_DIR=~/.config/claude-bettrbyus   # put this in the shell profile you use for this project
+mkdir -p "$CLAUDE_CONFIG_DIR"
+```
+
+First, `CLAUDE.md`. Claude Code reads this file at the start of every session in any project, and the instruction below tells it to read the Seasoned instructions and to leave the root files alone. If you must use your global `~/.claude/CLAUDE.md` instead, change the read instruction to "read `docs/seasoned/AGENTS.md` in the project root (if present)" so it stays inert in other projects.
+
+```bash
+cat >> "$CLAUDE_CONFIG_DIR/CLAUDE.md" <<'EOT'
+## When you are working on Bettrbyus
+
+Never edit AGENTS.md, CLAUDE.md, or README.md in the project root; those belong to the team working on `main`.
+
+At the start of every session, before doing any work, read `docs/seasoned/AGENTS.md` and follow it. It plays the same role as the root AGENTS.md for the `seasoned` branch.
+EOT
+```
+
+Second, `settings.json`. Lanes are Claude Code worktrees, and Claude Code cuts them from `origin/main` unless told otherwise. The `worktree.baseRef` setting has no way to name another branch, so set it to `head`: worktrees are then cut from whatever the main checkout has checked out, which the workflow keeps on an up-to-date `seasoned` (step 5). If the file already exists, add the `worktree` key to it instead of overwriting.
+
+```bash
+cat > "$CLAUDE_CONFIG_DIR/settings.json" <<'EOT'
+{
+  "worktree": { "baseRef": "head" }
+}
+EOT
+```
+
+Start Claude Code in the project and check that it picked the instructions up: `/memory` lists the loaded `CLAUDE.md` files, and the config directory's file should be among them. After editing either file, restart the session or run `/memory` so it reloads.
+
+```bash
+cd ~/Sites/Bettrbyus
+claude
+```
+
+From here on, follow `docs/seasoned/DAILY.md`: it starts with `claude --worktree <name>` and `scripts/lane.sh up`, which give each task its own Supabase stack and port instead of the single stack from step 8. The stack from step 8 stays useful as the main checkout's own database and as the place where Studio runs by default.
 
 ## Troubleshooting
 
