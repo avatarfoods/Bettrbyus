@@ -21,6 +21,7 @@ import {
   type AppDefinition,
   type AppMenu,
 } from "@/lib/apps";
+import { ModuleSettingsProvider } from "@/components/settings/module-context";
 import { createClient } from "@/lib/supabase/client";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { cn } from "@/lib/utils";
@@ -51,6 +52,7 @@ export function AppFrameClient({
   const app = appForPath(pathname);
 
   return (
+    <ModuleSettingsProvider app={app} isAdmin={isAdmin}>
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-50 flex h-(--app-bar-height) shrink-0 items-center gap-1 bg-sidebar px-2 text-sidebar-foreground sm:gap-2 sm:px-3">
         <Link
@@ -104,6 +106,7 @@ export function AppFrameClient({
 
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</main>
     </div>
+    </ModuleSettingsProvider>
   );
 }
 

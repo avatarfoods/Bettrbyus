@@ -8,7 +8,7 @@ export function downloadFinalOrderExcel(snapshot: FinalOrderSnapshot) {
   const rows: (string | number)[][] = [
     ["Final Order PO"],
     ["Order number", snapshot.orderNumber],
-    ["Required date", snapshot.requiredDate],
+    ["Arrival date", snapshot.requiredDate],
     ["Production week", snapshot.productionWeek || ""],
     ["Finalized", snapshot.finalizedAt.slice(0, 10)],
     [],
@@ -19,6 +19,7 @@ export function downloadFinalOrderExcel(snapshot: FinalOrderSnapshot) {
       "Req. to order",
       "Cases req.",
       "On hand",
+      "Order by",
     ],
   ];
 
@@ -31,6 +32,7 @@ export function downloadFinalOrderExcel(snapshot: FinalOrderSnapshot) {
         line.requiredToOrder,
         line.casesRequired,
         line.onHandCases ?? "",
+        line.orderByDate ?? "",
       ]);
     }
   }
@@ -43,6 +45,7 @@ export function downloadFinalOrderExcel(snapshot: FinalOrderSnapshot) {
     { wch: 14 },
     { wch: 12 },
     { wch: 10 },
+    { wch: 12 },
   ];
 
   const workbook = XLSX.utils.book_new();

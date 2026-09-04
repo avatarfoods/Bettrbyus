@@ -58,7 +58,7 @@ export function PurchasingFinalOrderView({
           {snapshot.orderNumber}
         </p>
         <p>
-          <span className="text-muted-foreground">Required date:</span>{" "}
+          <span className="text-muted-foreground">Arrival date:</span>{" "}
           <strong>{formatDate(snapshot.requiredDate)}</strong>
         </p>
         <p>
@@ -101,6 +101,9 @@ export function PurchasingFinalOrderView({
                   {group.lines.length} line
                   {group.lines.length === 1 ? "" : "s"} ·{" "}
                   {cases.toLocaleString()} cases
+                  {group.earliestOrderBy ? (
+                    <> · Order by {formatDate(group.earliestOrderBy)}</>
+                  ) : null}
                   {!interactive ? (
                     <>
                       {" "}
@@ -160,11 +163,12 @@ export function PurchasingFinalOrderView({
 
             <table className="w-full table-fixed border-collapse text-xs">
               <colgroup>
-                <col className="w-[18%]" />
-                <col className="w-[42%]" />
                 <col className="w-[14%]" />
-                <col className="w-[14%]" />
+                <col className="w-[32%]" />
                 <col className="w-[12%]" />
+                <col className="w-[12%]" />
+                <col className="w-[10%]" />
+                <col className="w-[20%]" />
               </colgroup>
               <thead>
                 <tr className="border-b text-left text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -172,7 +176,8 @@ export function PurchasingFinalOrderView({
                   <th className="py-1 pr-2 font-medium">Description</th>
                   <th className="py-1 pr-2 text-right font-medium">Req. to order</th>
                   <th className="py-1 pr-2 text-right font-medium">Cases req.</th>
-                  <th className="py-1 text-right font-medium">On hand</th>
+                  <th className="py-1 pr-2 text-right font-medium">On hand</th>
+                  <th className="py-1 text-right font-medium">Order by</th>
                 </tr>
               </thead>
               <tbody>
@@ -194,10 +199,13 @@ export function PurchasingFinalOrderView({
                     <td className="py-1 pr-2 align-top text-right tabular-nums">
                       {line.casesRequired.toLocaleString()}
                     </td>
-                    <td className="py-1 align-top text-right tabular-nums text-muted-foreground">
+                    <td className="py-1 pr-2 align-top text-right tabular-nums text-muted-foreground">
                       {line.onHandCases != null
                         ? line.onHandCases.toLocaleString()
                         : "—"}
+                    </td>
+                    <td className="py-1 align-top text-right tabular-nums text-muted-foreground">
+                      {formatDate(line.orderByDate)}
                     </td>
                   </tr>
                 ))}

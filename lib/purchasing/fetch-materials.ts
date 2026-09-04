@@ -10,21 +10,30 @@ type CurrentInventoryRow = {
 };
 
 export async function fetchMaterialsWithOnHand(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  options?: { companyIds?: number[] | null }
 ): Promise<{ data: MaterialWithOnHand[]; error: string | null }> {
   const COLUMNS =
-    "id, item_code, name, odoo_product_id, odoo_category, odoo_company_id, odoo_company_name, storage_type, lbs_per_case, is_protein, thaw_buffer_days, lead_time_days, price, active, last_synced_at";
+    "id, item_code, name, odoo_product_id, odoo_category, odoo_company_id, odoo_company_name, storage_type, purchasing_category, lbs_per_case, is_protein, thaw_buffer_days, lead_time_days, price, active, last_synced_at";
+
+  const companyIds = options?.companyIds;
+  const filterByPlace = Boolean(companyIds && companyIds.length > 0);
 
   const [materialsResult, inventoryResult] = await Promise.all([
     // Paged: there are more materials than PostgREST returns in one response,
     // and it does not say so. See lib/supabase/all-rows.
-    allRows<Material>((from: number, to: number) =>
-      supabase
+    allRows<Material>((from: number, to: number) => {
+      const query = supabase
         .from("purchasing_materials")
         .select(COLUMNS)
-        .order("item_code", { ascending: true })
-        .range(from, to)
-    ),
+        .order("item_code", { ascending: true });
+      const scoped = filterByPlace
+        ? query.or(
+            `odoo_company_id.in.(${companyIds!.join(",")}),odoo_company_id.is.null`
+          )
+        : query;
+      return scoped.range(from, to);
+    }),
     supabase
       .from("purchasing_current_inventory")
       .select("material_id, qty_on_hand, source, fetched_at"),

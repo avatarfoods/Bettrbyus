@@ -9,10 +9,7 @@ import { defaultDemandRange } from "@/lib/purchasing/demand-range";
 /**
  * Live Master PO generation.
  *
- * Replaces the old Excel-import-driven generateCycle() in import-actions.ts:
- * order quantities come from the production schedule + BOM, computed here,
- * instead of from a workbook's own already-calculated MASTER PO# rows. See
- * lib/purchasing/mrp.ts for the explosion itself.
+ * Order quantities come from the production schedule + BOM, computed here.
  *
  * TODO once PENDING_MIGRATIONS.sql (20260903_purchasing_live_mode) has run:
  * move DEFAULT_EXTRA_PCT below into an app_settings.purchasing_* column so
@@ -48,6 +45,21 @@ export async function generateCycleLive(input: {
   toDate?: string;
   /** Buffer percent, e.g. 15 for 15%. Defaults to DEFAULT_EXTRA_PCT. */
   extraPercent?: number;
+  /** Odoo companies (places) in scope. Null/omitted means every company. */
+  companyIds?: number[] | null;
+  /**
+   * Buy categories to include ("produce", "protein", "dairy_refrigerated",
+   * "dry_goods", "packaging", "uncategorized"). Null/omitted/empty means
+   * every category - a material outside this set gets no line at all,
+   * same as the full recompute already does for everything else.
+   */
+  categories?: string[] | null;
+  /**
+   * Production line to read the live schedule from (Bettr Bowl, Pita, Pizza
+   * Cupcake, ...). Null/omitted sums every line's schedule, which is the
+   * old, unscoped behavior.
+   */
+  lineId?: string | null;
 }): Promise<GenerateLiveResult> {
   const supabase = await createClient();
   const {
@@ -74,16 +86,30 @@ export async function generateCycleLive(input: {
     thaw_buffer_days: number;
     is_protein: boolean;
     storage_type: string | null;
+    purchasing_category: string | null;
   };
 
+  const companyIds = input.companyIds;
+  const filterByPlace = Boolean(companyIds && companyIds.length > 0);
+
   const [materialsRes, inventoryRes, existingCyclesRes] = await Promise.all([
-    supabase
-      .from("purchasing_materials")
-      .select(
-        "id, item_code, name, lbs_per_case, lead_time_days, thaw_buffer_days, is_protein, storage_type"
-      ),
+    (() => {
+      const query = supabase
+        .from("purchasing_materials")
+        .select(
+          "id, item_code, name, lbs_per_case, lead_time_days, thaw_buffer_days, is_protein, storage_type, purchasing_category"
+        )
+        .eq("active", true);
+      return filterByPlace
+        ? query.or(
+            `odoo_company_id.in.(${companyIds!.join(",")}),odoo_company_id.is.null`
+          )
+        : query;
+    })(),
     supabase.from("purchasing_current_inventory").select("material_id, qty_on_hand"),
-    supabase.from("purchasing_cycles").select("id, required_date, po_number, status"),
+    supabase
+      .from("purchasing_cycles")
+      .select("id, required_date, po_number, status, line_id"),
   ]);
 
   if (materialsRes.error) {
@@ -96,12 +122,17 @@ export async function generateCycleLive(input: {
     return { ok: false, message: `Loading cycles failed: ${existingCyclesRes.error.message}` };
   }
 
-  // Purchased materials only - produce and subrecipes made in-house never
-  // reach here in the first place (mrp.ts only accumulates onto a
-  // material_id, never a recipe), this is the packaging/dry-ingredient side
-  // of that same rule.
+  // Every purchasable material, produce included - subrecipes made
+  // in-house never reach here in the first place (mrp.ts only accumulates
+  // onto a material_id, never a recipe). Produce still nets and cases the
+  // same way as everything else; the Master PO screen has its own "hide
+  // produce" toggle for buyers who order it through a separate channel.
+  const categoryFilter = input.categories;
+  const filterByCategory = Boolean(categoryFilter && categoryFilter.length > 0);
   const materials = ((materialsRes.data ?? []) as MaterialRow[]).filter(
-    (material) => material.storage_type !== "produce"
+    (material) =>
+      !filterByCategory ||
+      categoryFilter!.includes(material.purchasing_category ?? "uncategorized")
   );
   const onHand = new Map<string, number>(
     (inventoryRes.data ?? []).map((row) => [row.material_id, row.qty_on_hand])
@@ -121,8 +152,9 @@ export async function generateCycleLive(input: {
         week_label: `${fromDate} to ${toDate}`,
         status: "in_progress",
         created_by: user.id,
+        line_id: input.lineId ?? null,
       })
-      .select("id, required_date, po_number, status")
+      .select("id, required_date, po_number, status, line_id")
       .single();
     if (createError || !created) {
       return { ok: false, message: `Creating cycle failed: ${createError?.message}` };
@@ -133,6 +165,7 @@ export async function generateCycleLive(input: {
       .from("purchasing_cycles")
       .update({
         week_label: `${fromDate} to ${toDate}`,
+        line_id: input.lineId ?? null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", cycle.id);
@@ -199,7 +232,7 @@ export async function generateCycleLive(input: {
   // The explosion itself.
   const [bom, scheduleDemand] = await Promise.all([
     fetchBom(supabase),
-    fetchLiveScheduleDemand(supabase, { fromDate, toDate }),
+    fetchLiveScheduleDemand(supabase, { fromDate, toDate, lineId: input.lineId }),
   ]);
   const { requirements, unresolvedLines, warnings } = computeMaterialRequirements({
     recipesById: bom.recipesById,

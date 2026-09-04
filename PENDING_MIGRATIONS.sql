@@ -21,8 +21,35 @@
 --     the unresolved-BOM-line warning has nowhere to read from
 --   - Syncing from Odoo fails outright (materials have nowhere to store
 --     which company they were bought under)
+--   - Purchasing cannot save which Odoo companies (places) it works with
+--   - Master PO generation fails outright ("Could not find the 'item_code'
+--     column of 'purchasing_lines'") - every generated line writes item_code
+--     and item_name now, not just unmatched Excel rows
 -- ============================================================
 
+
+-- ============================================================
+-- 20260826_purchasing_unmatched_lines
+-- Predates this rollup file (which starts at 20260827) but was never
+-- actually applied - backfilled here so `generateCycleLive` can write
+-- item_code/item_name on every purchasing_lines row.
+--
+-- Master PO rows whose Excel item code has no purchasing_materials match
+-- used to be dropped, so the matrix showed fewer lines than the MASTER
+-- PICKING ORDER table. Keep them as material-less lines carrying the Excel
+-- code and name.
+-- ============================================================
+
+alter table public.purchasing_lines
+  alter column material_id drop not null,
+  add column if not exists item_code text,
+  add column if not exists item_name text;
+
+-- The existing unique (cycle_id, material_id) no longer covers unmatched rows,
+-- because Postgres treats every NULL material_id as distinct.
+create unique index if not exists purchasing_lines_cycle_item_code_idx
+  on public.purchasing_lines (cycle_id, item_code)
+  where material_id is null;
 
 -- ============================================================
 -- 20260827_app_settings.sql
@@ -1318,3 +1345,108 @@ alter table public.purchasing_materials
 create index if not exists purchasing_materials_odoo_company_id_idx
   on public.purchasing_materials (odoo_company_id);
 
+-- ============================================================
+-- 20260904_purchasing_places
+-- Which Odoo companies Purchasing works with (Yaya's, AvatarNaturalFoods, …).
+-- Empty means every company the API user can see; once an admin saves a
+-- selection, sync and the Materials page only use those places.
+-- ============================================================
+
+create table if not exists public.purchasing_places (
+  id uuid primary key default gen_random_uuid(),
+  odoo_company_id integer not null unique,
+  name text not null,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+comment on table public.purchasing_places is
+  'Odoo companies Purchasing reads materials from. Empty means every company.';
+
+alter table public.purchasing_places enable row level security;
+
+drop policy if exists "Authenticated can read purchasing places" on public.purchasing_places;
+drop policy if exists "Admins can write purchasing places" on public.purchasing_places;
+
+create policy "Authenticated can read purchasing places"
+  on public.purchasing_places for select to authenticated using (true);
+
+create policy "Admins can write purchasing places"
+  on public.purchasing_places for all to authenticated
+  using (
+    exists (select 1 from public.profiles p
+            where p.id = auth.uid() and p.user_type = 'admin')
+  )
+  with check (
+    exists (select 1 from public.profiles p
+            where p.id = auth.uid() and p.user_type = 'admin')
+  );
+
+-- ============================================================
+-- 20260904_purchasing_material_category
+-- Buyer-facing shopping category, distinct from the Odoo-synced
+-- odoo_category (noisy, overwritten on every sync) and from storage_type
+-- (a temperature zone, not who the buyer calls). Admin-tagged, never
+-- touched by syncOdooMaterials. Null means "not tagged yet" - the Finalize
+-- Order screen buckets those under Uncategorized as a rollout checklist.
+-- ============================================================
+
+alter table public.purchasing_materials
+  add column if not exists purchasing_category text
+  check (purchasing_category is null or purchasing_category in
+    ('produce', 'protein', 'dairy_refrigerated', 'dry_goods', 'packaging'));
+
+-- ============================================================
+-- 20260904_purchasing_cycles_line
+-- Which production line a Master PO's schedule demand was computed from.
+-- Bettr Bowl, Pita, and Pizza Cupcake each run their own live schedule -
+-- this lets a buyer pick a single line and remembers which one a given
+-- Master PO used, so re-applying it later can't silently swap lines. Null
+-- means "every line" (the old, unscoped behavior), kept for cycles
+-- generated before this column existed.
+-- ============================================================
+
+alter table public.purchasing_cycles
+  add column if not exists line_id uuid references public.production_lines(id);
+
+
+
+-- ============================================================
+-- 20260904_recipe_change_log
+-- A simple, admin-only record of who changed a recipe and when.
+-- Not a diff/versioning system - one row per save with a short human
+-- summary, kept for reference when a number looks wrong months later.
+-- ============================================================
+
+
+create table if not exists public.recipe_change_log (
+  id uuid primary key default gen_random_uuid(),
+  recipe_id uuid references public.purchasing_recipes(id) on delete set null,
+  changed_by uuid,
+  changed_by_name text,
+  summary text not null,
+  changed_at timestamptz not null default now()
+);
+
+create index if not exists recipe_change_log_recipe_id_idx
+  on public.recipe_change_log (recipe_id, changed_at desc);
+
+alter table public.recipe_change_log enable row level security;
+
+drop policy if exists "Admins can read recipe change log" on public.recipe_change_log;
+drop policy if exists "Admins can write recipe change log" on public.recipe_change_log;
+
+create policy "Admins can read recipe change log"
+  on public.recipe_change_log for select to authenticated
+  using (
+    exists (select 1 from public.profiles p
+            where p.id = auth.uid() and p.user_type = 'admin')
+  );
+
+create policy "Admins can write recipe change log"
+  on public.recipe_change_log for insert to authenticated
+  with check (
+    exists (select 1 from public.profiles p
+            where p.id = auth.uid() and p.user_type = 'admin')
+  );

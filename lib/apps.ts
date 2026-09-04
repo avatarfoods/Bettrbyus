@@ -8,7 +8,7 @@ import {
   ClipboardList,
   CookingPot,
   Factory,
-  FileInput,
+  History,
   Layers,
   LayoutDashboard,
   ListChecks,
@@ -167,7 +167,11 @@ export const APPS: AppDefinition[] = [
       {
         label: "Recipes",
         href: "/recipes",
-        items: [{ label: "All recipes", href: "/recipes", icon: CookingPot }],
+        items: [
+          { label: "All recipes", href: "/recipes", icon: CookingPot },
+          // Admin-only: the page itself turns everyone else away.
+          { label: "Changes", href: "/recipes/history", icon: History },
+        ],
       },
       {
         // Grouped by what each page configures, in the same order those
@@ -239,7 +243,7 @@ export const APPS: AppDefinition[] = [
     href: "/purchasing",
     icon: ShoppingCart,
     tint: "warning",
-    description: "Orders, materials and imports",
+    description: "Orders and materials",
     routes: ["/purchasing"],
     menus: [
       {
@@ -266,13 +270,14 @@ export const APPS: AppDefinition[] = [
         ],
       },
       {
-        label: "Imports",
-        href: "/purchasing/imports",
+        label: "Configuration",
+        href: "/purchasing/settings/places",
         items: [
           {
-            label: "Master workbook",
-            href: "/purchasing/imports",
-            icon: FileInput,
+            group: "Materials",
+            label: "Places",
+            href: "/purchasing/settings/places",
+            icon: Building2,
           },
         ],
       },

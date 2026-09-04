@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarRange,
-  FileUp,
   Loader2,
   Package,
   ShoppingCart,
@@ -189,10 +188,6 @@ export function PurchasingDashboard() {
             >
               <Package />
               <span className="hidden sm:inline">Materials</span>
-            </Link>
-            <Link href="/purchasing/imports" className={cn(buttonVariants())}>
-              <FileUp />
-              <span className="hidden sm:inline">Import plan</span>
             </Link>
           </div>
         </div>

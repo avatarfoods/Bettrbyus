@@ -5,6 +5,10 @@ import {
   type PurchaseCycle,
   type PurchaseLine,
 } from "@/lib/purchasing/fetch-cycles";
+import {
+  PURCHASING_CATEGORIES,
+  PURCHASING_CATEGORY_LABELS,
+} from "@/lib/validations/purchasing-material";
 
 export type GroupTracking = {
   status: LineStatus;
@@ -22,6 +26,8 @@ export type FinalOrderLineSnapshot = {
   requiredToOrder: number;
   lbsRequired: number | null;
   isEmergency: boolean;
+  /** When the buyer must place the order (arrival date minus lead/thaw time). */
+  orderByDate: string | null;
 };
 
 export type FinalOrderGroup = {
@@ -30,6 +36,8 @@ export type FinalOrderGroup = {
   status: LineStatus;
   notes: string | null;
   lines: FinalOrderLineSnapshot[];
+  /** Soonest orderByDate across the group's lines, for the group header. */
+  earliestOrderBy: string | null;
 };
 
 export type FinalOrderSnapshot = {
@@ -81,9 +89,43 @@ export function categoryLabel(key: string): string {
   return odooCategoryLabel(key);
 }
 
+const UNCATEGORIZED_KEY = "UNCATEGORIZED";
+
+/** Fixed buyer-friendly order: named categories first, untagged last. */
+const CATEGORY_ORDER = [...PURCHASING_CATEGORIES, UNCATEGORIZED_KEY];
+
+/**
+ * Group buy lines by the admin-tagged purchasing_category
+ * (Produce / Protein / Dairy & Refrigerated / Dry Goods / Packaging),
+ * not the Odoo-synced odoo_category. Untagged materials land in their own
+ * "Uncategorized" bucket rather than being silently merged elsewhere, so
+ * gaps in tagging are visible on every finalized order.
+ */
+export function groupLinesByPurchasingCategory(lines: PurchaseLine[]) {
+  const buckets = new Map<string, PurchaseLine[]>();
+  for (const line of lines) {
+    const key = line.material?.purchasing_category ?? UNCATEGORIZED_KEY;
+    const list = buckets.get(key) ?? [];
+    list.push(line);
+    buckets.set(key, list);
+  }
+
+  return CATEGORY_ORDER.filter((key) => buckets.has(key)).map((key) => ({
+    key,
+    label:
+      key === UNCATEGORIZED_KEY
+        ? "Uncategorized"
+        : PURCHASING_CATEGORY_LABELS[key as (typeof PURCHASING_CATEGORIES)[number]],
+    lines: (buckets.get(key) ?? []).sort((a, b) =>
+      lineItemCode(a).localeCompare(lineItemCode(b))
+    ),
+  }));
+}
+
 /**
  * Group buy lines by Odoo category on the matched material
  * (Master Fresh item id → purchasing_materials.item_code → odoo_category).
+ * @deprecated Prefer groupLinesByPurchasingCategory — kept for old snapshots.
  */
 export function groupLinesByItemCategory(lines: PurchaseLine[]) {
   const buckets = new Map<string, PurchaseLine[]>();
@@ -268,7 +310,9 @@ export function buildFinalOrderSnapshot(input: {
   cycle: PurchaseCycle;
   lines: PurchaseLine[];
   tracking: GroupTrackingMap;
-}): { ok: true; snapshot: FinalOrderSnapshot } | { ok: false; message: string } {
+}):
+  | { ok: true; snapshot: FinalOrderSnapshot; warning: string | null }
+  | { ok: false; message: string } {
   const orderLines = input.lines.filter(
     (line) => line.is_emergency || line.required_to_order > 0
   );
@@ -279,24 +323,31 @@ export function buildFinalOrderSnapshot(input: {
     };
   }
 
-  const sections = groupLinesByItemCategory(orderLines);
+  const sections = groupLinesByPurchasingCategory(orderLines);
   const groups: FinalOrderGroup[] = sections.map((section) => {
     const meta = input.tracking[section.key];
+    const lines = section.lines.map((line) => ({
+      itemCode: lineItemCode(line),
+      name: lineItemName(line),
+      category: section.key,
+      casesRequired: line.cases_required,
+      onHandCases: line.on_hand_cases,
+      requiredToOrder: line.required_to_order,
+      lbsRequired: line.lbs_required,
+      isEmergency: line.is_emergency,
+      orderByDate: line.order_by_date,
+    }));
+    const orderByDates = lines
+      .map((line) => line.orderByDate)
+      .filter((value): value is string => value != null)
+      .sort();
     return {
       key: section.key,
       label: section.label,
       status: meta?.status ?? "to_order",
       notes: meta?.notes ?? null,
-      lines: section.lines.map((line) => ({
-        itemCode: lineItemCode(line),
-        name: lineItemName(line),
-        category: section.key,
-        casesRequired: line.cases_required,
-        onHandCases: line.on_hand_cases,
-        requiredToOrder: line.required_to_order,
-        lbsRequired: line.lbs_required,
-        isEmergency: line.is_emergency,
-      })),
+      lines,
+      earliestOrderBy: orderByDates[0] ?? null,
     };
   });
 
@@ -318,5 +369,10 @@ export function buildFinalOrderSnapshot(input: {
     },
   };
 
-  return { ok: true, snapshot };
+  const uncategorized = groups.find((group) => group.key === UNCATEGORIZED_KEY);
+  const warning = uncategorized
+    ? `${uncategorized.lines.length} material(s) have no buy category set, grouped under Uncategorized. Tag them on Purchasing → Materials.`
+    : null;
+
+  return { ok: true, snapshot, warning };
 }

@@ -1,0 +1,14 @@
+---
+description: Every module uses the same Configuration UI, DataTable, and settings kit
+alwaysApply: true
+---
+
+# Module UI and settings
+
+Every app (Production, Purchasing, HR, and any new one) uses the same chrome and the same Configuration shape. Do not invent a second layout for a module.
+
+- Lists and catalogs: `DataTable` from `@/components/ui/data-table` (the Planning grid is the exception — it is a date matrix).
+- Configuration pages: `SettingsPage`, `useConfigRunner`, switches, Search, Save from `@/components/settings/shared`.
+- Configuration lives under that module's **Configuration** menu, admin-gated in the settings layout.
+- Saved module config is a React context for that app (e.g. `usePurchasingConfig()`), loaded once in the module layout — not a "currently selected" summary band on the settings page. The table's Include column is the selection.
+- Current app: `useModuleSettings()` from `@/components/settings/module-context`.

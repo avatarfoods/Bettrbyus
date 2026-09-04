@@ -51,6 +51,7 @@ type RecipeRow = {
   name: string;
   department: string | null;
   batch_size: number | null;
+  batch_yield: number | null;
   uom: string | null;
   active: boolean;
 };
@@ -79,7 +80,7 @@ export async function fetchWipData(supabase: SupabaseClient): Promise<WipData> {
     await Promise.all([
       supabase
         .from("purchasing_recipes")
-        .select("id, wip_code, name, department, batch_size, uom, active")
+        .select("id, wip_code, name, department, batch_size, batch_yield, uom, active")
         .eq("active", true),
       supabase
         .from("purchasing_recipe_lines")
@@ -106,6 +107,7 @@ export async function fetchWipData(supabase: SupabaseClient): Promise<WipData> {
         name: row.name,
         department: row.department,
         batchSize: row.batch_size,
+        batchYield: row.batch_yield,
         uom: row.uom,
       },
     ])
