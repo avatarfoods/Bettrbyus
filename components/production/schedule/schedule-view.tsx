@@ -941,24 +941,48 @@ export function ScheduleView({
     if (!groupByDept) return flat;
 
     /*
-      Gathered by department, departments in build order.
+      Gathered by department, departments by tree level.
 
-      A department's place is where its first row falls in the tree - finished
-      products, then assembly, then the kitchen, then produce - so the groups
-      still read top to bottom the way the plan is explained. Inside a group
-      the rows keep that same order.
+      Finished products on top, then assembly, then the kitchen, produce
+      last - the order the plan is explained in. A department's level is how
+      deep its rows sit on average, with the two ends pinned: whatever is
+      finished is first and produce is always last, however shallow one
+      onion happens to sit. Inside a group the rows keep build order.
     */
-    const rank = new Map<string, number>();
+    const depthSum = new Map<
+      string,
+      { total: number; count: number; first: number; finished: boolean }
+    >();
     flat.forEach((row, index) => {
       const key = departmentFamily(row.recipe.department);
-      if (!rank.has(key)) rank.set(key, index);
+      const entry = depthSum.get(key) ?? {
+        total: 0,
+        count: 0,
+        first: index,
+        finished: false,
+      };
+      entry.total += row.treeDepth ?? 0;
+      entry.count += 1;
+      entry.finished = entry.finished || row.recipe.isFinished;
+      depthSum.set(key, entry);
     });
+    // One level per department, so a group never splits in two.
+    const level = (row: (typeof flat)[number]) => {
+      const key = departmentFamily(row.recipe.department);
+      const entry = depthSum.get(key);
+      if (entry?.finished) return -1;
+      if (/produce/i.test(key)) return Number.POSITIVE_INFINITY;
+      return entry ? entry.total / entry.count : 0;
+    };
     return flat
       .map((row, index) => ({ row, index }))
       .sort((a, b) => {
-        const ga = rank.get(departmentFamily(a.row.recipe.department)) ?? 0;
-        const gb = rank.get(departmentFamily(b.row.recipe.department)) ?? 0;
-        return ga - gb || a.index - b.index;
+        const la = level(a.row);
+        const lb = level(b.row);
+        if (la !== lb) return la - lb;
+        const fa = depthSum.get(departmentFamily(a.row.recipe.department))?.first ?? 0;
+        const fb = depthSum.get(departmentFamily(b.row.recipe.department))?.first ?? 0;
+        return fa - fb || a.index - b.index;
       })
       .map(({ row }) => row);
   }, [rows, working, dept, groupByDept, query]);
