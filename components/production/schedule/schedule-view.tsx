@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   Boxes,
@@ -260,6 +267,25 @@ export function ScheduleView({
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
+
+  /*
+    Typing on the live view looked like it did nothing.
+
+    Every keystroke saves into your draft - it has to, so the floor does not
+    change under them mid-shift - but the page was still showing live, so the
+    refresh put the old number straight back and the plan appeared to refuse
+    the edit. Now the view follows the edit into the draft it just landed in.
+    Confirm is what puts it back on live.
+  */
+  const followDraft = useCallback(
+    (draftId: string) => {
+      if (viewingId !== null) return;
+      const search = new URLSearchParams(window.location.search);
+      search.set("view", draftId);
+      router.replace(`/production/schedule?${search}`);
+    },
+    [viewingId, router]
+  );
 
   const changed = useMemo(() => new Set(draftChanges), [draftChanges]);
   const myDraft = drafts.find((draft) => draft.id === myDraftId);
@@ -1445,6 +1471,7 @@ export function ScheduleView({
             { recipeId, productionDate: date, quantity: quantity ?? 0 },
           ])
         }
+        onDraftOpened={followDraft}
         today={today}
         dates={dates}
         rows={shown}
