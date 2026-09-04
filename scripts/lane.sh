@@ -294,7 +294,16 @@ create_admin_user() {
     echo "lane: admin user $ADMIN_EMAIL already exists"
   else
     echo "lane: could not create admin user: $out" >&2
+    return 0
   fi
+  # The signup trigger deliberately ignores caller-supplied user_type (issue #10),
+  # so a fresh profile lands as 'user'. Promote it explicitly through the service
+  # role, which the guard trigger allows - the same thing lib/users/actions.ts does.
+  curl -s -o /dev/null -X PATCH "$url/rest/v1/profiles?email=eq.$ADMIN_EMAIL" \
+    -H "apikey: $key" -H "Authorization: Bearer $key" \
+    -H "Content-Type: application/json" -H "Prefer: return=minimal" \
+    -d '{"user_type":"admin"}' \
+    && echo "lane: admin user $ADMIN_EMAIL promoted to admin"
 }
 
 # The dev server log lives next to the worktree, inside .claude/worktrees/, so it never shows up in git status.
