@@ -8,7 +8,6 @@ import {
   ClipboardList,
   CookingPot,
   Factory,
-  FileInput,
   Layers,
   LayoutDashboard,
   ListChecks,
@@ -239,7 +238,7 @@ export const APPS: AppDefinition[] = [
     href: "/purchasing",
     icon: ShoppingCart,
     tint: "warning",
-    description: "Orders, materials and imports",
+    description: "Orders and materials",
     routes: ["/purchasing"],
     menus: [
       {
@@ -262,17 +261,6 @@ export const APPS: AppDefinition[] = [
             label: "All materials",
             href: "/purchasing/materials",
             icon: Package,
-          },
-        ],
-      },
-      {
-        label: "Imports",
-        href: "/purchasing/imports",
-        items: [
-          {
-            label: "Master workbook",
-            href: "/purchasing/imports",
-            icon: FileInput,
           },
         ],
       },
