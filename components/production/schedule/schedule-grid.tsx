@@ -88,6 +88,8 @@ type Props = {
    */
   locked?: boolean;
   onLocalChange?: (recipeId: string, date: string, quantity: number | null) => void;
+  /** A save landed in a draft - the caller may want to follow it there. */
+  onDraftOpened?: (draftId: string) => void;
   today: string;
   dates: string[];
   rows: GridRow[];
@@ -122,6 +124,7 @@ export function ScheduleGrid({
   readOnly = false,
   locked = false,
   onLocalChange,
+  onDraftOpened,
   today,
   dates,
   rows,
@@ -309,6 +312,7 @@ export function ScheduleGrid({
               readOnly={readOnly}
               locked={locked}
               onLocalChange={onLocalChange}
+          onDraftOpened={onDraftOpened}
               dates={dates}
               row={row}
               style={
@@ -377,6 +381,7 @@ function Row({
   readOnly,
   locked,
   onLocalChange,
+  onDraftOpened,
   dates,
   row,
   style,
@@ -391,6 +396,8 @@ function Row({
   readOnly?: boolean;
   locked?: boolean;
   onLocalChange?: (recipeId: string, date: string, quantity: number | null) => void;
+  /** A save landed in a draft - the caller may want to follow it there. */
+  onDraftOpened?: (draftId: string) => void;
   dates: string[];
   row: GridRow;
   style: DepartmentStyle;
@@ -618,6 +625,7 @@ function Row({
           readOnly={readOnly}
           locked={locked}
           onLocalChange={onLocalChange}
+          onDraftOpened={onDraftOpened}
           needed={
             // What this day is on the hook for. A run made early carries the
             // number of the day it is covering, so entering rice on the 5th
@@ -651,6 +659,7 @@ function Cell({
   readOnly,
   locked,
   onLocalChange,
+  onDraftOpened,
   needed,
   anyOpen,
   isSource,
@@ -667,6 +676,8 @@ function Cell({
   readOnly?: boolean;
   locked?: boolean;
   onLocalChange?: (recipeId: string, date: string, quantity: number | null) => void;
+  /** A save landed in a draft - the caller may want to follow it there. */
+  onDraftOpened?: (draftId: string) => void;
   needed: number;
   /** Whether this recipe still has demand nothing covers, anywhere in range. */
   anyOpen: boolean;
@@ -793,8 +804,13 @@ function Cell({
         productionDate: date,
         quantity,
       });
-      if (result.ok) lastSaved.current = displayed;
-      else {
+      if (result.ok) {
+        lastSaved.current = displayed;
+        // Typing always lands in a draft, never on live. Tell the caller
+        // which one, so a live view can follow the edit instead of
+        // refreshing back to the number that was there before.
+        if (result.draftId) onDraftOpened?.(result.draftId);
+      } else {
         setTookSuggest(false);
         setError(result.message);
       }
