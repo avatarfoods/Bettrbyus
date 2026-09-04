@@ -139,8 +139,8 @@ export function SheetHeader({
 export function SignoffRow({ labels }: { labels: string[] }) {
   return (
     <div className="mt-5 flex flex-wrap gap-x-8 gap-y-4 text-[0.625rem] text-zinc-600">
-      {labels.map((label) => (
-        <div key={label} className="min-w-40 flex-1">
+      {labels.map((label, index) => (
+        <div key={`${label}-${index}`} className="min-w-40 flex-1">
           <div className="h-7 border-b border-zinc-500" />
           <span className="mt-0.5 block tracking-wider uppercase">{label}</span>
         </div>
