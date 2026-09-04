@@ -96,10 +96,8 @@ const CATEGORY_ORDER = [...PURCHASING_CATEGORIES, UNCATEGORIZED_KEY];
 
 /**
  * Group buy lines by the admin-tagged purchasing_category
- * (Produce / Protein / Dairy & Refrigerated / Dry Goods / Packaging),
- * not the Odoo-synced odoo_category. Untagged materials land in their own
- * "Uncategorized" bucket rather than being silently merged elsewhere, so
- * gaps in tagging are visible on every finalized order.
+ * (Produce / Protein / Dairy & Refrigerated / Dry Goods / Packaging).
+ * @deprecated The Final Order and Total Orders list group by Odoo category.
  */
 export function groupLinesByPurchasingCategory(lines: PurchaseLine[]) {
   const buckets = new Map<string, PurchaseLine[]>();
@@ -124,8 +122,7 @@ export function groupLinesByPurchasingCategory(lines: PurchaseLine[]) {
 
 /**
  * Group buy lines by Odoo category on the matched material
- * (Master Fresh item id → purchasing_materials.item_code → odoo_category).
- * @deprecated Prefer groupLinesByPurchasingCategory — kept for old snapshots.
+ * (same bands as Total Orders). Unmatched rows land in Other / uncategorized.
  */
 export function groupLinesByItemCategory(lines: PurchaseLine[]) {
   const buckets = new Map<string, PurchaseLine[]>();
@@ -323,7 +320,7 @@ export function buildFinalOrderSnapshot(input: {
     };
   }
 
-  const sections = groupLinesByPurchasingCategory(orderLines);
+  const sections = groupLinesByItemCategory(orderLines);
   const groups: FinalOrderGroup[] = sections.map((section) => {
     const meta = input.tracking[section.key];
     const lines = section.lines.map((line) => ({
@@ -369,9 +366,9 @@ export function buildFinalOrderSnapshot(input: {
     },
   };
 
-  const uncategorized = groups.find((group) => group.key === UNCATEGORIZED_KEY);
+  const uncategorized = groups.find((group) => group.key === "OTHER");
   const warning = uncategorized
-    ? `${uncategorized.lines.length} material(s) have no buy category set, grouped under Uncategorized. Tag them on Purchasing → Materials.`
+    ? `${uncategorized.lines.length} material(s) have no Odoo category, grouped under Other / uncategorized.`
     : null;
 
   return { ok: true, snapshot, warning };

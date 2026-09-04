@@ -6,6 +6,8 @@ import { format, parseISO } from "date-fns";
 import {
   AlertTriangle,
   CalendarRange,
+  ChevronDown,
+  ChevronRight,
   Columns3,
   ListFilter,
   Loader2,
@@ -39,13 +41,21 @@ import {
 import {
   buildFinalOrderSnapshot,
   clearFinalOrderLocal,
-  groupLinesByItemCategory,
   loadFinalOrder,
   loadGroupTracking,
+  odooCategoryLabel,
   saveFinalOrder,
   type FinalOrderSnapshot,
   type GroupTrackingMap,
 } from "@/lib/purchasing/finalize-order";
+import {
+  groupCodeGroupsByCategory,
+  groupLinesByCodeStem,
+  itemCodeStem,
+  mixedPackLabel,
+  stemsMatchingChildQuery,
+  type CodeGroup,
+} from "@/lib/purchasing/code-groups";
 import { printFinalOrder } from "@/lib/purchasing/print-final-order";
 import {
   fetchCycles,
@@ -90,6 +100,7 @@ import { cn } from "@/lib/utils";
 const MATRIX_COLUMN_DEFS = [
   { key: "itemCode", label: "Item #", always: true },
   { key: "description", label: "Description", always: true },
+  { key: "caseSpec", label: "Lbs/case", always: false },
   { key: "casesRequired", label: "Total case req.", always: false },
   { key: "onHand", label: "On hand", always: false },
   { key: "requiredToOrder", label: "Req. to order", always: false },
@@ -103,6 +114,7 @@ type VisibleColumns = Record<MatrixColumnKey, boolean>;
 const DEFAULT_VISIBLE_COLUMNS: VisibleColumns = {
   itemCode: true,
   description: true,
+  caseSpec: true,
   casesRequired: true,
   onHand: true,
   requiredToOrder: true,
@@ -113,7 +125,13 @@ const VISIBLE_COLUMNS_STORAGE_KEY = "purchasing-matrix-visible-columns";
 
 const ONLY_TO_ORDER_STORAGE_KEY = "purchasing-matrix-only-to-order";
 
+const MATRIX_VIEW_STORAGE_KEY = "purchasing-matrix-view";
+
+const HIDDEN_CATEGORIES_STORAGE_KEY = "purchasing-matrix-hidden-categories";
+
 const HIDE_PRODUCE_STORAGE_KEY = "purchasing-matrix-hide-produce";
+
+type MatrixView = "to-order" | "requested";
 
 const SELECTED_LINE_STORAGE_KEY = "purchasing-matrix-selected-line";
 
@@ -165,14 +183,29 @@ function loadHideProduce(): boolean {
   }
 }
 
-/** Default narrows to shortages; buyers can turn it off to see the full list. */
-function loadOnlyToOrder(): boolean {
-  if (typeof window === "undefined") return true;
+/** Default is shortages. "requested" is everything this week actually needs. */
+function loadMatrixView(): MatrixView {
+  if (typeof window === "undefined") return "to-order";
   try {
-    const raw = window.localStorage.getItem(ONLY_TO_ORDER_STORAGE_KEY);
-    return raw === null ? true : raw === "true";
+    const saved = window.localStorage.getItem(MATRIX_VIEW_STORAGE_KEY);
+    if (saved === "to-order" || saved === "requested") return saved;
+    const legacy = window.localStorage.getItem(ONLY_TO_ORDER_STORAGE_KEY);
+    return legacy === "false" ? "requested" : "to-order";
   } catch {
-    return true;
+    return "to-order";
+  }
+}
+
+function loadHiddenCategories(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(HIDDEN_CATEGORIES_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((key): key is string => typeof key === "string");
+  } catch {
+    return [];
   }
 }
 
@@ -408,6 +441,7 @@ type LineRowProps = {
   visibleColumns: VisibleColumns;
   onChanged: (line: PurchaseLine) => void;
   onOpenDetail: (materialId: string) => void;
+  indented?: boolean;
 };
 
 function MatrixLineRow({
@@ -415,6 +449,7 @@ function MatrixLineRow({
   visibleColumns,
   onChanged,
   onOpenDetail,
+  indented = false,
 }: LineRowProps) {
   const [casesRequired, setCasesRequired] = useState(String(line.cases_required));
   const [editingCases, setEditingCases] = useState(false);
@@ -485,27 +520,30 @@ function MatrixLineRow({
         line.is_emergency && "bg-destructive/12 hover:bg-destructive/12",
         line.required_to_order > 0 &&
           !line.is_emergency &&
-          "bg-warning-muted/40 hover:bg-warning-muted/40"
+          "bg-muted/70 hover:bg-muted/80"
       )}
     >
       {visibleColumns.itemCode && (
         <TableCell className="px-2 py-0.5 font-mono text-xs">
-          {material ? (
-            <button
-              type="button"
-              onClick={() => onOpenDetail(material.id)}
-              className="text-left text-primary underline-offset-2 hover:underline"
-            >
-              {material.item_code}
-            </button>
-          ) : (
-            <span
-              className="text-muted-foreground"
-              title="Not in Odoo — shown from the Excel MASTER PICKING ORDER"
-            >
-              {lineItemCode(line)}
-            </span>
-          )}
+          <span className="flex items-center gap-1.5">
+            {indented ? <span className="inline-block w-4 shrink-0" /> : null}
+            {material ? (
+              <button
+                type="button"
+                onClick={() => onOpenDetail(material.id)}
+                className="text-left text-primary underline-offset-2 hover:underline"
+              >
+                {material.item_code}
+              </button>
+            ) : (
+              <span
+                className="text-muted-foreground"
+                title="Not in Odoo — shown from the Excel MASTER PICKING ORDER"
+              >
+                {lineItemCode(line)}
+              </span>
+            )}
+          </span>
         </TableCell>
       )}
       {visibleColumns.description && (
@@ -535,56 +573,53 @@ function MatrixLineRow({
           </span>
         </TableCell>
       )}
-      {visibleColumns.casesRequired && (
-        <TableCell className="px-2 py-0.5 text-right text-xs tabular-nums">
-          {editingCases ? (
-            <Input
-              ref={casesInputRef}
-              type="number"
-              min={0}
-              step={1}
-              value={casesRequired}
-              onChange={(event) => setCasesRequired(event.target.value)}
-              onBlur={() => void saveCases()}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.currentTarget.blur();
-                }
-                if (event.key === "Escape") {
-                  setCasesRequired(String(line.cases_required));
-                  setEditingCases(false);
-                }
-              }}
-              disabled={isSaving}
-              className="h-7 w-20 ml-auto text-right tabular-nums"
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setEditingCases(true)}
-              className="ml-auto block min-w-12 rounded px-1.5 py-0.5 text-right hover:bg-muted"
-              title="Click to edit total case req."
-            >
-              {line.cases_required.toLocaleString()}
-            </button>
-          )}
-        </TableCell>
-      )}
-      {visibleColumns.onHand && (
-        <TableCell className="px-2 py-0.5 text-right text-xs tabular-nums text-muted-foreground">
-          {line.on_hand_cases != null ? line.on_hand_cases.toLocaleString() : "—"}
-        </TableCell>
-      )}
-      {visibleColumns.requiredToOrder && (
-        <TableCell className="px-2 py-0.5 text-right text-xs font-semibold tabular-nums">
-          {line.required_to_order.toLocaleString()}
-        </TableCell>
-      )}
-      {visibleColumns.totalLbs && (
-        <TableCell className="px-2 py-0.5 text-right text-xs tabular-nums text-muted-foreground">
-          {line.lbs_required != null ? Math.round(line.lbs_required).toLocaleString() : "—"}
-        </TableCell>
-      )}
+      <NumericCell visible={visibleColumns.caseSpec} muted>
+        {material?.lbs_per_case != null && material.lbs_per_case > 0
+          ? material.lbs_per_case.toLocaleString()
+          : "—"}
+      </NumericCell>
+      <NumericCell visible={visibleColumns.casesRequired}>
+        {editingCases ? (
+          <Input
+            ref={casesInputRef}
+            type="number"
+            min={0}
+            step={1}
+            value={casesRequired}
+            onChange={(event) => setCasesRequired(event.target.value)}
+            onBlur={() => void saveCases()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.currentTarget.blur();
+              }
+              if (event.key === "Escape") {
+                setCasesRequired(String(line.cases_required));
+                setEditingCases(false);
+              }
+            }}
+            disabled={isSaving}
+            className="h-7 w-20 text-right tabular-nums"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditingCases(true)}
+            className="rounded py-0.5 text-right hover:bg-muted"
+            title="Click to edit total case req."
+          >
+            {line.cases_required.toLocaleString()}
+          </button>
+        )}
+      </NumericCell>
+      <NumericCell visible={visibleColumns.onHand} muted>
+        {line.on_hand_cases != null ? line.on_hand_cases.toLocaleString() : "—"}
+      </NumericCell>
+      <NumericCell visible={visibleColumns.requiredToOrder} strong>
+        {line.required_to_order.toLocaleString()}
+      </NumericCell>
+      <NumericCell visible={visibleColumns.totalLbs} muted>
+        {line.lbs_required != null ? Math.round(line.lbs_required).toLocaleString() : "—"}
+      </NumericCell>
     </TableRow>
   );
 }
@@ -623,6 +658,126 @@ function CategorySectionHeader({
   );
 }
 
+function MixedFlag({ title }: { title: string }) {
+  return (
+    <span title={title} className="inline-flex">
+      <AlertTriangle className="size-3 shrink-0 text-warning-foreground" />
+    </span>
+  );
+}
+
+function NumericCell({
+  visible,
+  muted,
+  strong,
+  className,
+  children,
+}: {
+  visible: boolean;
+  muted?: boolean;
+  strong?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  if (!visible) return null;
+  return (
+    <TableCell
+      className={cn(
+        "px-2 py-0.5 text-right text-xs tabular-nums",
+        muted && "text-muted-foreground",
+        strong && "font-semibold",
+        className
+      )}
+    >
+      <span className="flex w-full items-center justify-end gap-1">{children}</span>
+    </TableCell>
+  );
+}
+
+type MatrixGroupRowProps = {
+  group: CodeGroup;
+  visibleColumns: VisibleColumns;
+  isOpen: boolean;
+  onToggle: () => void;
+};
+
+function MatrixGroupRow({
+  group,
+  visibleColumns,
+  isOpen,
+  onToggle,
+}: MatrixGroupRowProps) {
+  const packTitle = mixedPackLabel(group.packSizes);
+
+  return (
+    <TableRow
+      className={cn(
+        "cursor-pointer border-b border-border/60 hover:bg-accent/25",
+        isOpen && "bg-muted/40 hover:bg-muted/40",
+        group.isEmergency && "bg-destructive/12 hover:bg-destructive/12",
+        group.hasToOrder &&
+          !group.isEmergency &&
+          "bg-muted/70 hover:bg-muted/80"
+      )}
+      onClick={onToggle}
+      aria-expanded={isOpen}
+    >
+      {visibleColumns.itemCode && (
+        <TableCell className="px-2 py-0.5 font-mono text-xs">
+          <span className="flex items-center gap-1.5">
+            {isOpen ? (
+              <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+            )}
+            {group.stem}
+          </span>
+        </TableCell>
+      )}
+      {visibleColumns.description && (
+        <TableCell className="px-2 py-0.5 text-xs">
+          <span className="flex items-center gap-1">
+            {group.isEmergency && (
+              <AlertTriangle className="size-3 shrink-0 text-destructive" />
+            )}
+            <span className="truncate font-medium">{group.name}</span>
+            <span className="shrink-0 text-[0.625rem] text-muted-foreground">
+              {group.lines.length} codes
+            </span>
+            {group.isProtein && (
+              <Snowflake className="size-3 shrink-0 text-sky-500" />
+            )}
+          </span>
+        </TableCell>
+      )}
+      <NumericCell visible={visibleColumns.caseSpec} muted>
+        {group.mixedPack && <MixedFlag title={packTitle} />}
+        {group.packSizes.length === 0
+          ? "—"
+          : group.packSizes.map((size) => size.toLocaleString()).join(" / ")}
+      </NumericCell>
+      <NumericCell visible={visibleColumns.casesRequired}>
+        {group.mixedPack && <MixedFlag title={packTitle} />}
+        {group.casesRequired.toLocaleString()}
+      </NumericCell>
+      <NumericCell visible={visibleColumns.onHand} muted>
+        {group.mixedPack && <MixedFlag title={packTitle} />}
+        {group.onHand != null ? group.onHand.toLocaleString() : "—"}
+      </NumericCell>
+      <NumericCell visible={visibleColumns.requiredToOrder} strong>
+        {group.mixedPack && <MixedFlag title={packTitle} />}
+        {group.requiredToOrder.toLocaleString()}
+      </NumericCell>
+      <NumericCell visible={visibleColumns.totalLbs} muted>
+        {group.mixedUom && <MixedFlag title="Mixed LB / units" />}
+        {group.lbsRequired != null
+          ? Math.round(group.lbsRequired).toLocaleString()
+          : "—"}
+      </NumericCell>
+    </TableRow>
+  );
+}
+
 type PurchasingMatrixProps = {
   initialCycleId?: string;
 };
@@ -638,7 +793,9 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [onlyToOrder, setOnlyToOrder] = useState(true);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<MatrixView>("to-order");
+  const [hiddenCategoryKeys, setHiddenCategoryKeys] = useState<string[]>([]);
   const [hideProduce, setHideProduce] = useState(false);
   const [generateCategories, setGenerateCategories] = useState<string[]>([
     ...GENERATE_CATEGORY_KEYS,
@@ -652,6 +809,8 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
   );
   const [columnsOpen, setColumnsOpen] = useState(false);
   const columnsMenuRef = useRef<HTMLDivElement | null>(null);
+  const [sectionFilterOpen, setSectionFilterOpen] = useState(false);
+  const sectionFilterRef = useRef<HTMLDivElement | null>(null);
   const [showGenerate, setShowGenerate] = useState(false);
   const [requiredDate, setRequiredDate] = useState("");
   const [demandFrom, setDemandFrom] = useState("");
@@ -716,22 +875,18 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
   }, [initialCycleId, reloadKey]);
 
   /*
-    The saved view, read once on the client rather than in an effect.
-
-    These come from localStorage, which does not exist on the server, so the
-    first render has to use the defaults either way - but reading them during
-    the first client render means the columns never appear wrong and then
-    correct themselves.
+    Saved view is read after mount. Reading localStorage during render
+    (typeof window !== "undefined") makes the first client HTML differ from
+    the server HTML, which React refuses to patch.
   */
-  const [readSaved, setReadSaved] = useState(false);
-  if (typeof window !== "undefined" && !readSaved) {
-    setReadSaved(true);
+  useEffect(() => {
     setVisibleColumns(loadVisibleColumns());
-    setOnlyToOrder(loadOnlyToOrder());
+    setViewMode(loadMatrixView());
+    setHiddenCategoryKeys(loadHiddenCategories());
     setHideProduce(loadHideProduce());
     setGenerateCategories(loadGenerateCategories());
     setSelectedLineId(loadSelectedLineId());
-  }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -775,6 +930,20 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [columnsOpen]);
+
+  useEffect(() => {
+    if (!sectionFilterOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      if (
+        sectionFilterRef.current &&
+        !sectionFilterRef.current.contains(event.target as Node)
+      ) {
+        setSectionFilterOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [sectionFilterOpen]);
 
   useEffect(() => {
     if (!categoriesOpen) return;
@@ -843,6 +1012,10 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
     };
   }, [selectedCycleId, reloadKey]);
 
+  useEffect(() => {
+    setExpanded(new Set());
+  }, [selectedCycleId]);
+
   const activeCycle = selectedCycleId ? cycle : null;
   const activeLines = useMemo(
     () => (selectedCycleId ? lines : []),
@@ -864,10 +1037,36 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
     [visibleColumns]
   );
 
-  function handleOnlyToOrderChange(next: boolean) {
-    setOnlyToOrder(next);
+  function handleViewModeChange(next: MatrixView) {
+    setViewMode(next);
     try {
-      window.localStorage.setItem(ONLY_TO_ORDER_STORAGE_KEY, String(next));
+      window.localStorage.setItem(MATRIX_VIEW_STORAGE_KEY, next);
+    } catch {
+      // ignore storage failures
+    }
+  }
+
+  function toggleHiddenCategory(key: string) {
+    setHiddenCategoryKeys((current) => {
+      const next = current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key];
+      try {
+        window.localStorage.setItem(
+          HIDDEN_CATEGORIES_STORAGE_KEY,
+          JSON.stringify(next)
+        );
+      } catch {
+        // ignore storage failures
+      }
+      return next;
+    });
+  }
+
+  function showAllCategories() {
+    setHiddenCategoryKeys([]);
+    try {
+      window.localStorage.setItem(HIDDEN_CATEGORIES_STORAGE_KEY, JSON.stringify([]));
     } catch {
       // ignore storage failures
     }
@@ -901,33 +1100,127 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
 
   const filteredLines = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return activeLines.filter((line) => {
-      if (hideProduce && isProduceBuyLine(line)) return false;
-      if (onlyToOrder && !line.is_emergency && line.required_to_order <= 0) {
-        return false;
-      }
+
+    function matchesSearch(line: PurchaseLine) {
       if (!query) return true;
       return (
         lineItemCode(line).toLowerCase().includes(query) ||
         lineItemName(line).toLowerCase().includes(query)
       );
-    });
-  }, [activeLines, search, onlyToOrder, hideProduce]);
+    }
 
-  const categorySections = useMemo(
-    () => groupLinesByItemCategory(filteredLines),
+    function isRequested(line: PurchaseLine) {
+      return line.is_emergency || line.cases_required > 0;
+    }
+
+    function needsOrder(line: PurchaseLine) {
+      return line.is_emergency || line.required_to_order > 0;
+    }
+
+    const byStem = new Map<string, PurchaseLine[]>();
+    const placeholders: PurchaseLine[] = [];
+    for (const line of activeLines) {
+      if (hideProduce && isProduceBuyLine(line)) continue;
+      const code = lineItemCode(line);
+      if (!code || code === "—") {
+        placeholders.push(line);
+        continue;
+      }
+      const stem = itemCodeStem(code);
+      const list = byStem.get(stem) ?? [];
+      list.push(line);
+      byStem.set(stem, list);
+    }
+
+    /*
+      A family stays together. The view asks whether *any* variant qualifies
+      — not whether every sibling does. Filtering each row first left
+      510028-2 alone, so there was nothing to collapse.
+    */
+    const visibleIds = new Set<string>();
+    for (const members of byStem.values()) {
+      const viewOk =
+        viewMode === "to-order"
+          ? members.some(needsOrder)
+          : members.some(isRequested);
+      const searchOk = members.some(matchesSearch);
+      if (!viewOk || !searchOk) continue;
+      for (const line of members) visibleIds.add(line.id);
+    }
+    for (const line of placeholders) {
+      const viewOk =
+        viewMode === "to-order" ? needsOrder(line) : isRequested(line);
+      if (viewOk && matchesSearch(line)) visibleIds.add(line.id);
+    }
+
+    return activeLines.filter((line) => visibleIds.has(line.id));
+  }, [activeLines, search, viewMode, hideProduce]);
+
+  const codeGroups = useMemo(
+    () => groupLinesByCodeStem(filteredLines),
     [filteredLines]
   );
 
+  const categoryOptions = useMemo(() => {
+    const source = hideProduce
+      ? activeLines.filter((line) => !isProduceBuyLine(line))
+      : activeLines;
+    const seen = new Map<string, string>();
+    for (const group of groupLinesByCodeStem(source)) {
+      if (!seen.has(group.categoryKey)) {
+        seen.set(group.categoryKey, odooCategoryLabel(group.categoryKey));
+      }
+    }
+    return [...seen.entries()]
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) =>
+        a.label.localeCompare(b.label, undefined, { numeric: true })
+      );
+  }, [activeLines, hideProduce]);
+
+  const hiddenCategorySet = useMemo(
+    () => new Set(hiddenCategoryKeys),
+    [hiddenCategoryKeys]
+  );
+
+  const visibleCodeGroups = useMemo(
+    () =>
+      hiddenCategorySet.size === 0
+        ? codeGroups
+        : codeGroups.filter((group) => !hiddenCategorySet.has(group.categoryKey)),
+    [codeGroups, hiddenCategorySet]
+  );
+
+  const categorySections = useMemo(
+    () => groupCodeGroupsByCategory(visibleCodeGroups),
+    [visibleCodeGroups]
+  );
+
+  const searchExpandKeys = useMemo(
+    () => stemsMatchingChildQuery(codeGroups, search),
+    [codeGroups, search]
+  );
+
+  function toggleGroup(key: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   const totals = useMemo(() => {
-    return filteredLines.reduce(
-      (acc, line) => {
-        acc.items += 1;
-        acc.casesRequired += line.cases_required;
-        acc.onHand += line.on_hand_cases ?? 0;
-        acc.requiredToOrder += line.required_to_order;
-        acc.lbsRequired += line.lbs_required ?? 0;
-        if (line.required_to_order > 0) acc.itemsToOrder += 1;
+    return visibleCodeGroups.reduce(
+      (acc, group) => {
+        for (const line of group.lines) {
+          acc.items += 1;
+          acc.casesRequired += line.cases_required;
+          acc.onHand += line.on_hand_cases ?? 0;
+          acc.requiredToOrder += line.required_to_order;
+          acc.lbsRequired += line.lbs_required ?? 0;
+          if (line.required_to_order > 0) acc.itemsToOrder += 1;
+        }
         return acc;
       },
       {
@@ -939,7 +1232,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
         lbsRequired: 0,
       }
     );
-  }, [filteredLines]);
+  }, [visibleCodeGroups]);
 
   const summary = useMemo(() => {
     const actionable = activeLines.filter(
@@ -1092,7 +1385,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
     startFinalize(() => {
       const result = buildFinalOrderSnapshot({
         cycle: activeCycle,
-        lines: activeLines,
+        lines: visibleCodeGroups.flatMap((group) => group.lines),
         tracking: groupTracking,
       });
       if (!result.ok) {
@@ -1657,21 +1950,93 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
               )}
             </div>
 
-            <Hairline />
+          <Hairline />
 
-            <label
-              className="flex items-center gap-1.5 text-xs"
-              title="Hide rows already covered by on hand (Req. to order = 0)"
+          <span className="flex overflow-hidden rounded-sm ring-1 ring-foreground/15">
+            {(
+              [
+                ["to-order", "To order"],
+                ["requested", "Requested"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => handleViewModeChange(key)}
+                aria-pressed={viewMode === key}
+                title={
+                  key === "to-order"
+                    ? "Only shortages (Req. to order > 0)"
+                    : "Everything this week needs, including what's already covered by on hand"
+                }
+                className={cn(
+                  "h-7 px-2 text-[0.6875rem] font-semibold tracking-wide whitespace-nowrap transition-colors",
+                  viewMode === key
+                    ? "bg-foreground text-background"
+                    : "bg-card text-muted-foreground hover:bg-muted"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </span>
+
+          <div className="relative" ref={sectionFilterRef}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setSectionFilterOpen((open) => !open)}
+              aria-expanded={sectionFilterOpen}
+              aria-haspopup="menu"
             >
-              <input
-                type="checkbox"
-                checked={onlyToOrder}
-                onChange={(event) => handleOnlyToOrderChange(event.target.checked)}
-                className="size-3.5 accent-primary"
-              />
-              Need to order only
-            </label>
-            <label
+              <ListFilter />
+              {hiddenCategoryKeys.length === 0
+                ? "Categories"
+                : `${categoryOptions.filter((option) => !hiddenCategorySet.has(option.key)).length} of ${categoryOptions.length}`}
+            </Button>
+            {sectionFilterOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 z-20 mt-1 w-64 rounded-md bg-popover p-2 text-popover-foreground shadow-md ring-1 ring-foreground/10"
+              >
+                <p className="mb-1.5 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Show categories
+                </p>
+                <div className="flex max-h-72 flex-col gap-0.5 overflow-y-auto">
+                  {categoryOptions.length === 0 ? (
+                    <p className="px-1.5 py-1 text-xs text-muted-foreground">
+                      No categories in this view.
+                    </p>
+                  ) : (
+                    categoryOptions.map((option) => (
+                      <label
+                        key={option.key}
+                        className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-muted"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!hiddenCategorySet.has(option.key)}
+                          onChange={() => toggleHiddenCategory(option.key)}
+                          className="size-3.5 accent-primary"
+                        />
+                        <span className="min-w-0 truncate">{option.label}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="mt-1.5 w-full rounded px-1.5 py-1 text-left text-[11px] text-primary hover:bg-muted"
+                  onClick={showAllCategories}
+                >
+                  Show all
+                </button>
+              </div>
+            )}
+          </div>
+
+          <label
               className="flex items-center gap-1.5 text-xs"
               title="Produce is ordered separately from the Produce Schedule"
             >
@@ -1765,6 +2130,11 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                       Description
                     </TableHead>
                   )}
+                  {visibleColumns.caseSpec && (
+                    <TableHead className="h-8 border-b border-border px-2 text-right text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">
+                      Lbs/case
+                    </TableHead>
+                  )}
                   {visibleColumns.casesRequired && (
                     <TableHead className="h-8 border-b border-border px-2 text-right text-[0.5625rem] font-semibold tracking-wider text-primary uppercase">
                       Total case req.
@@ -1788,7 +2158,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredLines.length === 0 ? (
+                {visibleCodeGroups.length === 0 ? (
                   <TableRow>
                     <TableCell
                       colSpan={visibleColumnCount}
@@ -1805,18 +2175,51 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                       <Fragment key={section.key}>
                         <CategorySectionHeader
                           label={section.label}
-                          lineCount={section.lines.length}
+                          lineCount={section.groups.length}
                           colSpan={visibleColumnCount}
                         />
-                        {section.lines.map((line) => (
-                          <MatrixLineRow
-                            key={line.id}
-                            line={line}
-                            visibleColumns={visibleColumns}
-                            onChanged={handleLineChanged}
-                            onOpenDetail={setDetailMaterialId}
-                          />
-                        ))}
+                        {section.groups.map((group) => {
+                          if (group.lines.length < 2) {
+                            const line = group.lines[0];
+                            if (!line) return null;
+                            return (
+                              <MatrixLineRow
+                                key={line.id}
+                                line={line}
+                                visibleColumns={visibleColumns}
+                                onChanged={handleLineChanged}
+                                onOpenDetail={setDetailMaterialId}
+                              />
+                            );
+                          }
+
+                          const isOpen =
+                            searchExpandKeys.has(group.key) !==
+                            expanded.has(group.key);
+
+                          return (
+                            <Fragment key={group.key}>
+                              <MatrixGroupRow
+                                group={group}
+                                visibleColumns={visibleColumns}
+                                isOpen={isOpen}
+                                onToggle={() => toggleGroup(group.key)}
+                              />
+                              {isOpen
+                                ? group.lines.map((line) => (
+                                    <MatrixLineRow
+                                      key={line.id}
+                                      line={line}
+                                      visibleColumns={visibleColumns}
+                                      onChanged={handleLineChanged}
+                                      onOpenDetail={setDetailMaterialId}
+                                      indented
+                                    />
+                                  ))
+                                : null}
+                            </Fragment>
+                          );
+                        })}
                       </Fragment>
                     ))}
                     <TableRow className="border-t-2 border-t-brand/40 bg-muted hover:bg-muted">
@@ -1831,26 +2234,21 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                           {totals.itemsToOrder.toLocaleString()} to order
                         </TableCell>
                       )}
-                      {visibleColumns.casesRequired && (
-                        <TableCell className="px-2 py-1.5 text-right text-xs font-semibold tabular-nums">
-                          {totals.casesRequired.toLocaleString()}
-                        </TableCell>
-                      )}
-                      {visibleColumns.onHand && (
-                        <TableCell className="px-2 py-1.5 text-right text-xs tabular-nums text-muted-foreground">
-                          {totals.onHand.toLocaleString()}
-                        </TableCell>
-                      )}
-                      {visibleColumns.requiredToOrder && (
-                        <TableCell className="px-2 py-1.5 text-right text-xs font-semibold tabular-nums">
-                          {totals.requiredToOrder.toLocaleString()}
-                        </TableCell>
-                      )}
-                      {visibleColumns.totalLbs && (
-                        <TableCell className="px-2 py-1.5 text-right text-xs tabular-nums text-muted-foreground">
-                          {Math.round(totals.lbsRequired).toLocaleString()}
-                        </TableCell>
-                      )}
+                      <NumericCell visible={visibleColumns.caseSpec} muted className="py-1.5">
+                        —
+                      </NumericCell>
+                      <NumericCell visible={visibleColumns.casesRequired} strong className="py-1.5">
+                        {totals.casesRequired.toLocaleString()}
+                      </NumericCell>
+                      <NumericCell visible={visibleColumns.onHand} muted className="py-1.5">
+                        {totals.onHand.toLocaleString()}
+                      </NumericCell>
+                      <NumericCell visible={visibleColumns.requiredToOrder} strong className="py-1.5">
+                        {totals.requiredToOrder.toLocaleString()}
+                      </NumericCell>
+                      <NumericCell visible={visibleColumns.totalLbs} muted className="py-1.5">
+                        {Math.round(totals.lbsRequired).toLocaleString()}
+                      </NumericCell>
                     </TableRow>
                   </>
                 )}
