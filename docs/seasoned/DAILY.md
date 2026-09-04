@@ -69,20 +69,20 @@ Inside Studio the useful places are:
 - **Authentication, Users**: see who exists, create a user by hand, or reset a password. A user created here gets a `profiles` row from the trigger; set `user_type` to `admin` on that row if the account should be an admin.
 - **Database, Policies**: the row-level security policies the migrations install.
 
-Without Studio, the database is still reachable from the terminal: `up` prints a `postgresql://postgres:postgres@127.0.0.1:543x2/postgres` URL that works with `psql`, and `supabase migration list` inside the worktree shows the migration state.
+Without Studio, the database is still reachable from the terminal: `up` prints a `postgresql://postgres:postgres@127.0.0.1:543x2/postgres` URL that works with `psql`, and `scripts/lane.sh run supabase migration list` shows the migration state.
 
 ## 6. Other Supabase commands
 
-Run these inside the worktree, where they address the lane's own stack:
+Run these through `scripts/lane.sh run`, which points the CLI at the lane's own stack. A bare `supabase` command inside a worktree addresses the main checkout's stack instead, because the worktree's `supabase/config.toml` is the committed one with the default ports.
 
 ```bash
-supabase status                  # URLs and keys of this lane's stack
-supabase migration new <name>    # new migration file with a fresh timestamp
-supabase migration up            # apply migration files the lane has not run yet
-supabase db reset                # wipe the lane's database and replay every migration (and seed.sql)
+scripts/lane.sh run supabase status                  # URLs and keys of this lane's stack
+scripts/lane.sh run supabase migration new <name>    # new migration file with a fresh timestamp
+scripts/lane.sh run supabase migration up            # apply migration files the lane has not run yet
+scripts/lane.sh run supabase db reset                # wipe the lane's database and replay every migration (and seed.sql)
 ```
 
-`supabase db reset` deletes the lane's users too; run `scripts/lane.sh up` afterwards to recreate the admin account.
+`supabase db reset` deletes the lane's users too; run `scripts/lane.sh up` afterwards to recreate the admin account. If the task needs a change to `supabase/config.toml`, edit and commit it like any other file; the next `up` restarts the lane's stack with it.
 
 ## 7. Finish a task
 
