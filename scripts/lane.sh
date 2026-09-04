@@ -6,7 +6,8 @@ BASE_BRANCH="seasoned"        # lanes are cut from this branch; pull requests ta
 ENV_FILE=".env.local"         # copied into each worktree by .worktreeinclude, then overridden here
 APP_PORT_BASE=3001            # lane 1 serves Next on 3001, lane 2 on 3002, ...
 SUPABASE_PORT_BASE=54330      # lane i uses ports SUPABASE_PORT_BASE+10*i .. +9 (main checkout keeps 5432x)
-INSTALL_CMD="npm ci"
+# --no-audit: npm's advisory request can hang for minutes and a lane does not need the report.
+INSTALL_CMD="npm ci --no-audit --no-fund"
 ADMIN_EMAIL="admin@local.test"      # local admin created in every lane (same as docs/seasoned/INSTALL.md)
 ADMIN_PASSWORD="bettrbyus-local"
 # -----------------------------------------------------------------------------
