@@ -42,10 +42,13 @@ const APP_NAME = "Bettrbyus";
 export function AppFrameClient({
   email,
   isAdmin,
+  logoUrl = null,
   children,
 }: {
   email: string;
   isAdmin: boolean;
+  /** From Settings > Appearance. Null means the shipped logo. */
+  logoUrl?: string | null;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -55,30 +58,38 @@ export function AppFrameClient({
     <ModuleSettingsProvider app={app} isAdmin={isAdmin}>
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-50 flex h-(--app-bar-height) shrink-0 items-center gap-1 bg-sidebar px-2 text-sidebar-foreground sm:gap-2 sm:px-3">
+        {/*
+          The logo and the app's name are the way home.
+
+          There used to be a separate grid button for that, which made two
+          controls for one destination and left the name a link to a page you
+          were already on. One link, one meaning: click it and you are back at
+          the launcher with every app in front of you.
+        */}
         <Link
           href="/"
           aria-label="All apps"
           title="All apps"
-          className={cn(
-            "inline-flex size-8 shrink-0 items-center justify-center rounded-md text-sidebar-link transition-colors",
-            "hover:bg-sidebar-accent hover:text-white",
-            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring",
+          className="flex shrink-0 items-center gap-2 rounded-md px-1 py-0.5 outline-none transition-colors hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring"
+        >
+          {logoUrl ? (
+            // A plain img: the URL is whatever Settings holds, and Next's
+            // Image would refuse a host it was not configured for.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={logoUrl}
+              alt=""
+              className="size-8 shrink-0 object-contain"
+            />
+          ) : (
+            <Image
+              src="/logo.png"
+              alt=""
+              width={32}
+              height={32}
+              className="size-8 shrink-0 object-contain brightness-0 invert"
+            />
           )}
-        >
-          <LayoutGrid className="size-[1.05rem]" />
-        </Link>
-
-        <Link
-          href={app?.href ?? "/"}
-          className="flex shrink-0 items-center gap-2 rounded-md px-1 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring"
-        >
-          <Image
-            src="/logo.png"
-            alt=""
-            width={22}
-            height={22}
-            className="size-[1.35rem] shrink-0 object-contain brightness-0 invert"
-          />
           <span className="font-heading text-sm font-bold tracking-tight text-white">
             {app ? app.name : APP_NAME}
           </span>

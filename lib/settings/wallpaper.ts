@@ -66,6 +66,8 @@ export type AppSettings = {
   /** Image URL, layered over the colour when present. */
   wallpaperImageUrl: string | null;
   showLogoWatermark: boolean;
+  /** The logo in the top bar. Null means the one shipped with the app. */
+  logoUrl: string | null;
 };
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -73,6 +75,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   wallpaperColor: null,
   wallpaperImageUrl: null,
   showLogoWatermark: true,
+  logoUrl: null,
 };
 
 export function presetById(id: WallpaperPresetId): WallpaperPreset | null {
@@ -135,6 +138,7 @@ type AppSettingsRow = {
   wallpaper_color: string | null;
   wallpaper_image_url: string | null;
   show_logo_watermark: boolean | null;
+  logo_url?: string | null;
 };
 
 function rowToSettings(row: AppSettingsRow | null): AppSettings {
@@ -153,6 +157,7 @@ function rowToSettings(row: AppSettingsRow | null): AppSettings {
       ? row.wallpaper_image_url
       : null,
     showLogoWatermark: row.show_logo_watermark ?? true,
+    logoUrl: isSafeImageUrl(row.logo_url) ? row.logo_url : null,
   };
 }
 
@@ -163,11 +168,12 @@ function rowToSettings(row: AppSettingsRow | null): AppSettings {
 export async function fetchAppSettings(
   supabase: SupabaseClient
 ): Promise<AppSettings> {
+  // "*" rather than a column list: the logo column arrived with a later
+  // migration, and naming it on a database without it would fail the whole
+  // read and blank the wallpaper too.
   const { data, error } = await supabase
     .from("app_settings")
-    .select(
-      "wallpaper_preset, wallpaper_color, wallpaper_image_url, show_logo_watermark"
-    )
+    .select("*")
     .maybeSingle();
 
   if (error) return DEFAULT_APP_SETTINGS;

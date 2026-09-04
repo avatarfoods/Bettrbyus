@@ -1,5 +1,6 @@
 "use client";
 
+
 import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -7,8 +8,8 @@ import {
   ChevronDown,
   Loader2,
   Plus,
-  Settings2,
   Undo2,
+  History,
 } from "lucide-react";
 import {
   clearRange,
@@ -20,6 +21,12 @@ import {
 import type { DraftSummary } from "@/lib/production/schedule/ensure";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Hint } from "@/components/production/settings/shared";
+import {
+  GearAction,
+  GearButton,
+  GearDialog,
+  GearLink,
+} from "@/components/ui/gear-dialog";
 import { cn } from "@/lib/utils";
 
 /**
@@ -233,28 +240,40 @@ export function PlanPicker({
         belong next to the thing that says which plan you are on rather than
         halfway down a toolbar of filters.
       */}
-      {editing && canEdit && (
+      {canEdit && (
         <span className="relative">
-          <button
-            type="button"
-            onClick={() => setMenu((value) => !value)}
-            aria-expanded={menu}
-            aria-label="Plan actions"
-            title="Start over, copy the live plan in, clear this range"
-            className="inline-flex size-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <Settings2 className="size-4" />
-          </button>
+          <GearButton
+            onClick={() => setMenu(true)}
+            label="Plan settings"
+            title={
+              editing
+                ? "Plan history, start over, copy the live plan in, clear this range"
+                : "Plan history"
+            }
+          />
 
-          {menu && (
-            <>
-              <button
-                type="button"
-                aria-label="Close"
-                onClick={() => setMenu(false)}
-                className="fixed inset-0 z-[55] cursor-default"
-              />
-              <div className="absolute top-8 right-0 z-[60] w-64 overflow-hidden rounded-sm bg-card shadow-lg ring-1 ring-foreground/15">
+          <GearDialog
+            open={menu}
+            onOpenChange={setMenu}
+            title="The plan"
+            description={
+              editing
+                ? "Its history, and the three things that change your draft in one go."
+                : "Its history. Open the plan for editing to copy, clear or start a draft again."
+            }
+            error={error}
+          >
+            {/* Who confirmed what, and when. Out of the Planning menu and in
+                here, beside the plan it is the history of. */}
+            <GearLink
+              href="/production/schedule/history"
+              icon={<History />}
+              title="Plan history"
+              hint="Every confirm to the live plan, who did it and when."
+              onClick={() => setMenu(false)}
+            />
+            {editing && (
+              <>
                 <PlanAction
                   title="Copy the live plan in"
                   hint="Takes the live numbers for this range into your draft, so you change them instead of retyping them."
@@ -329,9 +348,9 @@ export function PlanPicker({
                     });
                   }}
                 />
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </GearDialog>
         </span>
       )}
 
@@ -479,19 +498,12 @@ function PlanAction({
   onClick: () => void;
 }) {
   return (
-    <span className="flex items-center gap-1.5 border-b border-border px-2.5 py-1.5 last:border-b-0">
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled}
-        className={cn(
-          "min-w-0 flex-1 text-left text-xs font-medium hover:underline disabled:opacity-40",
-          danger ? "text-destructive" : "text-foreground"
-        )}
-      >
-        {title}
-      </button>
-      <Hint text={hint} />
-    </span>
+    <GearAction
+      title={title}
+      hint={hint}
+      danger={danger}
+      disabled={disabled}
+      onClick={onClick}
+    />
   );
 }

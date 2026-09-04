@@ -15,7 +15,7 @@ export function FinishedStar({ className }: { className?: string }) {
     <Star
       aria-label="Finished product"
       className={cn(
-        "inline-block size-3.5 shrink-0 fill-warning-foreground text-warning-foreground",
+        "inline-block size-3.5 shrink-0 fill-primary/90 text-primary",
         className
       )}
     />

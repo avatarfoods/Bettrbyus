@@ -1,5 +1,6 @@
 import { PageShell } from "@/components/app-shell/page-shell";
 import { RecipeList } from "@/components/recipes/recipe-list";
+import { RecipeGear } from "@/components/recipes/recipe-gear";
 import { fetchRecipeCatalog } from "@/lib/recipes/catalog";
 import {
   departmentLineMap,
@@ -16,9 +17,16 @@ export const metadata = {
 export default async function RecipesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ kind?: string }>;
+  searchParams: Promise<{
+    /** Old links: ?kind=finished meant the finished-products view. */
+    kind?: string;
+    /** Which line's recipes. Absent means every line. */
+    line?: string;
+    /** "__finished__", or a department name. Absent means every department. */
+    dept?: string;
+  }>;
 }) {
-  const { kind } = await searchParams;
+  const params = await searchParams;
   const supabase = await createClient();
   const [catalog, productionConfig, profile] = await Promise.all([
     fetchRecipeCatalog(supabase),
@@ -42,6 +50,45 @@ export default async function RecipesPage({
     taken: option.taken || taken.has(option.itemCode),
   }));
 
+  /*
+    Line and area, read from the URL the way Planning reads them.
+
+    Both are checked against what exists: a bookmark carrying a line that was
+    deactivated or a department that moved lines falls back to "all" instead
+    of an empty page with a blank dropdown.
+  */
+  const lines = productionConfig.lines
+    .filter((entry) => entry.active)
+    .map((entry) => entry.name);
+  const line = params.line && lines.includes(params.line) ? params.line : null;
+
+  const configured = productionConfig.departments.filter((entry) => entry.active);
+  const lineByDepartment = new Map(
+    configured.map((entry) => [entry.name.trim().toUpperCase(), entry.lineName])
+  );
+  // Configured departments first, then anything the recipes use that
+  // settings has not caught up with - so nothing is unreachable.
+  const departments = [
+    ...new Set([...configured.map((entry) => entry.name), ...catalog.departments]),
+  ]
+    .sort()
+    .map((name) => ({
+      name,
+      lineName: lineByDepartment.get(name.trim().toUpperCase()) ?? null,
+    }));
+
+  const requestedDept =
+    params.dept ?? (params.kind === "finished" ? "__finished__" : undefined);
+  const dept =
+    requestedDept === "__finished__" ||
+    (requestedDept !== undefined &&
+      departments.some(
+        (entry) =>
+          entry.name === requestedDept && (!line || entry.lineName === line)
+      ))
+      ? requestedDept
+      : null;
+
   const needsReview = catalog.recipes.filter(
     (recipe) => recipe.issues.length > 0
   ).length;
@@ -50,19 +97,25 @@ export default async function RecipesPage({
     <PageShell
       breadcrumbs={[{ label: "Production" }, { label: "Recipes" }]}
       meta={
-        <span>
-          {catalog.recipes.length} recipes
-          {needsReview > 0 && ` · ${needsReview} need review`}
+        <span className="flex items-center gap-2">
+          <RecipeGear current="recipes" isAdmin={isAdminProfile(profile)} />
+          <span className="hidden text-muted-foreground sm:inline">
+            {catalog.recipes.length} recipes
+            {needsReview > 0 && ` · ${needsReview} need review`}
+          </span>
         </span>
       }
     >
       <RecipeList
         recipes={catalog.recipes}
-        departments={catalog.departments}
         departmentLines={Object.fromEntries(
           departmentLineMap(productionConfig)
         )}
-        initialFinishedOnly={kind === "finished"}
+        departmentColors={configured.map((entry) => [entry.name, entry.color])}
+        lines={lines}
+        departments={departments}
+        scopeLine={line}
+        scopeDept={dept}
         canCreate={isAdminProfile(profile)}
         odooOptions={odooOptions}
         odooError={odoo.error}
