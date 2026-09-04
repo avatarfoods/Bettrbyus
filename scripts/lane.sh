@@ -30,20 +30,24 @@ Supabase stack in Docker, its own Next port, and its own ${ENV_FILE}. Many lanes
 run in parallel without sharing state.
 
 Inside a worktree (no name needed, the current worktree is the lane):
-  scripts/lane.sh up                     Make the worktree a working lane: allocate a
+  scripts/lane.sh up [--no-dev]          Make the worktree a working lane: allocate a
                                          port, write ${ENV_FILE}, point supabase/config.toml
                                          at the lane's own ports, install dependencies,
                                          start the lane's Supabase stack (migrations and
-                                         supabase/seed.sql applied on first start), and
-                                         create the local admin user. Idempotent: re-running
-                                         reuses everything and never re-seeds.
-  scripts/lane.sh run <cmd...>           Run a command with PORT set, e.g. "run npm run dev".
-                                         Next ignores PORT in .env files, so use this (or
-                                         --port) for the dev server.
+                                         supabase/seed.sql applied on first start), create
+                                         the local admin user, and start the dev server in
+                                         the background on the lane's port (log next to the
+                                         worktree). Idempotent: re-running reuses everything,
+                                         never re-seeds, and leaves a running server alone.
+                                         --no-dev skips the dev server.
+  scripts/lane.sh run <cmd...>           Run a command with PORT set, e.g. "run npm run build"
+                                         then "run npm start". Next ignores PORT in .env
+                                         files, so anything that must land on the lane's
+                                         port goes through this.
   scripts/lane.sh studio [on|off]        Turn Studio (and Postgres Meta) on or off for the
                                          lane and restart its stack, data kept. Lanes start
                                          without Studio to save memory.
-  scripts/lane.sh down                   Kill the lane's Next processes and stop its stack,
+  scripts/lane.sh down                   Kill the lane's dev server and stop its stack,
                                          data kept. Run before leaving the worktree.
 
 From anywhere:
@@ -73,6 +77,7 @@ require_docker() {
 }
 
 lane_dir() { echo "$LANES_ROOT/$1"; }
+is_worktree() { [ -f "$(lane_dir "$1")/.git" ]; }
 project_id() { echo "${PROJECT_NAME}-lane-$(echo "$1" | tr '/' '-')"; }
 
 # Name of the lane the current directory belongs to, or nothing when not inside a lane worktree.
@@ -223,6 +228,33 @@ create_admin_user() {
   fi
 }
 
+# The dev server log lives next to the worktree, inside .claude/worktrees/, so it never shows up in git status.
+lane_log() { echo "$(dirname "$(lane_dir "$1")")/$(basename "$1").dev.log"; }
+
+start_dev_server() {
+  local name="$1" dir="$2" port="$3" log
+  log="$(lane_log "$name")"
+  if port_listening "$port"; then
+    echo "lane $name: dev server already running on port $port"
+    return 0
+  fi
+  echo "lane $name: starting dev server on port $port (log: $log)"
+  # exec so no shell lingers holding this script's stdout (that would hang callers piping the output);
+  # all three fds point away from the terminal so the server survives the session that started it.
+  ( cd "$dir" && exec env PORT="$port" nohup npm run dev >"$log" 2>&1 </dev/null ) &
+  for _ in $(seq 1 60); do
+    port_listening "$port" && break
+    sleep 1
+  done
+  if ! port_listening "$port"; then
+    echo "lane $name: dev server did not start within 60s; last log lines:" >&2
+    tail -20 "$log" >&2 || true
+    return 1
+  fi
+  # First request compiles the app, so the URL answers quickly when the user opens it.
+  curl -s -o /dev/null --max-time 120 "http://localhost:$port/login" || true
+}
+
 kill_lane_processes() {
   local name="$1" port pids
   port="$(lane_port "$name")"
@@ -244,7 +276,8 @@ stop_stack() {
 }
 
 up() {
-  local name dir port fresh=false
+  local name dir port fresh=false dev=true
+  [ "${1:-}" != "--no-dev" ] || dev=false
   name="$(require_current_lane)"
   require_docker
   dir="$(lane_dir "$name")"
@@ -283,13 +316,18 @@ up() {
     (cd "$dir" && supabase migration up)
   fi
   create_admin_user "$dir" "$port"
+  if $dev; then start_dev_server "$name" "$dir" "$port"; fi
 
   echo
   echo "lane $name ready"
   echo "  worktree:  $dir"
   echo "  branch:    $(git -C "$dir" branch --show-current)"
   echo "  database:  $(project_id "$name")$($fresh && echo ' (created + migrated + seeded)' || echo ' (reused)')"
-  echo "  app:       http://localhost:$port   (start with: scripts/lane.sh run npm run dev)"
+  if port_listening "$port"; then
+    echo "  app:       http://localhost:$port   (dev server running; log: $(lane_log "$name"))"
+  else
+    echo "  app:       http://localhost:$port   (dev server not running; start with: scripts/lane.sh up)"
+  fi
   echo "  supabase:  api http://127.0.0.1:$(api_port "$port")  mail http://127.0.0.1:$(mail_port "$port")  db postgresql://postgres:postgres@127.0.0.1:$(db_port "$port")/postgres"
   if [ "$(studio_state "$dir")" = on ]; then
     echo "  studio:    http://127.0.0.1:$(studio_port "$port")"
@@ -345,12 +383,12 @@ teardown() {
   dir="$(lane_dir "$name")"
   pid="$(project_id "$name")"
 
-  if [ -d "$dir" ]; then
+  if is_worktree "$name"; then
     if [ "$force" != "--force" ] && [ -n "$(git -C "$dir" status --porcelain)" ]; then
       die "lane $name has uncommitted changes — commit them or pass --force"
     fi
-    kill_lane_processes "$name"
   fi
+  kill_lane_processes "$name"
   if docker info >/dev/null 2>&1; then
     if stack_running "$name" || stack_has_data "$name"; then
       (cd "$MAIN_CHECKOUT" && supabase stop --no-backup --project-id "$pid") \
@@ -361,9 +399,14 @@ teardown() {
   else
     echo "lane $name: Docker is not running, supabase containers and volumes for $pid were left behind"
   fi
-  if [ -d "$dir" ]; then
+  rm -f "$(lane_log "$name")"
+  if is_worktree "$name"; then
     git -C "$MAIN_CHECKOUT" worktree remove --force "$dir"
     echo "lane $name removed (branch kept — delete it manually once its PR is closed)"
+  elif [ -d "$dir" ]; then
+    # Left behind after the worktree itself was removed (a dev server still writing .next/, for example).
+    rm -rf "$dir"
+    echo "lane $name: worktree already gone, stale directory and data removed"
   else
     echo "lane $name: worktree already gone, data removed"
   fi
@@ -396,13 +439,13 @@ list() {
   if docker info >/dev/null 2>&1; then
     for vol in $(docker volume ls -q 2>/dev/null | grep "^supabase_db_${PROJECT_NAME}-lane-" || true); do
       name="${vol#supabase_db_"${PROJECT_NAME}"-lane-}"
-      [ -d "$(lane_dir "$name")" ] || echo "orphan  $name  (supabase data without a worktree; scripts/lane.sh teardown $name removes it)"
+      is_worktree "$name" || echo "orphan  $name  (supabase data without a worktree; scripts/lane.sh teardown $name removes it)"
     done
   fi
 }
 
 case "${1:-}" in
-  up) up ;;
+  up) shift; up "${1:-}" ;;
   run) shift; run "$@" ;;
   studio) shift; studio "${1:-on}" ;;
   down) down ;;

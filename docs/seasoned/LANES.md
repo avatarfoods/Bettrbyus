@@ -24,8 +24,8 @@ What the script does not do any more: create or remove worktrees. It works on th
 Inside a worktree:
 
 ```bash
-scripts/lane.sh up                 # make this worktree a lane: port, env, own Supabase stack, admin user
-scripts/lane.sh run npm run dev    # run something on the lane's port
+scripts/lane.sh up [--no-dev]      # make this worktree a lane: port, env, own Supabase stack, admin user, dev server
+scripts/lane.sh run <cmd...>       # run something else on the lane's port (npm run build, npm start)
 scripts/lane.sh studio [on|off]    # turn Studio on or off for the lane (off by default)
 scripts/lane.sh down               # stop the dev server and the stack, keep data (before leaving)
 ```
@@ -62,10 +62,11 @@ The lane index is chosen by `up`: the first index whose Next port and whole Supa
 - `.env.local` (copied by `.worktreeinclude`, or by `up` from the main checkout) gets a managed block appended that overrides `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_APP_URL` and `PORT` for the lane. Later lines win in Next's env loading, so nothing above the block needs editing. Re-running `up` rewrites only the block.
 - `supabase/config.toml` is rewritten with the lane's project id and ports. Log analytics and the edge runtime are disabled because the app uses neither, and Studio (with its Postgres Meta service) is disabled because it only serves manual browsing and is the largest part of the stack; `scripts/lane.sh studio` turns Studio on for the lane and restarts its stack with the data kept, and the choice survives later runs of `up`. The file is then marked `skip-worktree` in git, so the rewrite never shows up in `git status` or lands in a commit. If a task genuinely has to change `config.toml`, run `git update-index --no-skip-worktree supabase/config.toml` in the worktree first, and keep the lane-specific hunks out of the commit.
 
-Next ignores `PORT` in `.env` files because it binds the server before loading them, which is why the dev server is started through `scripts/lane.sh run npm run dev` (or `npm run dev -- --port <port>`).
+Next ignores `PORT` in `.env` files because it binds the server before loading them, which is why `up` starts the dev server itself with `PORT` in the environment, and why anything else that must listen on the lane's port goes through `scripts/lane.sh run`.
 
 ## Behavior worth knowing
 
+- `up` ends by starting `npm run dev` detached, with output in `.claude/worktrees/<name>.dev.log` (next to the worktree, so it never appears in `git status`), waits for the port to answer, and requests the login page once so the first click is fast. If the port already listens it leaves the server alone. `--no-dev` skips this.
 - `up` is idempotent: re-running reuses the port and the Supabase data, restarts the stack if it was stopped, applies any migrations added since (`supabase migration up`), and never re-seeds. To reseed, run `supabase db reset` inside the worktree, then `up` again to recreate the admin user.
 - The first `supabase start` in a lane replays every file in `supabase/migrations/` and then `supabase/seed.sql` if present, exactly as in `INSTALL.md` step 8. Docker images are shared between stacks.
 - A lane stack is five containers (Postgres, Kong, PostgREST, Auth, Mailpit), about 200 MiB of memory right after start and a few hundred under use. Turning Studio on adds the Studio and Postgres Meta containers, roughly another 430 MiB. Keep only the lanes you are actively using started; `down` and `sweep` stop the rest without losing data.

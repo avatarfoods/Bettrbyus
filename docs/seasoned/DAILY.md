@@ -15,24 +15,29 @@ A lane is a Claude Code worktree. Create one with a short lowercase name for the
 claude --worktree fix-login-redirect     # a person starting a session straight in a new lane
 ```
 
-Inside a running session, ask Claude to "create a worktree named fix-login-redirect"; it uses the EnterWorktree tool. Either way the worktree lands in `.claude/worktrees/fix-login-redirect` on branch `worktree-fix-login-redirect`, with `.env.local` already copied in.
+Inside a running session, just state the task, for example "fix the redirect after login". Claude creates the worktree itself with a name taken from the request, here `fix-login-redirect`, and you can also name it yourself ("create a worktree named login-redirect and ..."). Either way the worktree lands in `.claude/worktrees/<name>` on branch `worktree-<name>`, with `.env.local` already copied in, and Claude runs `scripts/lane.sh up` before it starts on the task. Once the lane is up it tells you the app URL and the login from section 4, and when the task changes the UI it ends with the URL of the page where the change can be seen, on the lane's port.
 
 Then, inside the worktree:
 
 ```bash
-scripts/lane.sh up      # port, own Supabase stack, dependencies, admin user; safe to re-run
+scripts/lane.sh up      # port, own Supabase stack, dependencies, admin user, dev server; safe to re-run
 scripts/lane.sh list    # what is running, on which ports (works from anywhere)
 ```
 
-A new lane takes a few minutes the first time, most of it `npm ci` and the Supabase stack replaying every migration. Re-running `up` in an existing lane is quick; it restarts the stack if it was stopped, applies new migrations, and keeps the data.
+A new lane takes a few minutes the first time, most of it `npm ci` and the Supabase stack replaying every migration. Re-running `up` in an existing lane is quick; it restarts the stack if it was stopped, applies new migrations, keeps the data, and leaves a running dev server alone.
 
-## 3. Start the application
+## 3. The application
+
+`up` ends by starting the dev server in the background on the lane's port and waits until it answers, so the URL it prints is live: lane 1 is http://localhost:3001, lane 2 is http://localhost:3002, and so on. The server's output goes to a log file next to the worktree (`.claude/worktrees/<name>.dev.log`); `up` prints the path, and that is where compile errors appear.
 
 ```bash
-scripts/lane.sh run npm run dev
+scripts/lane.sh up --no-dev              # set the lane up without a dev server
+scripts/lane.sh down && scripts/lane.sh up   # restart the dev server
+scripts/lane.sh run npm run build        # anything else that must use the lane's port
+scripts/lane.sh run npm start
 ```
 
-The lane's port is printed by `up` and by `list`: lane 1 is http://localhost:3001, lane 2 is http://localhost:3002, and so on. Use `run` rather than a plain `npm run dev` because Next decides its port before it reads `.env.local`. The same wrapper works for anything that must land on the lane's port, for example `scripts/lane.sh run npm run build` followed by `scripts/lane.sh run npm start`.
+Use `run` rather than a plain `npm run build` or `npm start` for those, because Next decides its port before it reads `.env.local`.
 
 ## 4. Sign in
 
