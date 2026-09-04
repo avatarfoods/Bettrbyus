@@ -637,7 +637,15 @@ export function ScheduleView({
       if (!recipe) continue;
       if (line && recipe.lineName !== line) continue;
 
-      const unfolded = isExpandedChild(node.path);
+      /*
+        Opening one row by hand means "show me what is under this", so its
+        children come through whatever department they belong to. Opening
+        EVERYTHING does not mean that - with expand-all on every row is an
+        expanded child, and the exemption swallowed the department filter
+        whole: pick Main Kitchen and you got the entire plan back. Same trap
+        the empty-row filter below already had to climb out of.
+      */
+      const unfolded = !expandAll && isExpandedChild(node.path);
       if (!unfolded) {
         if (dept === "__finished__" && !recipe.isFinished) continue;
         if (dept === "__all__" && node.depth > 0) continue;
