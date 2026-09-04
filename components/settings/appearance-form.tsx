@@ -64,6 +64,7 @@ export function AppearanceForm({ settings }: AppearanceFormProps) {
     wallpaperColor: color ?? null,
     wallpaperImageUrl: imageUrl || null,
     showLogoWatermark,
+    logoUrl: settings.logoUrl,
   });
 
   async function onSubmit(values: WallpaperSettingsValues) {

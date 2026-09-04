@@ -1,5 +1,6 @@
 import { PageShell } from "@/components/app-shell/page-shell";
 import { AppearanceForm } from "@/components/settings/appearance-form";
+import { LogoForm } from "@/components/settings/logo-form";
 import { fetchAppSettings } from "@/lib/settings/wallpaper";
 import { createClient } from "@/lib/supabase/server";
 
@@ -19,7 +20,8 @@ export default async function AppearancePage() {
           dark mode is your own.
         </p>
 
-        <div className="mt-3">
+        <div className="mt-3 flex flex-col gap-6">
+          <LogoForm logoUrl={settings.logoUrl} />
           <AppearanceForm settings={settings} />
         </div>
       </div>

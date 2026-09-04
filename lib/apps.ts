@@ -8,7 +8,6 @@ import {
   ClipboardList,
   CookingPot,
   Factory,
-  History,
   Layers,
   LayoutDashboard,
   ListChecks,
@@ -117,12 +116,12 @@ export const APPS: AppDefinition[] = [
             href: "/production/schedule?view=live",
             icon: CalendarRange,
           },
+          // Plan history lives behind the gear on the schedule page itself.
           {
-            // Admin-only: the page itself turns everyone else away.
             group: "Plan",
-            label: "Plan history",
-            href: "/production/schedule/history",
-            icon: History,
+            label: "Picking Order",
+            href: "/production/picking",
+            icon: ClipboardList,
           },
           { group: "Plan", label: "Orders", href: "/orders", icon: CalendarDays },
           {
@@ -174,11 +173,7 @@ export const APPS: AppDefinition[] = [
       {
         label: "Recipes",
         href: "/recipes",
-        items: [
-          { label: "All recipes", href: "/recipes", icon: CookingPot },
-          // Admin-only: the page itself turns everyone else away.
-          { label: "Changes", href: "/recipes/history", icon: History },
-        ],
+        items: [{ label: "All recipes", href: "/recipes", icon: CookingPot }],
       },
       {
         // Grouped by what each page configures, in the same order those
@@ -229,9 +224,10 @@ export const APPS: AppDefinition[] = [
             icon: Trash2,
           },
           {
+            // Lives inside Recipes as its Settings tab; this is the same page.
             group: "Recipes",
             label: "Product Groups",
-            href: "/production/settings/groups",
+            href: "/recipes/settings",
             icon: Layers,
           },
           {

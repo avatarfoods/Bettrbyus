@@ -17,30 +17,60 @@ import {
 import { NewRecipeDialog } from "@/components/recipes/new-recipe-dialog";
 import type { OdooFinishedOption } from "@/lib/finished-products/fetch";
 import { FinishedStar } from "@/components/recipes/finished-star";
+import {
+  RecipeScope,
+  type ScopeDepartment,
+} from "@/components/recipes/recipe-scope";
 import { SearchPanel } from "@/components/ui/search-panel";
+import { Hint } from "@/components/settings/shared";
+import {
+  departmentColor,
+  type DepartmentColor,
+} from "@/lib/production/department-colors";
 import { cn } from "@/lib/utils";
 
 type SortKey = "wipCode" | "name" | "kind" | "department" | "lines";
 
-/** Bucket for departments with no line assigned yet. */
-
 const KINDS: RecipeKind[] = ["finished", "assembly", "kitchen"];
 
+/** Rows are one line each; the shared TD is a touch taller than that. */
+const CELL = "py-1 text-[0.8125rem]";
+
+/**
+ * Every recipe in the plant, as a sheet.
+ *
+ * The line and the area are chosen up in the page header, the same pair the
+ * plan uses. Down here is what is left: a search, the kind, and the two
+ * housekeeping filters. The summary card says what the sheet holds before
+ * the sheet is read, and colour does the rest - each department keeps the
+ * colour Settings gave it, a finished product carries the star, and a kind
+ * has a tint of its own.
+ */
 export function RecipeList({
   recipes,
-  departments,
   departmentLines = {},
-  initialFinishedOnly,
+  departmentColors = [],
+  lines = [],
+  departments = [],
+  scopeLine = null,
+  scopeDept = null,
   canCreate = false,
   odooOptions = [],
   odooError = null,
 }: {
   recipes: CatalogRecipe[];
-  departments: string[];
   /** Department name -> production line name, from Production settings. */
   departmentLines?: Record<string, string>;
-  /** Set by /recipes?kind=finished, which is where the nav points. */
-  initialFinishedOnly?: boolean;
+  /** Department name -> colour key chosen in Settings, in settings order. */
+  departmentColors?: [string, string | null][];
+  /** Active lines, for the line buttons. */
+  lines?: string[];
+  /** Every department with the line it belongs to, for the area select. */
+  departments?: ScopeDepartment[];
+  /** From the URL: one line, or null for all of them. */
+  scopeLine?: string | null;
+  /** From the URL: "__finished__", a department name, or null for all. */
+  scopeDept?: string | null;
   canCreate?: boolean;
   /** Finished goods from Odoo, so a new one is picked rather than typed. */
   odooOptions?: OdooFinishedOption[];
@@ -48,39 +78,72 @@ export function RecipeList({
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [finishedOnly, setFinishedOnly] = useState(initialFinishedOnly ?? false);
   const [groupByDept, setGroupByDept] = useState(false);
 
   /**
    * Every filter as one list of ids, which is what the pills in the search
-   * field are. Decoded back into the values the list already filters on, so
-   * only the control changed and none of the filtering did.
+   * field are. Decoded back into the values the list already filters on.
    */
   const [filters, setFilters] = useState<string[]>([]);
-
   const onlyIssues = filters.includes("issues");
   /** Archived recipes are out of the way unless asked for by name. */
   const showArchived = filters.includes("archived");
   const kind = (filters
     .find((id) => id.startsWith("kind:"))
     ?.slice(5) ?? "") as RecipeKind | "";
-  const line = filters.find((id) => id.startsWith("line:"))?.slice(5) ?? "";
-  const department = filters.find((id) => id.startsWith("dept:"))?.slice(5) ?? "";
 
   const [sort, setSort] = useState<SortKey>("name");
   const [dir, setDir] = useState(1);
 
+  /**
+   * One colour per department, for the whole page.
+   *
+   * A department keeps whatever colour Settings gave it; one nobody has
+   * chosen for takes the palette in order, after the configured ones, so
+   * the same department is the same colour here as on the plan.
+   */
+  const looks = useMemo(() => {
+    const map = new Map<string, DepartmentColor>();
+    let index = 0;
+    for (const [name, key] of departmentColors) {
+      map.set(name, departmentColor(key, index));
+      index += 1;
+    }
+    for (const recipe of recipes) {
+      const name = recipe.department ?? "—";
+      if (map.has(name)) continue;
+      map.set(name, departmentColor(null, index));
+      index += 1;
+    }
+    return map;
+  }, [departmentColors, recipes]);
+
+  const sameName = (a: string | null, b: string) =>
+    (a ?? "").trim().toUpperCase() === b.trim().toUpperCase();
+
+  /** What the header narrowed the sheet to, before the search does its part. */
+  const scoped = useMemo(
+    () =>
+      recipes.filter((recipe) => {
+        if (
+          scopeLine &&
+          departmentLines[recipe.department ?? ""] !== scopeLine
+        ) {
+          return false;
+        }
+        if (scopeDept === "__finished__") return recipe.isFinished;
+        if (scopeDept) return sameName(recipe.department, scopeDept);
+        return true;
+      }),
+    [recipes, scopeLine, scopeDept, departmentLines]
+  );
+
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
 
-    const filtered = recipes.filter((recipe) => {
+    const filtered = scoped.filter((recipe) => {
       if (recipe.archivedAt !== null && !showArchived) return false;
-      if (finishedOnly && !recipe.isFinished) return false;
       if (kind && recipe.kind !== kind) return false;
-      if (department && recipe.department !== department) return false;
-      if (line && departmentLines[recipe.department ?? ""] !== line) {
-        return false;
-      }
       if (onlyIssues && recipe.issues.length === 0) return false;
       if (!needle) return true;
       const haystack = `${recipe.wipCode} ${recipe.name} ${recipe.lines
@@ -99,19 +162,7 @@ export function RecipeList({
         String(av).localeCompare(String(bv), undefined, { numeric: true }) * dir
       );
     });
-  }, [
-    recipes,
-    query,
-    kind,
-    department,
-    line,
-    onlyIssues,
-    showArchived,
-    finishedOnly,
-    sort,
-    dir,
-    departmentLines,
-  ]);
+  }, [scoped, query, kind, onlyIssues, showArchived, sort, dir]);
 
   const grouped = useMemo(() => {
     if (!groupByDept) return null;
@@ -122,20 +173,29 @@ export function RecipeList({
       if (bucket) bucket.push(recipe);
       else map.set(key, [recipe]);
     }
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [rows, groupByDept]);
+    // Line first, then department, so the sheet reads the way the plant does.
+    return [...map.entries()].sort(
+      (a, b) =>
+        (departmentLines[a[0]] ?? "").localeCompare(departmentLines[b[0]] ?? "") ||
+        a[0].localeCompare(b[0])
+    );
+  }, [rows, groupByDept, departmentLines]);
 
-  const lineNames = useMemo(
-    () => [...new Set(Object.values(departmentLines))].sort(),
-    [departmentLines]
-  );
+  /** What the summary card says, about what the header narrowed to. */
+  const summary = useMemo(() => {
+    const live = scoped.filter((recipe) => recipe.archivedAt === null);
+    return {
+      total: live.length,
+      finished: live.filter((recipe) => recipe.isFinished).length,
+      review: live.filter((recipe) => recipe.issues.length > 0).length,
+      unverified: live.filter((recipe) => recipe.allergensUnverified.length > 0)
+        .length,
+      archived: scoped.length - live.length,
+    };
+  }, [scoped]);
 
-  const filterGroups = useMemo(() => {
-    const visibleDepartments = line
-      ? departments.filter((name) => departmentLines[name] === line)
-      : departments;
-
-    return [
+  const filterGroups = useMemo(
+    () => [
       {
         items: [
           { id: "issues", label: "Needs review" },
@@ -149,19 +209,9 @@ export function RecipeList({
           label: RECIPE_KIND_SHORT[option],
         })),
       },
-      {
-        exclusive: true,
-        items: lineNames.map((name) => ({ id: `line:${name}`, label: name })),
-      },
-      {
-        exclusive: true,
-        items: visibleDepartments.map((name) => ({
-          id: `dept:${name}`,
-          label: name,
-        })),
-      },
-    ].filter((group) => group.items.length > 0);
-  }, [departments, departmentLines, line, lineNames]);
+    ],
+    []
+  );
 
   function toggleSort(key: SortKey) {
     if (sort === key) setDir((value) => -value);
@@ -177,40 +227,74 @@ export function RecipeList({
     dir,
   });
 
+  const COLUMNS = 9;
+  const scopeLabel =
+    scopeDept === "__finished__"
+      ? "finished products"
+      : scopeDept
+        ? scopeDept
+        : scopeLine
+          ? `${scopeLine} recipes`
+          : "recipes";
+
   return (
-    <div className="flex flex-col gap-3 px-3 py-3 sm:px-4">
+    <div className="flex flex-col gap-2.5 px-3 py-3 sm:px-4">
       {/*
-        One search field, and everything else behind Filter.
-        Six controls in a row is six things to read before you can type; a
-        field with the live filters shown as pills inside it says the same
-        thing in the place you were already looking.
+        The sheet's summary, before the sheet.
+
+        Big numbers left, in the colours the sheet itself uses; the action on
+        the right. What the header narrowed to is what is counted, so
+        switching line changes the numbers rather than the caption.
+      */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-sm bg-card px-3 py-2 ring-1 ring-foreground/10">
+        <Big
+          tone="blue"
+          value={String(summary.total)}
+          label={scopeLabel}
+          hint="Active recipes in what the header is pointed at. Archived ones are counted separately."
+        />
+        {scopeDept !== "__finished__" && (
+          <Big
+            tone="green"
+            value={String(summary.finished)}
+            label="finished products"
+            hint="Recipes marked with the star. They are what the plan cascades from."
+          />
+        )}
+        <Big
+          tone={summary.review > 0 ? "amber" : "muted"}
+          value={String(summary.review)}
+          label="need review"
+          hint="Something stops the recipe being trusted downstream: an ingredient not linked, a zero quantity, a missing unit."
+        />
+        <Big
+          tone={summary.unverified > 0 ? "amber" : "muted"}
+          value={String(summary.unverified)}
+          label="allergens unverified"
+          hint="An ingredient beneath the recipe never answered the allergen question in Odoo, so its allergen list is a floor, not the whole truth."
+        />
+        {summary.archived > 0 && (
+          <Big
+            tone="muted"
+            value={String(summary.archived)}
+            label="archived"
+            hint="Out of every list and unpickable. Show them with the Archived filter."
+          />
+        )}
+      </div>
+
+      {/*
+        One row of controls, in the order the question is asked: which part
+        of the plant, then what to find in it, then how to read it - and the
+        one thing you can add, at the end.
       */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* The one filter people reach for stays out where it can be hit
-            without opening anything. The rest live behind Filter. */}
-        <div className="flex overflow-hidden rounded-sm border border-zinc-300 dark:border-zinc-600">
-          {(
-            [
-              [false, "All recipes"],
-              [true, "Finished products"],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={label}
-              type="button"
-              onClick={() => setFinishedOnly(value)}
-              aria-pressed={finishedOnly === value}
-              className={cn(
-                "h-8 px-2.5 text-sm transition-colors",
-                finishedOnly === value
-                  ? "bg-primary font-medium text-primary-foreground"
-                  : "bg-card text-muted-foreground hover:bg-muted"
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <RecipeScope
+          lines={lines}
+          currentLine={scopeLine}
+          departments={departments}
+          currentArea={scopeDept ?? "__all__"}
+        />
 
         <SearchPanel
           query={query}
@@ -220,15 +304,26 @@ export function RecipeList({
           filters={filters}
           onFiltersChange={setFilters}
           filterGroups={filterGroups}
-          className="sm:max-w-xl"
+          className="min-w-56 flex-1 sm:max-w-xl"
         />
 
-        <Toggle active={groupByDept} onClick={() => setGroupByDept((v) => !v)}>
-          By dept
-        </Toggle>
+        <button
+          type="button"
+          onClick={() => setGroupByDept((value) => !value)}
+          aria-pressed={groupByDept}
+          title="Gather the rows by department"
+          className={cn(
+            "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-sm px-2.5 text-[0.6875rem] font-semibold tracking-wide uppercase transition-colors",
+            groupByDept
+              ? "bg-foreground text-background"
+              : "bg-card text-muted-foreground ring-1 ring-foreground/15 hover:bg-muted"
+          )}
+        >
+          By department
+        </button>
 
-        <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">
-          {rows.length} / {recipes.length}
+        <span className="ml-auto shrink-0 text-[0.625rem] tabular-nums text-muted-foreground">
+          {rows.length} / {scoped.length}
         </span>
 
         <NewRecipeDialog
@@ -243,39 +338,72 @@ export function RecipeList({
         <DataTable>
           <THead
             columns={[
-              { label: "Number", ...sortProps("wipCode") },
+              {
+                label: <FinishedStar className="size-3" />,
+                title: "Finished product",
+                className: "w-8 px-0 text-center",
+              },
+              { label: "Number", ...sortProps("wipCode"), className: "w-24" },
               { label: "Recipe", ...sortProps("name") },
-              { label: "Type", ...sortProps("kind") },
-              { label: "Department", ...sortProps("department") },
-              { label: "Batch", numeric: true },
-              { label: "Lines", numeric: true, ...sortProps("lines") },
+              { label: "Type", ...sortProps("kind"), className: "w-24" },
+              { label: "Department", ...sortProps("department"), className: "w-44" },
+              { label: "Batch", numeric: true, className: "w-24" },
+              { label: "Lines", numeric: true, ...sortProps("lines"), className: "w-16" },
               { label: "Allergens" },
-              { label: "Status" },
+              { label: "Status", className: "w-28" },
             ]}
           />
           <TBody>
             {grouped
-              ? grouped.flatMap(([dept, list]) => [
-                  <tr key={`group-${dept}`} className="bg-muted">
-                    <td
-                      colSpan={8}
-                      className="border-b border-border px-2.5 py-1.5 text-[0.6875rem] font-semibold tracking-wider uppercase"
+              ? grouped.flatMap(([dept, list]) => {
+                  const look = looks.get(dept) ?? departmentColor(null, 0);
+                  return [
+                    <tr
+                      key={`group-${dept}`}
+                      className={cn("border-y border-primary/15", look.tint)}
                     >
-                      {dept}
-                      <span className="ml-2 font-normal text-muted-foreground">
-                        {list.length}
-                      </span>
-                    </td>
-                  </tr>,
-                  ...list.map((recipe) => (
-                    <Row key={recipe.id} recipe={recipe} onOpen={router.push} />
-                  )),
-                ])
+                      <td
+                        colSpan={COLUMNS}
+                        className="px-2.5 py-0.5 text-[0.625rem] font-bold tracking-wider uppercase"
+                      >
+                        <span className="flex items-center gap-2">
+                          <span className={cn("h-3 w-1 rounded-[1px]", look.spine)} />
+                          {departmentLines[dept] && (
+                            <span className="font-semibold text-muted-foreground">
+                              {departmentLines[dept]}
+                              <span className="mx-1 text-muted-foreground/50">›</span>
+                            </span>
+                          )}
+                          {dept}
+                          <span className="font-semibold text-muted-foreground tabular-nums">
+                            {list.length}
+                          </span>
+                        </span>
+                      </td>
+                    </tr>,
+                    ...list.map((recipe) => (
+                      <Row
+                        key={recipe.id}
+                        recipe={recipe}
+                        look={looks.get(recipe.department ?? "—")}
+                        onOpen={router.push}
+                      />
+                    )),
+                  ];
+                })
               : rows.map((recipe) => (
-                  <Row key={recipe.id} recipe={recipe} onOpen={router.push} />
+                  <Row
+                    key={recipe.id}
+                    recipe={recipe}
+                    look={looks.get(recipe.department ?? "—")}
+                    onOpen={router.push}
+                  />
                 ))}
             {rows.length === 0 && (
-              <TableEmpty colSpan={8}>No recipes match.</TableEmpty>
+              <TableEmpty colSpan={COLUMNS}>
+                No recipes match. Try another line or department up top, or
+                clear the filters.
+              </TableEmpty>
             )}
           </TBody>
         </DataTable>
@@ -283,34 +411,45 @@ export function RecipeList({
 
       {/* Phone */}
       <ul className="flex flex-col gap-2 md:hidden">
-        {rows.map((recipe) => (
-          <li key={recipe.id}>
-            <Link
-              href={`/recipes/${recipe.id}`}
-              className="flex flex-col gap-1.5 rounded-sm bg-card ring-1 ring-foreground/10 p-3"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <span className="min-w-0">
-                  <span className="flex items-center gap-1.5 text-sm font-semibold">
-                    {recipe.isFinished && <FinishedStar />}
-                    <span className="min-w-0 truncate">{recipe.name}</span>
+        {rows.map((recipe) => {
+          const look = looks.get(recipe.department ?? "—");
+          return (
+            <li key={recipe.id}>
+              <Link
+                href={`/recipes/${recipe.id}`}
+                className="flex flex-col gap-1.5 rounded-sm bg-card p-3 ring-1 ring-foreground/10"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5 text-sm font-semibold">
+                      {recipe.isFinished && <FinishedStar />}
+                      <span className="min-w-0 truncate">{recipe.name}</span>
+                    </span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {recipe.wipCode}
+                    </span>
                   </span>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {recipe.wipCode}
+                  <StatusCell recipe={recipe} />
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <KindTag kind={recipe.kind} />
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span
+                      className={cn(
+                        "size-1.5 shrink-0 rounded-[1px]",
+                        look?.dot ?? "bg-muted-foreground/40"
+                      )}
+                    />
+                    <span className="truncate">{recipe.department}</span>
                   </span>
-                </span>
-                <StatusCell recipe={recipe} />
-              </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <KindTag kind={recipe.kind} />
-                <span className="truncate">{recipe.department}</span>
-                <span className="ml-auto tabular-nums">
-                  {recipe.lines.length} lines
-                </span>
-              </div>
-            </Link>
-          </li>
-        ))}
+                  <span className="ml-auto tabular-nums">
+                    {recipe.lines.length} lines
+                  </span>
+                </div>
+              </Link>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -318,39 +457,88 @@ export function RecipeList({
 
 function Row({
   recipe,
+  look,
   onOpen,
 }: {
   recipe: CatalogRecipe;
+  look: DepartmentColor | undefined;
   onOpen: (href: string) => void;
 }) {
   return (
-    <TR onClick={() => onOpen(`/recipes/${recipe.id}`)}>
-      <TD mono muted>
+    <TR
+      onClick={() => onOpen(`/recipes/${recipe.id}`)}
+      className={cn(recipe.archivedAt !== null && "opacity-60")}
+    >
+      <TD className={cn(CELL, "px-0 text-center")}>
+        {recipe.isFinished && <FinishedStar className="size-3.5" />}
+      </TD>
+      <TD mono muted className={CELL}>
         {recipe.wipCode}
       </TD>
-      <TD strong>
-        <span className="flex items-center gap-1.5">
-          {recipe.isFinished && <FinishedStar />}
-          {recipe.name}
-        </span>
+      <TD strong className={cn(CELL, recipe.isFinished && "text-primary")}>
+        {recipe.name}
       </TD>
-      <TD>
+      <TD className={CELL}>
         <KindTag kind={recipe.kind} />
       </TD>
-      <TD muted>{recipe.department}</TD>
-      <TD numeric muted>
+      <TD muted className={CELL}>
+        <span className="flex items-center gap-1.5">
+          <span
+            className={cn(
+              "size-1.5 shrink-0 rounded-[1px]",
+              look?.dot ?? "bg-muted-foreground/40"
+            )}
+          />
+          <span className="truncate">{recipe.department ?? "—"}</span>
+        </span>
+      </TD>
+      <TD numeric muted className={CELL}>
         {recipe.batchSize
           ? `${recipe.batchSize} ${recipe.uom?.toLowerCase() ?? ""}`
           : `per ${recipe.kind === "finished" ? "case" : "unit"}`}
       </TD>
-      <TD numeric>{recipe.lines.length}</TD>
-      <TD>
+      <TD numeric className={CELL}>
+        {recipe.lines.length}
+      </TD>
+      <TD className={CELL}>
         <AllergenChips recipe={recipe} />
       </TD>
-      <TD>
+      <TD className={CELL}>
         <StatusCell recipe={recipe} />
       </TD>
     </TR>
+  );
+}
+
+function Big({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone: "blue" | "green" | "amber" | "muted";
+}) {
+  return (
+    <span className="flex items-baseline gap-1">
+      <span
+        className={cn(
+          "text-lg font-bold tabular-nums",
+          tone === "blue" && "text-primary",
+          tone === "green" && "text-success",
+          tone === "amber" && "text-warning-foreground",
+          tone === "muted" && "text-muted-foreground"
+        )}
+      >
+        {value}
+      </span>
+      <span className="flex items-center gap-1 text-[0.625rem] text-muted-foreground">
+        {label}
+        {hint && <Hint text={hint} />}
+      </span>
+    </span>
   );
 }
 
@@ -383,7 +571,7 @@ export function AllergenChips({ recipe }: { recipe: CatalogRecipe }) {
     return (
       <span
         title={unverifiedTitle}
-        className="inline-flex cursor-help items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[0.6875rem] font-medium text-muted-foreground"
+        className="inline-flex cursor-help items-center gap-1 rounded-sm bg-muted px-1.5 py-0.5 text-[0.6875rem] font-medium text-muted-foreground"
       >
         <HelpCircle className="size-3" />
         {unverified.length} unverified
@@ -397,7 +585,7 @@ export function AllergenChips({ recipe }: { recipe: CatalogRecipe }) {
         <span
           key={allergen}
           title={`From: ${(recipe.allergenSources[allergen] ?? []).join(", ")}`}
-          className="inline-flex cursor-help rounded bg-warning-muted px-1.5 py-0.5 text-[0.6875rem] font-medium text-warning-foreground"
+          className="inline-flex cursor-help rounded-sm bg-warning-muted px-1.5 py-px text-[0.6875rem] font-medium text-warning-foreground"
         >
           {allergen}
         </span>
@@ -405,7 +593,7 @@ export function AllergenChips({ recipe }: { recipe: CatalogRecipe }) {
       {unverified.length > 0 && (
         <span
           title={unverifiedTitle}
-          className="inline-flex cursor-help items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[0.6875rem] font-medium text-muted-foreground"
+          className="inline-flex cursor-help items-center gap-1 rounded-sm bg-muted px-1.5 py-px text-[0.6875rem] font-medium text-muted-foreground"
         >
           <HelpCircle className="size-3" />
           +{unverified.length}
@@ -416,62 +604,51 @@ export function AllergenChips({ recipe }: { recipe: CatalogRecipe }) {
 }
 
 function StatusCell({ recipe }: { recipe: CatalogRecipe }) {
-  if (recipe.issues.length === 0) {
+  if (recipe.archivedAt !== null) {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="size-1.5 rounded-[1px] bg-muted-foreground/40" />
+        Archived
+      </span>
+    );
+  }
+  if (recipe.issues.length === 0) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-success">
         <span className="size-1.5 rounded-[1px] bg-success" />
         OK
       </span>
     );
   }
   return (
-    <span className="inline-flex shrink-0 rounded-[1px] bg-warning-muted px-2 py-0.5 text-[0.6875rem] font-medium text-warning-foreground">
+    <span
+      title={recipe.issues.join("\n")}
+      className="inline-flex shrink-0 cursor-help rounded-sm bg-warning-muted px-2 py-px text-[0.6875rem] font-medium text-warning-foreground"
+    >
       {recipe.issues.length} to review
     </span>
   );
 }
 
+/**
+ * The three kinds, three tints: blue for what ships, green for what is
+ * assembled, amber for what is cooked - the same three the summary card and
+ * the plan already lean on.
+ */
 export function KindTag({ kind }: { kind: RecipeKind }) {
   const styles: Record<RecipeKind, string> = {
     finished: "bg-brand-muted text-primary",
-    assembly: "bg-muted text-foreground",
-    kitchen: "bg-muted text-muted-foreground",
+    assembly: "bg-success/10 text-success",
+    kitchen: "bg-warning-muted text-warning-foreground",
   };
   return (
     <span
       className={cn(
-        "inline-flex rounded px-1.5 py-0.5 text-[0.6875rem] font-medium",
+        "inline-flex rounded-sm px-1.5 py-px text-[0.6875rem] font-medium",
         styles[kind]
       )}
     >
       {RECIPE_KIND_SHORT[kind]}
     </span>
-  );
-}
-
-
-function Toggle({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        "h-8 rounded-md px-2.5 text-sm transition-colors",
-        active
-          ? "bg-accent font-medium text-accent-foreground"
-          : "border border-border bg-card text-muted-foreground hover:bg-muted"
-      )}
-    >
-      {children}
-    </button>
   );
 }
