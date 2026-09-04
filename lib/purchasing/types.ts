@@ -1,5 +1,12 @@
 export type StorageType = "dry" | "refrigerated" | "frozen" | "produce";
 
+export type PurchasingCategory =
+  | "produce"
+  | "protein"
+  | "dairy_refrigerated"
+  | "dry_goods"
+  | "packaging";
+
 export type Material = {
   id: string;
   item_code: string;
@@ -10,6 +17,8 @@ export type Material = {
   odoo_company_id: number | null;
   odoo_company_name: string | null;
   storage_type: StorageType | null;
+  /** Buyer-facing shopping category. Admin-tagged, never Odoo-synced. */
+  purchasing_category: PurchasingCategory | null;
   /** Ingredient matrix department (Finished Product, Fresh Mixing, …). */
   department: string | null;
   lbs_per_case: number | null;

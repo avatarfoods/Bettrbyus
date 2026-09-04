@@ -57,7 +57,9 @@ function normalizeSnapshot(snapshot: FinalOrderSnapshot): FinalOrderSnapshot {
         lbsRequired:
           line.lbsRequired == null ? null : Number(line.lbsRequired),
         isEmergency: Boolean(line.isEmergency),
+        orderByDate: line.orderByDate ?? null,
       })),
+      earliestOrderBy: group.earliestOrderBy ?? null,
     })),
     totals: raw.totals ?? { lineCount: 0, casesToOrder: 0 },
   };
@@ -84,21 +86,29 @@ function buildPrintHtml(snapshot: FinalOrderSnapshot) {
                 ? Number(line.onHandCases).toLocaleString()
                 : "—"
             }</td>
+            <td class="num muted">${escapeHtml(formatDate(line.orderByDate))}</td>
           </tr>`;
               })
               .join("");
 
+            const orderBySuffix = group.earliestOrderBy
+              ? ` <span class="status">· Order by ${escapeHtml(
+                  formatDate(group.earliestOrderBy)
+                )}</span>`
+              : "";
+
             return `<section class="group">
         <h2>${escapeHtml(group.label)} <span class="status">(${escapeHtml(
               groupStatusLabel(group.status)
-            )})</span></h2>
+            )})</span>${orderBySuffix}</h2>
         <table>
           <colgroup>
-            <col style="width:18%" />
-            <col style="width:42%" />
             <col style="width:14%" />
-            <col style="width:14%" />
+            <col style="width:32%" />
             <col style="width:12%" />
+            <col style="width:12%" />
+            <col style="width:10%" />
+            <col style="width:20%" />
           </colgroup>
           <thead>
             <tr>
@@ -107,9 +117,10 @@ function buildPrintHtml(snapshot: FinalOrderSnapshot) {
               <th class="num">Req. to order</th>
               <th class="num">Cases req.</th>
               <th class="num">On hand</th>
+              <th class="num">Order by</th>
             </tr>
           </thead>
-          <tbody>${rows || `<tr><td colspan="5">No lines</td></tr>`}</tbody>
+          <tbody>${rows || `<tr><td colspan="6">No lines</td></tr>`}</tbody>
         </table>
       </section>`;
           })
@@ -180,7 +191,7 @@ function buildPrintHtml(snapshot: FinalOrderSnapshot) {
 <body>
   <div class="header">
     <h1>${escapeHtml(snapshot.orderNumber)}</h1>
-    <p class="meta">Required date: <strong>${escapeHtml(
+    <p class="meta">Arrival date: <strong>${escapeHtml(
       formatDate(snapshot.requiredDate)
     )}</strong></p>
     <p class="meta">Production week: <strong>${escapeHtml(

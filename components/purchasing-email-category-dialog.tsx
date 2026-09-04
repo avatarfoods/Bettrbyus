@@ -47,12 +47,15 @@ function buildEmailBody(snapshot: FinalOrderSnapshot): string {
   const lines = [
     `Final Order PO: ${snapshot.orderNumber}`,
     `Category: ${group?.label ?? "—"}`,
-    `Required date: ${formatDate(snapshot.requiredDate)}`,
+    `Arrival date: ${formatDate(snapshot.requiredDate)}`,
     `Production week: ${snapshot.productionWeek || "—"}`,
     `Status: ${group?.status ?? "to_order"}`,
+    group?.earliestOrderBy
+      ? `Order by: ${formatDate(group.earliestOrderBy)}`
+      : null,
     "",
-    "Item #\tDescription\tReq. to order\tCases req.\tOn hand",
-  ];
+    "Item #\tDescription\tReq. to order\tCases req.\tOn hand\tOrder by",
+  ].filter((line): line is string => line !== null);
 
   for (const line of group?.lines ?? []) {
     const name = line.isEmergency ? `${line.name} (emergency)` : line.name;
@@ -63,6 +66,7 @@ function buildEmailBody(snapshot: FinalOrderSnapshot): string {
         String(line.requiredToOrder),
         String(line.casesRequired),
         line.onHandCases != null ? String(line.onHandCases) : "—",
+        formatDate(line.orderByDate),
       ].join("\t")
     );
   }

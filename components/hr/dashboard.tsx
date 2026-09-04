@@ -41,7 +41,7 @@ import {
   type Shift,
 } from "@/lib/hr/model";
 import { departmentColor } from "@/lib/hr/colors";
-import { beginDrag, dataOf, moveItem } from "@/components/hr/drag";
+import { beginDrag, dataOf, moveItem } from "@/lib/drag";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Hint } from "@/components/production/settings/shared";
 import { StaffingTab } from "@/components/hr/staffing-tab";

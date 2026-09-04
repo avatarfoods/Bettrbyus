@@ -27,7 +27,7 @@ export default async function SetPasswordPage({
         width={200}
         height={64}
         className="mb-8 h-auto w-full max-w-[180px] object-contain"
-        priority
+        loading="eager"
       />
       <SetPasswordForm />
       <p className="mt-12 text-center text-xs text-muted-foreground">

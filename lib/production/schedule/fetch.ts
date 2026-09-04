@@ -176,6 +176,7 @@ export async function fetchScheduleData(
     name: string;
     department: string | null;
     batch_size: number | null;
+    batch_yield: number | null;
     uom: string | null;
     is_finished_product: boolean | null;
   };
@@ -203,6 +204,7 @@ export async function fetchScheduleData(
       name: row.name,
       department: row.department,
       batchSize: row.batch_size,
+      batchYield: row.batch_yield,
       uom: row.uom,
       isFinishedProduct: row.is_finished_product,
     };

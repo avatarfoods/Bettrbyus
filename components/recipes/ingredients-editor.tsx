@@ -3,7 +3,18 @@
 import { useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Loader2, Lock, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  GripVertical,
+  Loader2,
+  Lock,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
+import { beginDrag, dataOf, moveItem } from "@/lib/drag";
 import {
   saveRecipeBatch,
   saveRecipeLines,
@@ -209,6 +220,40 @@ export function IngredientsEditor({
     );
   }
 
+  /** Ingredient order is the recipe's method order - saved as sort_order. */
+  function moveLine(index: number, direction: -1 | 1) {
+    setLines((prev) => {
+      const target = index + direction;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+
+  /* Drag a line by its grip, same as arranging departments on the HR board. */
+  const [dropOn, setDropOn] = useState<number | null>(null);
+
+  function dragIngredient(event: React.PointerEvent<HTMLElement>, index: number) {
+    const row = (event.currentTarget as HTMLElement).closest("tr");
+    beginDrag(event, {
+      hit: "[data-ing-row]",
+      ghost: row as HTMLElement | null,
+      onMove: (target) => {
+        const value = dataOf(target, "ingRow");
+        setDropOn(value === null ? null : Number(value));
+      },
+      onDrop: (target) => {
+        const value = dataOf(target, "ingRow");
+        if (value === null) return;
+        const to = Number(value);
+        if (to === index) return;
+        setLines((prev) => moveItem(prev, index, to));
+      },
+      onEnd: () => setDropOn(null),
+    });
+  }
+
   function choose(option: PickerOption) {
     const picked = {
       ingredientName: option.name,
@@ -245,6 +290,14 @@ export function IngredientsEditor({
     setNotice(null);
     setWarning(null);
     setError(null);
+    // Everything downstream divides by the yield, so a batch recipe cannot be
+    // saved without one. It may equal the desired batch - it just has to be said.
+    if (usesBatch && !(produced !== null && produced > 0)) {
+      setError(
+        "Batch yield is required — what actually comes out. Enter the desired batch size again if nothing is lost."
+      );
+      return;
+    }
     startTransition(async () => {
       const batchResult = await saveRecipeBatch({
         recipeId,
@@ -372,7 +425,11 @@ export function IngredientsEditor({
                 />
                 <RailNumber
                   label="Batch yield"
-                  hint="what actually comes out"
+                  hint={
+                    live && !(produced !== null && produced > 0)
+                      ? "required — what actually comes out"
+                      : "what actually comes out"
+                  }
                   value={batchYield}
                   readOnly={!live}
                   onChange={setBatchYield}
@@ -471,15 +528,35 @@ export function IngredientsEditor({
               <Th numeric className="w-20">
                 {showLoss ? "Loss %" : ""}
               </Th>
-              <Th className="w-10" />
+              <Th className="w-16" />
             </tr>
           </thead>
           <tbody className="[&>tr]:border-b [&>tr]:border-border/50">
             {lines.map((line, index) => {
               const math = lineMath(line, total, desired);
               return (
-                <tr key={index} className="border-t border-border">
+                <tr
+                  key={index}
+                  data-ing-row={index}
+                  className={cn(
+                    "border-t border-border",
+                    dropOn === index && "bg-brand-muted"
+                  )}
+                >
                   <Td>
+                    <span className="flex items-center gap-1.5">
+                      {live && (
+                        <span
+                          onPointerDown={(event) => dragIngredient(event, index)}
+                          role="button"
+                          tabIndex={-1}
+                          aria-label="Drag to reorder"
+                          title="Drag to reorder"
+                          className="shrink-0 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
+                        >
+                          <GripVertical className="size-4" />
+                        </span>
+                      )}
                     <button
                       type="button"
                       disabled={!live}
@@ -511,6 +588,7 @@ export function IngredientsEditor({
                         </span>
                       )}
                     </button>
+                    </span>
                   </Td>
                   <Td className="text-right">
                     {(() => {
@@ -578,16 +656,11 @@ export function IngredientsEditor({
                   {/* Slack, so Per each stays next to the name. */}
                   <Td />
                   <Td>
-                    <input
-                      type="number"
-                      min={0}
-                      step="any"
+                    <DecimalInput
                       value={line.quantity}
                       readOnly={!live}
-                      onChange={(event) =>
-                        update(index, { quantity: Number(event.target.value) })
-                      }
-                      aria-label="Quantity"
+                      onChange={(next) => update(index, { quantity: next })}
+                      label="Quantity"
                       className={cn(
                         "w-full px-2 py-0.5 text-right text-sm tabular-nums",
                         fieldClass
@@ -640,16 +713,36 @@ export function IngredientsEditor({
                   </Td>
                   <Td>
                     {live && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setLines((prev) => prev.filter((_, i) => i !== index))
-                        }
-                        aria-label="Remove line"
-                        className="text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </button>
+                      <span className="flex items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => moveLine(index, -1)}
+                          disabled={index === 0}
+                          aria-label="Move up"
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                        >
+                          <ChevronUp className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveLine(index, 1)}
+                          disabled={index === lines.length - 1}
+                          aria-label="Move down"
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                        >
+                          <ChevronDown className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setLines((prev) => prev.filter((_, i) => i !== index))
+                          }
+                          aria-label="Remove line"
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </span>
                     )}
                   </Td>
                 </tr>
@@ -879,6 +972,51 @@ function Td({
   return <td className={cn("px-3 py-1 align-middle", className)}>{children}</td>;
 }
 
+/**
+ * A quantity that reads as 40.00, not 40.
+ *
+ * Recipe numbers are weights, and a weight written to two places says it was
+ * measured. The formatting only applies when the field is at rest - while it
+ * has focus the raw text is kept exactly as typed, so "0.4" does not fight
+ * the person entering it and become "0" halfway through.
+ */
+function DecimalInput({
+  value,
+  readOnly,
+  onChange,
+  label,
+  className,
+}: {
+  value: number;
+  readOnly: boolean;
+  onChange: (next: number) => void;
+  label: string;
+  className?: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const shown =
+    draft ?? (Number.isFinite(value) ? Number(value).toFixed(2) : "");
+
+  return (
+    <input
+      type="number"
+      min={0}
+      step="any"
+      value={shown}
+      readOnly={readOnly}
+      onFocus={() => setDraft(String(value))}
+      onBlur={() => setDraft(null)}
+      onChange={(event) => {
+        setDraft(event.target.value);
+        const next = Number(event.target.value);
+        onChange(Number.isFinite(next) ? next : 0);
+      }}
+      aria-label={label}
+      className={className}
+    />
+  );
+}
+
 
 
 /** A number in the rail: label on the left, the field on the right. */
@@ -897,6 +1035,14 @@ function RailNumber({
   onChange: (next: string) => void;
   unit: string;
 }) {
+  // Same two-place treatment as the recipe quantities: formatted at rest,
+  // untouched while it has focus.
+  const [focused, setFocused] = useState(false);
+  const shown =
+    focused || value === "" || !Number.isFinite(Number(value))
+      ? value
+      : Number(value).toFixed(2);
+
   return (
     <label className="flex items-baseline justify-between gap-2 text-xs">
       <span className="min-w-0">
@@ -910,8 +1056,10 @@ function RailNumber({
           type="number"
           min={0}
           step="any"
-          value={value}
+          value={shown}
           readOnly={readOnly}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           onChange={(event) => onChange(event.target.value)}
           placeholder="—"
           aria-label={label}

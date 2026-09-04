@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUserProfile, isAdminProfile } from "@/lib/auth/profile";
 import { createClient } from "@/lib/supabase/server";
 import { isMissingColumn } from "@/lib/supabase/missing";
+import { logRecipeChange } from "@/lib/recipes/change-log";
 
 /**
  * Editing a recipe's ingredient lines, and its batch numbers.
@@ -48,7 +49,12 @@ async function requireAdmin() {
       message: "Only an administrator can change a recipe",
     };
   }
-  return { ok: true as const, supabase, userId: profile.id };
+  return {
+    ok: true as const,
+    supabase,
+    userId: profile.id,
+    userName: profile.full_name || profile.email || null,
+  };
 }
 
 /**
@@ -150,6 +156,16 @@ export async function saveRecipeLines(input: {
     }
   }
 
+  await logRecipeChange(gate.supabase, {
+    recipeId: input.recipeId,
+    userId: gate.userId,
+    userName: gate.userName,
+    summary: `Saved ${cleaned.length} ingredient line${cleaned.length === 1 ? "" : "s"}: ${cleaned
+      .map((line) => line.ingredientName)
+      .slice(0, 6)
+      .join(", ")}${cleaned.length > 6 ? "…" : ""}`,
+  });
+
   revalidatePath(`/recipes/${input.recipeId}`);
   revalidatePath("/recipes");
   revalidatePath("/production/schedule");
@@ -178,6 +194,22 @@ export async function saveRecipeBatch(input: {
   ] as const) {
     if (value !== null && (!Number.isFinite(value) || value < 0)) {
       return fail(`${label} must be zero or more`);
+    }
+  }
+
+  /*
+    A batch recipe must state what a batch actually yields.
+
+    Everything downstream - how much of this a bowl takes, how much to buy -
+    divides by the yield, so a blank one silently falls back to the desired
+    batch and every number below it comes out wrong. It can equal the desired
+    batch (a recipe that loses nothing), but it has to be said out loud.
+  */
+  if (input.callBasis === "batch" || input.batchSize !== null) {
+    if (input.batchYield === null || !(input.batchYield > 0)) {
+      return fail(
+        "Batch yield is required for a batch recipe — what actually comes out of the kettle. Enter the desired batch size again if nothing is lost."
+      );
     }
   }
 
@@ -222,6 +254,16 @@ export async function saveRecipeBatch(input: {
   }
 
   if (error) return fail(error.message);
+
+  await logRecipeChange(gate.supabase, {
+    recipeId: input.recipeId,
+    userId: gate.userId,
+    userName: gate.userName,
+    summary:
+      input.batchSize === null
+        ? `Called in ${input.callBasis ?? "unit"} (no batch)`
+        : `Batch: desired ${input.batchSize}, yield ${input.batchYield ?? "—"}, called in ${input.callBasis ?? "batch"}`,
+  });
 
   revalidatePath(`/recipes/${input.recipeId}`);
   revalidatePath("/production/schedule");

@@ -35,6 +35,8 @@ import type { InstructionStep } from "@/lib/recipes/instructions";
 import type { FinishedProduct } from "@/lib/finished-products/model";
 import type { OdooFinishedOption } from "@/lib/finished-products/fetch";
 import { MasterBom } from "@/components/recipes/master-bom";
+import { RecipeHistoryTab } from "@/components/recipes/recipe-history-tab";
+import type { RecipeChange } from "@/lib/recipes/change-log";
 import { RecipeMap } from "@/components/recipes/recipe-map";
 import { AllergenChips, KindTag } from "@/components/recipes/recipe-list";
 import { departmentColor } from "@/lib/production/department-colors";
@@ -81,6 +83,8 @@ export type RecipeDetailData = {
   departments?: DepartmentOption[];
   /** Every production line from settings. */
   lines?: string[];
+  /** Who changed this recipe and when. Only loaded for admins. */
+  changes?: RecipeChange[];
   recipe: CatalogRecipe;
   raws: RawRequirement[];
   bom: BomRow[];
@@ -150,6 +154,17 @@ export function RecipeDetail({ data }: { data: RecipeDetailData }) {
       ? ([
           { id: "timing", label: "Timing window" },
           { id: "spec", label: "Specification" },
+        ] satisfies TabItem[])
+      : []),
+    // Admins only, and last: it is about the recipe's paperwork, not about
+    // making it.
+    ...((data.canEdit ?? false)
+      ? ([
+          {
+            id: "history",
+            label: "History",
+            count: data.changes?.length ?? 0,
+          },
         ] satisfies TabItem[])
       : []),
   ];
@@ -357,6 +372,9 @@ export function RecipeDetail({ data }: { data: RecipeDetailData }) {
                 raws={raws}
                 usedIn={usedIn}
               />
+            )}
+            {tab === "history" && (
+              <RecipeHistoryTab changes={data.changes ?? []} />
             )}
           </TabBody>
         </div>

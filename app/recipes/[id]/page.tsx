@@ -13,6 +13,7 @@ import {
   fetchSpecForRecipe,
 } from "@/lib/finished-products/fetch";
 import { fetchInstructions } from "@/lib/recipes/instructions";
+import { fetchRecipeChanges } from "@/lib/recipes/change-log";
 import { resolveWindows } from "@/lib/production/schedule/model";
 import type {
   MaterialOption,
@@ -52,6 +53,9 @@ export default async function RecipePage({ params, searchParams }: Params) {
   const canEdit = isAdminProfile(profile);
 
   const instructions = await fetchInstructions(supabase, id);
+
+  // The change log is an admin's tab, so non-admins never pay for the query.
+  const changes = canEdit ? await fetchRecipeChanges(supabase, id) : [];
 
   // Departments come from Production settings where they are configured, and
   // fall back to whatever the recipes themselves already use.
@@ -355,6 +359,7 @@ export default async function RecipePage({ params, searchParams }: Params) {
           specOptions: specOptions.options,
           specOdooError: specOptions.error,
           canEdit,
+          changes,
           steps: instructions.steps,
           stepsMissingTable: instructions.missingTable,
           timing,

@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
 import {
   fetchOdooCompanies,
@@ -10,6 +9,7 @@ import {
   type OdooProduct,
   type OdooProductDetail,
 } from "@/lib/purchasing/odoo";
+import { fetchPurchasingPlaces, selectedCompanyIds } from "@/lib/purchasing/places";
 import type { SyncResult } from "@/lib/purchasing/types";
 
 export type ProductDetailResult =
@@ -62,13 +62,23 @@ function dedupeByCode(products: CompanyProduct[]): Map<string, CompanyProduct> {
  * purchased per company, not shared across them, so this is what lets the
  * Materials page and Master PO filter/select "just this place".
  */
-async function fetchAllCompanyProducts(): Promise<CompanyProduct[]> {
+async function fetchAllCompanyProducts(
+  companyIds?: number[] | null
+): Promise<CompanyProduct[]> {
   const companies = await fetchOdooCompanies();
+  const wanted =
+    companyIds && companyIds.length > 0
+      ? companies.filter((company) => companyIds.includes(company.id))
+      : companies;
   const allProducts: CompanyProduct[] = [];
-  for (const company of companies) {
+  for (const company of wanted) {
     const products = await fetchOdooProducts(company.id);
     for (const product of products) {
-      allProducts.push({ ...product, companyId: company.id, companyName: company.name });
+      allProducts.push({
+        ...product,
+        companyId: company.id,
+        companyName: company.name,
+      });
     }
   }
   return allProducts;
@@ -88,16 +98,24 @@ export async function syncOdooMaterials(): Promise<SyncResult> {
     return { ok: false, message: "You must be signed in to sync materials." };
   }
 
+  const places = await fetchPurchasingPlaces(supabase);
+  const companyIds = selectedCompanyIds(places);
+
   let products: CompanyProduct[];
   try {
-    products = await fetchAllCompanyProducts();
+    products = await fetchAllCompanyProducts(companyIds);
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Odoo sync failed." };
   }
 
   const byCode = dedupeByCode(products);
   if (byCode.size === 0) {
-    return { ok: false, message: "Odoo returned no products with an internal reference." };
+    return {
+      ok: false,
+      message: companyIds
+        ? "Odoo returned no products for the selected places."
+        : "Odoo returned no products with an internal reference.",
+    };
   }
 
   const { data: existing, error: existingError } = await supabase
@@ -132,6 +150,27 @@ export async function syncOdooMaterials(): Promise<SyncResult> {
   }
 
   const created = rows.filter((row) => !existingCodes.has(row.item_code)).length;
+
+  // A material explicitly tagged to a company outside the current place
+  // selection no longer belongs in an active catalog scoped to "just this
+  // place" - retire it (not delete: old PO lines and on-hand history still
+  // resolve). Materials with no company tag at all are left alone here;
+  // those are either legacy rows this sync just re-tagged above, or a
+  // one-time historical backlog from before per-company tagging existed.
+  if (companyIds && companyIds.length > 0) {
+    const { error: retireError } = await supabase
+      .from("purchasing_materials")
+      .update({ active: false, updated_at: now })
+      .eq("active", true)
+      .not("odoo_company_id", "is", null)
+      .not("odoo_company_id", "in", `(${companyIds.join(",")})`);
+    if (retireError) {
+      return {
+        ok: false,
+        message: `Materials sync failed while retiring other places: ${retireError.message}`,
+      };
+    }
+  }
 
   revalidatePath("/purchasing/materials");
   revalidatePath("/purchasing");
@@ -185,9 +224,12 @@ export async function syncOdooInventory(): Promise<SyncResult> {
     return { ok: false, message: "You must be signed in to sync inventory." };
   }
 
+  const places = await fetchPurchasingPlaces(supabase);
+  const companyIds = selectedCompanyIds(places);
+
   let products: CompanyProduct[];
   try {
-    products = await fetchAllCompanyProducts();
+    products = await fetchAllCompanyProducts(companyIds);
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Odoo sync failed." };
   }
@@ -234,103 +276,6 @@ export async function syncOdooInventory(): Promise<SyncResult> {
     ok: true,
     snapshots: snapshots.length,
     message: `Saved on-hand quantities for ${snapshots.length} materials.`,
-  };
-}
-
-/**
- * Fallback for when the Odoo API is unavailable: upload the Odoo inventory
- * export (xlsx/csv with Internal Reference / Name / Quantity On Hand columns).
- */
-export async function uploadInventoryFile(formData: FormData): Promise<SyncResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return { ok: false, message: "You must be signed in to upload inventory." };
-  }
-
-  const file = formData.get("file");
-  if (!(file instanceof File)) {
-    return { ok: false, message: "No file received." };
-  }
-
-  let rows: unknown[][];
-  try {
-    const buffer = new Uint8Array(await file.arrayBuffer());
-    const workbook = XLSX.read(buffer, { type: "array" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
-  } catch {
-    return { ok: false, message: "Could not read the file. Export it from Odoo as xlsx or csv." };
-  }
-
-  const headerIndex = rows.findIndex((row) =>
-    row.some((cell) => String(cell).trim().toLowerCase() === "internal reference")
-  );
-  const startIndex = headerIndex === -1 ? 0 : headerIndex + 1;
-  let codeCol = 0;
-  let qtyCol = 2;
-  if (headerIndex !== -1) {
-    const header = rows[headerIndex].map((cell) => String(cell).trim().toLowerCase());
-    codeCol = header.indexOf("internal reference");
-    const foundQty = header.findIndex((cell) => cell.startsWith("quantity"));
-    if (foundQty !== -1) qtyCol = foundQty;
-  }
-
-  const quantities = new Map<string, number>();
-  for (const row of rows.slice(startIndex)) {
-    const code = String(row[codeCol] ?? "").trim();
-    if (!code) continue;
-    const qty = Number(String(row[qtyCol] ?? "").replace(/,/g, ""));
-    if (!Number.isFinite(qty)) continue;
-    quantities.set(code, qty);
-  }
-
-  if (quantities.size === 0) {
-    return {
-      ok: false,
-      message: "No inventory rows found. Expected Internal Reference / Name / Quantity On Hand columns.",
-    };
-  }
-
-  const { data: materials, error: materialsError } = await supabase
-    .from("purchasing_materials")
-    .select("id, item_code");
-  if (materialsError) {
-    return { ok: false, message: `Could not read materials: ${materialsError.message}` };
-  }
-
-  const fetchedAt = new Date().toISOString();
-  const snapshots = (materials ?? [])
-    .filter((material) => quantities.has(material.item_code))
-    .map((material) => ({
-      material_id: material.id,
-      qty_on_hand: quantities.get(material.item_code)!,
-      source: "file_upload" as const,
-      fetched_at: fetchedAt,
-      created_by: user.id,
-    }));
-
-  if (snapshots.length === 0) {
-    return { ok: false, message: "No rows in the file matched existing materials." };
-  }
-
-  for (let i = 0; i < snapshots.length; i += CHUNK_SIZE) {
-    const chunk = snapshots.slice(i, i + CHUNK_SIZE);
-    const { error } = await supabase.from("purchasing_inventory_snapshots").insert(chunk);
-    if (error) {
-      return { ok: false, message: `Inventory upload failed: ${error.message}` };
-    }
-  }
-
-  revalidatePath("/purchasing/materials");
-  revalidatePath("/purchasing");
-
-  return {
-    ok: true,
-    snapshots: snapshots.length,
-    message: `Loaded on-hand quantities for ${snapshots.length} of ${quantities.size} items in the file.`,
   };
 }
 
