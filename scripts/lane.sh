@@ -30,7 +30,9 @@ Supabase stack in Docker, its own Next port, and its own ${ENV_FILE}. Many lanes
 run in parallel without sharing state.
 
 Inside a worktree (no name needed, the current worktree is the lane):
-  scripts/lane.sh up [--no-dev]          Make the worktree a working lane: allocate a
+  scripts/lane.sh up [--no-dev]          Make the worktree a working lane: catch up with
+                                         origin/${BASE_BRANCH} (reset if the lane has no commits
+                                         of its own, rebase otherwise), allocate a
                                          port, write ${ENV_FILE}, point supabase/config.toml
                                          at the lane's own ports, install dependencies,
                                          start the lane's Supabase stack (migrations and
@@ -275,6 +277,27 @@ stop_stack() {
   fi
 }
 
+# Make sure the lane contains the latest origin/$BASE_BRANCH. A lane without commits of its own is moved onto it
+# (uncommitted changes are kept); a lane with its own commits is rebased, and left untouched when the rebase conflicts.
+sync_with_base() {
+  local name="$1" dir="$2" base="origin/$BASE_BRANCH"
+  if ! git -C "$dir" fetch origin --quiet; then
+    echo "lane $name: WARNING: git fetch failed; cannot check whether this worktree is based on the latest $base" >&2
+    return 0
+  fi
+  if git -C "$dir" merge-base --is-ancestor "$base" HEAD 2>/dev/null; then return 0; fi
+  if git -C "$dir" merge-base --is-ancestor HEAD "$base" 2>/dev/null; then
+    echo "lane $name: worktree was cut from an outdated $BASE_BRANCH; resetting to $base"
+    git -C "$dir" reset --keep "$base" || die "could not reset to $base because uncommitted changes are in the way. Commit or stash them, then rerun up."
+    return 0
+  fi
+  echo "lane $name: worktree has its own commits on an outdated $BASE_BRANCH; rebasing onto $base"
+  if ! git -C "$dir" rebase --autostash --quiet "$base"; then
+    git -C "$dir" rebase --abort 2>/dev/null || true
+    echo "lane $name: WARNING: rebase onto $base conflicted and was aborted; the worktree is unchanged. Rebase by hand before opening the pull request." >&2
+  fi
+}
+
 up() {
   local name dir port fresh=false dev=true
   [ "${1:-}" != "--no-dev" ] || dev=false
@@ -282,11 +305,8 @@ up() {
   require_docker
   dir="$(lane_dir "$name")"
 
-  # Worktrees are cut from the main checkout's HEAD (worktree.baseRef = head); make sure that was current.
-  git -C "$dir" fetch origin --quiet || true
-  if ! git -C "$dir" merge-base --is-ancestor "origin/$BASE_BRANCH" HEAD 2>/dev/null; then
-    echo "lane $name: WARNING: this worktree is not based on the latest origin/$BASE_BRANCH. Pull $BASE_BRANCH in the main checkout before creating worktrees, or rebase this branch." >&2
-  fi
+  # Worktrees are cut from the main checkout's HEAD (worktree.baseRef = head); if that was stale, catch up with origin.
+  sync_with_base "$name" "$dir"
 
   port="$(lane_port "$name")"
   [ -n "$port" ] || port="$(allocate_port)"
