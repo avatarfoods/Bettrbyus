@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUserProfile, isAdminProfile } from "@/lib/auth/profile";
 import { createClient } from "@/lib/supabase/server";
 import { draftName } from "@/lib/production/schedule/ensure";
+import { logScheduleChange } from "@/lib/production/schedule/change-log";
 import { isMissingColumn, isMissingTable } from "@/lib/supabase/missing";
 
 /**
@@ -238,6 +239,37 @@ export async function confirmDraft(input: {
     .eq("id", draft.id);
 
   if (closeError) return fail(closeError.message);
+
+  // The live plan just moved. Record who moved it - confirmed_by on the
+  // draft says the same thing until someone discards drafts, and then it
+  // is gone.
+  const { data: liveRow } = await supabase
+    .from("production_schedules")
+    .select("line_id, production_lines ( name )")
+    .eq("id", liveId)
+    .maybeSingle();
+
+  const line = (liveRow as { production_lines?: { name?: string } | null } | null)
+    ?.production_lines;
+  const dates = rows
+    .map((row) => String(row.production_date))
+    .sort();
+  const span =
+    dates.length > 0
+      ? dates[0] === dates[dates.length - 1]
+        ? ` on ${dates[0]}`
+        : ` for ${dates[0]}–${dates[dates.length - 1]}`
+      : "";
+
+  await logScheduleChange(supabase, {
+    scheduleId: liveId,
+    draftId: draft.id as string,
+    lineId: (liveRow?.line_id as string | null) ?? null,
+    lineName: line?.name ?? null,
+    userId: profile.id,
+    userName: profile.full_name || profile.email || null,
+    summary: `Confirmed ${rows.length} change${rows.length === 1 ? "" : "s"} into the live plan${span} (${sets.length} set, ${clears.length} cleared)`,
+  });
 
   revalidatePath(SCHEDULE_PATH);
   return { ok: true, applied: rows.length };
