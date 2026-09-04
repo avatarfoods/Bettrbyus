@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Boxes,
@@ -232,6 +232,34 @@ export function ScheduleView({
   useEffect(() => {
     setLocalEntries([]);
   }, [serverEntries]);
+
+  /*
+    The pinned band's height, published so the grid header can sit under it.
+
+    Measured rather than guessed: the toolbar wraps to two or three rows
+    depending on the window and on which buttons apply, and a hard-coded
+    offset would leave a gap on a wide screen and cover the dates on a narrow
+    one.
+  */
+  const barRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const node = barRef.current;
+    if (!node) return;
+    const publish = () => {
+      node.style.setProperty(
+        "--schedule-bar-height",
+        `${node.offsetHeight}px`
+      );
+      node.parentElement?.style.setProperty(
+        "--schedule-bar-height",
+        `${node.offsetHeight}px`
+      );
+    };
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   const changed = useMemo(() => new Set(draftChanges), [draftChanges]);
   const myDraft = drafts.find((draft) => draft.id === myDraftId);
@@ -702,20 +730,32 @@ export function ScheduleView({
           ? depthById.get(row.parentPath)! + 1
           : 0;
       depthById.set(row.path, parentDepth);
-      return { ...row, depth: parentDepth };
+      // treeDepth is where it really sits (0 = finished product); depth is
+      // how far to indent it given what survived the filter.
+      return { ...row, treeDepth: row.depth, depth: parentDepth };
     });
 
     /*
-      With the whole tree open, "what is running" is a work list, not a tree.
+      A repeated row only means something while you can see what it hangs
+      under.
 
-      A step feeds every bowl that uses it, so PRODUCE items were appearing
-      once per bowl - the same 90 lb of cilantro on eleven lines. The tree is
-      right to show it that way when you are reading one bowl; a list of what
-      to make today is wrong to. So this view is flat and each recipe appears
-      once. Nothing is lost: the cells are per recipe, so eleven rows were
-      showing the same number eleven times.
+      A step feeds every bowl that uses it - Birria Stew goes into six of
+      them - so the tree shows it six times. That is right when you are
+      reading one bowl top to bottom. It is wrong the moment the parents are
+      off screen: filtered to Main Kitchen you get Birria Stew six times with
+      the same 347 on each, and nothing on the page explains why. The cells
+      are per recipe, so the copies were six views of one number.
+
+      So the list flattens to one row per recipe whenever the parent chain is
+      not on screen: "what is running", a department, or a search. The full
+      tree - no filter - still repeats, because there the parents are right
+      there above it.
     */
-    if (!working) return withDepth;
+    const parentsHidden =
+      working ||
+      (dept !== "__finished__" && dept !== "__all__") ||
+      query.trim() !== "";
+    if (!parentsHidden) return withDepth;
 
     const seen = new Set<string>();
     return withDepth
@@ -724,8 +764,25 @@ export function ScheduleView({
         seen.add(row.recipe.id);
         return true;
       })
-      .map((row) => ({ ...row, depth: 0, hasChildren: false }));
-  }, [rows, working]);
+      .map((row, index) => ({
+        ...row,
+        depth: 0,
+        hasChildren: false,
+        // Where this recipe sits in the tree, kept for the sort below - the
+        // display depth is flat, but build order is not.
+        treeOrder: [row.treeDepth ?? 0, index] as const,
+      }))
+      /*
+        Finished product first, then down the tree.
+
+        Sorted by how deep a recipe sits rather than by whatever order the
+        roots happened to be walked in, which put the bowl near the bottom
+        with its own components above it. Depth ascending reads the way the
+        plan is explained: the bowl, what it is assembled from, what that is
+        mixed from, down to the produce that gets cut.
+      */
+      .sort((a, b) => a.treeOrder[0] - b.treeOrder[0] || a.treeOrder[1] - b.treeOrder[1]);
+  }, [rows, working, dept, query]);
 
   const styles = useMemo(() => {
     const map = new Map<
@@ -947,6 +1004,20 @@ export function ScheduleView({
 
   return (
     <div className="flex flex-col gap-2.5 px-3 py-3 sm:px-4">
+      {/*
+        Everything above the grid travels with you.
+
+        The plan is fourteen columns wide and two hundred rows deep, so the
+        useful controls - the dates, the filters, Confirm - were a scroll away
+        from whatever you were looking at. The band pins under the page bar and
+        reports its own height as --schedule-bar-height, which the grid's own
+        sticky header adds to its offset so the two never sit on top of each
+        other however the toolbar wraps.
+      */}
+      <div
+        ref={barRef}
+        className="sticky top-[calc(var(--app-bar-height)+var(--page-shell-height,0px))] z-40 -mx-3 flex flex-col gap-2.5 bg-background/95 px-3 pb-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:-mx-4 sm:px-4"
+      >
       {/*
         One bar, the way the dashboard does it.
 
@@ -1358,6 +1429,7 @@ export function ScheduleView({
           </button>
         </div>
       )}
+      </div>
 
       <div className="flex min-h-0 gap-2.5">
       <div className="min-w-0 flex-1">
