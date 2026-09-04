@@ -14,7 +14,11 @@
 // neither FK set contributes zero and is reported in `unresolvedLines`
 // instead of silently disappearing; see purchasing_recipe_lines_unresolved.
 
-import type { WipRecipe, WipRecipeLine } from "@/lib/production/wip-explode";
+import {
+  linePerOutputUnit,
+  type WipRecipe,
+  type WipRecipeLine,
+} from "@/lib/production/wip-explode";
 
 export type ScheduleDemandEntry = {
   recipeId: string;
@@ -47,50 +51,25 @@ export type MrpResult = {
 
 const MAX_BOM_DEPTH = 12;
 
-function isWeightUom(uom: string | null): boolean {
-  if (!uom) return true;
-  const value = uom.trim().toUpperCase();
-  return value === "LB" || value === "LBS" || value === "OZ" || value === "POUND";
-}
-
-function toLbs(quantity: number, uom: string | null): number {
-  const value = (uom ?? "LB").trim().toUpperCase();
-  if (value === "OZ") return quantity / 16;
-  return quantity;
-}
-
-/** Loss percentages are stored as e.g. -8 (8% lost) → need 8% more input. */
-function lossFactor(lossPct: number | null): number {
-  if (lossPct === null || lossPct === 0) return 1;
-  return 1 + Math.abs(lossPct) / 100;
-}
-
 /**
  * Requirement contributed by one BOM line for a given demand of its recipe.
  * Returns lbs for weight lines and units for unit lines.
  *
- * Same arithmetic as explodeToNodes() in lib/production/wip-explode.ts and
- * deriveDemand() in lib/production/schedule/model.ts - all three have to
- * agree, or purchasing, the WIP calculator and the batch sheet would each be
- * working from a different number for the same line.
+ * The arithmetic itself is linePerOutputUnit() in wip-explode.ts, shared with
+ * the WIP calculator and the batch sheet so the three can never disagree
+ * about the same line again.
  */
 function lineRequirement(
   recipe: WipRecipe,
   line: WipRecipeLine,
+  recipeLines: WipRecipeLine[],
   demand: number
 ): { lbs: number; units: number } {
-  if (recipe.batchSize !== null && recipe.batchSize !== 0) {
-    // Batch recipe: demand is output lbs; line quantity is a share of batch.
-    const fraction = line.quantity / recipe.batchSize;
-    return { lbs: demand * fraction, units: 0 };
-  }
-
-  // Per-unit recipe: demand is output units.
-  const factor = lossFactor(line.lossPct);
-  if (isWeightUom(line.uom)) {
-    return { lbs: demand * toLbs(line.quantity, line.uom) * factor, units: 0 };
-  }
-  return { lbs: 0, units: demand * line.quantity * factor };
+  const per = linePerOutputUnit(recipe, line, recipeLines);
+  const quantity = demand * per.quantity;
+  return per.isWeight
+    ? { lbs: quantity, units: 0 }
+    : { lbs: 0, units: quantity };
 }
 
 export function computeMaterialRequirements(input: {
@@ -175,7 +154,7 @@ export function computeMaterialRequirements(input: {
 
     const lines = linesByRecipeId.get(recipeId) ?? [];
     for (const line of lines) {
-      const { lbs, units } = lineRequirement(recipe, line, demand);
+      const { lbs, units } = lineRequirement(recipe, line, lines, demand);
       if (lbs <= 0 && units <= 0) continue;
 
       if (line.subRecipeId) {

@@ -14,6 +14,7 @@ export async function updatePurchasingMaterial(
     .from("purchasing_materials")
     .update({
       storage_type: values.storageType,
+      purchasing_category: values.purchasingCategory,
       lbs_per_case: values.lbsPerCase,
       is_protein: values.isProtein,
       thaw_buffer_days: values.thawBufferDays,
@@ -22,7 +23,7 @@ export async function updatePurchasingMaterial(
     })
     .eq("id", materialId)
     .select(
-      "id, item_code, name, odoo_product_id, odoo_category, storage_type, lbs_per_case, is_protein, thaw_buffer_days, lead_time_days, price, active, last_synced_at"
+      "id, item_code, name, odoo_product_id, odoo_category, storage_type, purchasing_category, lbs_per_case, is_protein, thaw_buffer_days, lead_time_days, price, active, last_synced_at"
     )
     .single();
 

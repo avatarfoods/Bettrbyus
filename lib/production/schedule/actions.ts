@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUserProfile, isAdminProfile } from "@/lib/auth/profile";
 import { createClient } from "@/lib/supabase/server";
 import { draftName } from "@/lib/production/schedule/ensure";
+import { logScheduleChange } from "@/lib/production/schedule/change-log";
 import { isMissingColumn, isMissingTable } from "@/lib/supabase/missing";
+import { allRows } from "@/lib/supabase/all-rows";
 
 /**
  * Writing the schedule.
@@ -191,12 +193,23 @@ export async function confirmDraft(input: {
     return fail("Only an administrator can confirm someone else's draft");
   }
 
-  const { data: entries } = await supabase
-    .from("production_schedule_entries")
-    .select("recipe_id, production_date, quantity, note")
-    .eq("schedule_id", draft.id);
+  // Every row, not the first thousand: a fresh draft over two weeks zeroes
+  // ~2,800 cells, and reading 1,000 of them merged half a clear.
+  const entries = await allRows<{
+    recipe_id: string;
+    production_date: string;
+    quantity: number | null;
+    note: string | null;
+  }>((from, to) =>
+    supabase
+      .from("production_schedule_entries")
+      .select("recipe_id, production_date, quantity, note")
+      .eq("schedule_id", draft.id)
+      .range(from, to)
+  );
+  if (entries.error) return fail(entries.error);
 
-  const rows = entries ?? [];
+  const rows = entries.rows;
   const liveId = draft.parent_schedule_id as string;
 
   const clears = rows.filter((row) => Number(row.quantity ?? 0) === 0);
@@ -228,16 +241,55 @@ export async function confirmDraft(input: {
     if (error) return fail(error.message);
   }
 
-  const { error: closeError } = await supabase
+  // Only a draft that is still a draft closes: two tabs confirming the same
+  // one both got here, and both wrote a "confirmed" line to the log.
+  const { data: closed, error: closeError } = await supabase
     .from("production_schedules")
     .update({
       status: "confirmed",
       confirmed_at: new Date().toISOString(),
       confirmed_by: profile.id,
     })
-    .eq("id", draft.id);
+    .eq("id", draft.id)
+    .eq("status", "draft")
+    .select("id");
 
   if (closeError) return fail(closeError.message);
+  if (!closed || closed.length === 0) {
+    revalidatePath(SCHEDULE_PATH);
+    return fail("That draft was just confirmed from somewhere else");
+  }
+
+  // The live plan just moved. Record who moved it - confirmed_by on the
+  // draft says the same thing until someone discards drafts, and then it
+  // is gone.
+  const { data: liveRow } = await supabase
+    .from("production_schedules")
+    .select("line_id, production_lines ( name )")
+    .eq("id", liveId)
+    .maybeSingle();
+
+  const line = (liveRow as { production_lines?: { name?: string } | null } | null)
+    ?.production_lines;
+  const dates = rows
+    .map((row) => String(row.production_date))
+    .sort();
+  const span =
+    dates.length > 0
+      ? dates[0] === dates[dates.length - 1]
+        ? ` on ${dates[0]}`
+        : ` for ${dates[0]}–${dates[dates.length - 1]}`
+      : "";
+
+  await logScheduleChange(supabase, {
+    scheduleId: liveId,
+    draftId: draft.id as string,
+    lineId: (liveRow?.line_id as string | null) ?? null,
+    lineName: line?.name ?? null,
+    userId: profile.id,
+    userName: profile.full_name || profile.email || null,
+    summary: `Confirmed ${rows.length} change${rows.length === 1 ? "" : "s"} into the live plan${span} (${sets.length} set, ${clears.length} cleared)`,
+  });
 
   revalidatePath(SCHEDULE_PATH);
   return { ok: true, applied: rows.length };
@@ -297,7 +349,7 @@ export async function discardDraft(input: {
 export async function applySuggestions(input: {
   scheduleId: string;
   entries: { recipeId: string; productionDate: string; quantity: number }[];
-}): Promise<ActionResult & { written?: number }> {
+}): Promise<ActionResult & { written?: number; draftId?: string }> {
   if (!input.scheduleId) return fail("Missing schedule");
   if (input.entries.length === 0) return { ok: true, written: 0 };
 
@@ -323,13 +375,21 @@ export async function applySuggestions(input: {
     "taken" meant Accept did nothing whenever the confirmed plan had a leftover
     zero (or any row) for that date — the grey number stayed grey.
   */
-  const { data: existing } = await supabase
-    .from("production_schedule_entries")
-    .select("recipe_id, production_date, quantity")
-    .eq("schedule_id", draft.id);
+  const existing = await allRows<{
+    recipe_id: string;
+    production_date: string;
+    quantity: number | null;
+  }>((from, to) =>
+    supabase
+      .from("production_schedule_entries")
+      .select("recipe_id, production_date, quantity")
+      .eq("schedule_id", draft.id)
+      .range(from, to)
+  );
+  if (existing.error) return fail(existing.error);
 
   const taken = new Set(
-    (existing ?? [])
+    existing.rows
       .filter((row) => Number(row.quantity ?? 0) > 0)
       .map((row) => `${row.recipe_id}|${row.production_date}`)
   );
@@ -346,7 +406,7 @@ export async function applySuggestions(input: {
       updated_by: profile.id,
     }));
 
-  if (rows.length === 0) return { ok: true, written: 0 };
+  if (rows.length === 0) return { ok: true, written: 0, draftId: draft.id };
 
   const { error } = await supabase
     .from("production_schedule_entries")
@@ -355,7 +415,7 @@ export async function applySuggestions(input: {
   if (error) return fail(error.message);
 
   revalidatePath(SCHEDULE_PATH);
-  return { ok: true, written: rows.length };
+  return { ok: true, written: rows.length, draftId: draft.id };
 }
 
 /**
@@ -576,21 +636,22 @@ export async function newEmptyDraft(input: {
   const profile = await getCurrentUserProfile(supabase);
   if (!profile) return fail("You are signed out");
 
-  const today = new Date().toISOString().slice(0, 10);
-
-  // Whatever was open gets thrown away first: this is a fresh start.
+  // Whatever was open gets thrown away first: this is a fresh start. Open
+  // means the working draft - a parked one was saved on purpose and stays.
   const { data: existing } = await supabase
     .from("production_schedules")
-    .select("id")
+    .select("*")
     .eq("parent_schedule_id", scheduleId)
     .eq("status", "draft")
     .eq("created_by", profile.id);
 
   for (const row of existing ?? []) {
-    await supabase
+    if (((row.is_working as boolean | null) ?? true) !== true) continue;
+    const { error: dropError } = await supabase
       .from("production_schedules")
       .delete()
       .eq("id", row.id as string);
+    if (dropError) return fail(dropError.message);
   }
 
   const { data: live } = await supabase
@@ -616,14 +677,19 @@ export async function newEmptyDraft(input: {
 
   // Zero over everything the live plan has in this range, so the grid opens
   // blank rather than showing the confirmed numbers back at you.
-  const { data: planned } = await supabase
-    .from("production_schedule_entries")
-    .select("recipe_id, production_date")
-    .eq("schedule_id", scheduleId)
-    .gte("production_date", from)
-    .lte("production_date", to);
+  const planned = await allRows<{ recipe_id: string; production_date: string }>(
+    (start, end) =>
+      supabase
+        .from("production_schedule_entries")
+        .select("recipe_id, production_date")
+        .eq("schedule_id", scheduleId)
+        .gte("production_date", from)
+        .lte("production_date", to)
+        .range(start, end)
+  );
+  if (planned.error) return fail(planned.error);
 
-  const rows = (planned ?? []).map((row) => ({
+  const rows = planned.rows.map((row) => ({
     schedule_id: created.id as string,
     recipe_id: row.recipe_id as string,
     production_date: row.production_date as string,
@@ -654,7 +720,7 @@ export async function duplicateLiveIntoDraft(input: {
   scheduleId: string;
   from: string;
   to: string;
-}): Promise<ActionResult & { copied?: number }> {
+}): Promise<ActionResult & { copied?: number; draftId?: string }> {
   const { scheduleId, from, to } = input;
   if (!scheduleId) return fail("Missing schedule");
 
@@ -666,14 +732,22 @@ export async function duplicateLiveIntoDraft(input: {
   const draft = await openDraft(supabase, scheduleId, profile, today);
   if ("error" in draft) return fail(draft.error);
 
-  const { data: live } = await supabase
-    .from("production_schedule_entries")
-    .select("recipe_id, production_date, quantity")
-    .eq("schedule_id", scheduleId)
-    .gte("production_date", from)
-    .lte("production_date", to);
+  const live = await allRows<{
+    recipe_id: string;
+    production_date: string;
+    quantity: number | null;
+  }>((start, end) =>
+    supabase
+      .from("production_schedule_entries")
+      .select("recipe_id, production_date, quantity")
+      .eq("schedule_id", scheduleId)
+      .gte("production_date", from)
+      .lte("production_date", to)
+      .range(start, end)
+  );
+  if (live.error) return fail(live.error);
 
-  const rows = (live ?? [])
+  const rows = live.rows
     .filter((row) => Number(row.quantity ?? 0) > 0)
     .map((row) => ({
       schedule_id: draft.id,
@@ -692,7 +766,7 @@ export async function duplicateLiveIntoDraft(input: {
   }
 
   revalidatePath(SCHEDULE_PATH);
-  return { ok: true, copied: rows.length };
+  return { ok: true, copied: rows.length, draftId: draft.id };
 }
 
 /**
@@ -706,7 +780,7 @@ export async function clearRange(input: {
   scheduleId: string;
   from: string;
   to: string;
-}): Promise<ActionResult & { cleared?: number }> {
+}): Promise<ActionResult & { cleared?: number; draftId?: string }> {
   const { scheduleId, from, to } = input;
   if (!scheduleId || !from || !to) return fail("Missing dates");
 
@@ -725,14 +799,19 @@ export async function clearRange(input: {
     the confirmed number stand. An explicit zero is what says "make nothing
     that day" - and zeroes become deletions when the draft is merged.
   */
-  const { data: live } = await supabase
-    .from("production_schedule_entries")
-    .select("recipe_id, production_date")
-    .eq("schedule_id", scheduleId)
-    .gte("production_date", from)
-    .lte("production_date", to);
+  const live = await allRows<{ recipe_id: string; production_date: string }>(
+    (start, end) =>
+      supabase
+        .from("production_schedule_entries")
+        .select("recipe_id, production_date")
+        .eq("schedule_id", scheduleId)
+        .gte("production_date", from)
+        .lte("production_date", to)
+        .range(start, end)
+  );
+  if (live.error) return fail(live.error);
 
-  const rows = (live ?? []).map((row) => ({
+  const rows = live.rows.map((row) => ({
     schedule_id: draft.id,
     recipe_id: row.recipe_id as string,
     production_date: row.production_date as string,
@@ -759,7 +838,7 @@ export async function clearRange(input: {
   }
 
   revalidatePath(SCHEDULE_PATH);
-  return { ok: true, cleared: rows.length };
+  return { ok: true, cleared: rows.length, draftId: draft.id };
 }
 
 /**
@@ -967,13 +1046,12 @@ export async function renameDraft(input: {
       .from("production_schedules")
       .update(row)
       .eq("id", input.draftId));
+    // The name landed; only the parking did not. Reporting that as a
+    // failure left the button on "Save draft" over a draft already named.
+    // The read-only banner is where the missing migration is explained.
     if (!error) {
       revalidatePath(SCHEDULE_PATH);
-      return {
-        ok: false,
-        message:
-          "Named, but clearing the plan needs the 20260831_draft_parking migration",
-      };
+      return { ok: true };
     }
   }
 

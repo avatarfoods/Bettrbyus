@@ -11,6 +11,8 @@
  * disagree, purchasing and the floor would be working from different numbers.
  */
 
+import { batchTotal, toPounds } from "@/lib/recipes/yield";
+
 export type RecipeKind = "finished" | "assembly" | "kitchen";
 
 export type WipRecipe = {
@@ -20,6 +22,13 @@ export type WipRecipe = {
   department: string | null;
   /** Null for per-unit recipes; a total for batch recipes. */
   batchSize: number | null;
+  /**
+   * What a batch actually produces, after cook loss - the real basis for
+   * "how many batches does this demand take", not batchSize (the target you
+   * set out to make). Null when nobody has entered a yield yet, in which
+   * case batchSize is used instead so an unset yield doesn't zero anything.
+   */
+  batchYield: number | null;
   uom: string | null;
   /**
    * Ticked by hand on the recipe. Undefined means nobody has said, and the
@@ -120,6 +129,51 @@ function toOutputUnits(quantity: number, uom: string | null): number {
   return quantity;
 }
 
+/**
+ * How much of one BOM line is consumed per 1 unit of its recipe's output.
+ *
+ * The one place this arithmetic lives. mrp.ts (buying), model.ts (the plan
+ * and the batch sheet) and explodeToNodes() below all call it, because when
+ * each kept its own copy they drifted and the floor, the plan and purchasing
+ * each believed a different number.
+ *
+ * A batch recipe follows the workbook exactly (see lib/recipes/yield.ts):
+ *
+ *   share      = this line / BATCH TOTAL (the sum of what the recipe calls for)
+ *   per batch  = share x DESIRED BATCH SIZE
+ *   per output = per batch / BATCH YEILD
+ *
+ * Dividing by the desired batch instead of the ingredient total was the old
+ * bug: it only ever gave the right answer when the quantities happened to
+ * add up to the desired batch, and silently undercounted whenever a recipe
+ * was written at its original scale. Per-line loss is not applied here - a
+ * kitchen recipe's loss IS its yield, which the last step already accounts
+ * for.
+ */
+export function linePerOutputUnit(
+  recipe: WipRecipe,
+  line: WipRecipeLine,
+  recipeLines: WipRecipeLine[]
+): { quantity: number; isWeight: boolean } {
+  if (recipe.batchSize !== null && recipe.batchSize !== 0) {
+    const total = batchTotal(recipeLines);
+    const share = total > 0 ? toPounds(line.quantity, line.uom) / total : 0;
+    // An unset yield falls back to the desired batch, which is the same as
+    // claiming the recipe loses nothing - the old behaviour, not a guess.
+    const output = recipe.batchYield || recipe.batchSize;
+    return { quantity: (share * recipe.batchSize) / output, isWeight: true };
+  }
+
+  // Per-unit recipe: the written quantity IS the per-unit amount.
+  const weight = isWeightUom(line.uom);
+  return {
+    quantity:
+      (weight ? toOutputUnits(line.quantity, line.uom) : line.quantity) *
+      lossFactor(line.lossPct),
+    isWeight: weight,
+  };
+}
+
 export type ExplodeInput = {
   recipesById: Map<string, WipRecipe>;
   linesByRecipeId: Map<string, WipRecipeLine[]>;
@@ -170,16 +224,8 @@ export function explodeToNodes(
     for (const line of lines) {
       if (!line.subRecipeId) continue; // Raw materials are purchasing's problem.
 
-      // Same arithmetic as lineRequirement() in lib/purchasing/mrp.ts.
       const quantity =
-        recipe.batchSize !== null && recipe.batchSize !== 0
-          ? // Batch recipe: the line is a share of the whole batch.
-            (mult * line.quantity) / recipe.batchSize
-          : mult *
-            (isWeightUom(line.uom)
-              ? toOutputUnits(line.quantity, line.uom)
-              : line.quantity) *
-            lossFactor(line.lossPct);
+        mult * linePerOutputUnit(recipe, line, lines).quantity;
 
       walk(line.subRecipeId, quantity, depth + 1);
     }

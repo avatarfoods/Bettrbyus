@@ -1,31 +1,38 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { format, parseISO } from "date-fns";
-import { Loader2, Pencil, RefreshCw, Snowflake, Upload } from "lucide-react";
+import { Loader2, Pencil, RefreshCw, Snowflake } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { syncFromOdoo, uploadInventoryFile } from "@/lib/purchasing/actions";
+import { syncFromOdoo } from "@/lib/purchasing/actions";
 import { fetchMaterialsWithOnHand } from "@/lib/purchasing/fetch-materials";
+import { usePurchasingConfig } from "@/components/purchasing/config-context";
 import { saveManualOnHand } from "@/lib/purchasing/save-snapshot";
 import {
   MATERIAL_SAVE_ERROR_MESSAGE,
   updatePurchasingMaterial,
 } from "@/lib/purchasing/update-material";
-import type { MaterialWithOnHand, StorageType } from "@/lib/purchasing/types";
+import type {
+  MaterialWithOnHand,
+  PurchasingCategory,
+  StorageType,
+} from "@/lib/purchasing/types";
 import {
   parseOptionalNumberInput,
   purchasingMaterialSchema,
+  PURCHASING_CATEGORIES,
+  PURCHASING_CATEGORY_LABELS,
   STORAGE_TYPES,
 } from "@/lib/validations/purchasing-material";
 import { Button } from "@/components/ui/button";
-import { ButtonTabBar, type TabItem } from "@/components/ui/tab-bar";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  DataTable,
+  TBody,
+  TD,
+  THead,
+  TR,
+  TableEmpty,
+} from "@/components/ui/data-table";
 import {
   Dialog,
   DialogContent,
@@ -36,14 +43,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { SearchPanel } from "@/components/ui/search-panel";
 import { cn } from "@/lib/utils";
 
 const STORAGE_LABELS: Record<StorageType, string> = {
@@ -77,6 +77,9 @@ function MaterialEditForm({ material, onCancel, onSaved }: MaterialEditFormProps
   const [storageType, setStorageType] = useState<string>(
     material.storage_type ?? ""
   );
+  const [purchasingCategory, setPurchasingCategory] = useState<string>(
+    material.purchasing_category ?? ""
+  );
   const [lbsPerCase, setLbsPerCase] = useState(
     material.lbs_per_case != null ? String(material.lbs_per_case) : ""
   );
@@ -97,6 +100,9 @@ function MaterialEditForm({ material, onCancel, onSaved }: MaterialEditFormProps
 
     const validation = purchasingMaterialSchema.safeParse({
       storageType: storageType ? (storageType as StorageType) : null,
+      purchasingCategory: purchasingCategory
+        ? (purchasingCategory as PurchasingCategory)
+        : null,
       lbsPerCase: parseOptionalNumberInput(lbsPerCase),
       isProtein,
       thawBufferDays: parseOptionalNumberInput(thawBufferDays) ?? -1,
@@ -175,6 +181,25 @@ function MaterialEditForm({ material, onCancel, onSaved }: MaterialEditFormProps
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
+              <Label htmlFor="material-category">Buy category</Label>
+              <select
+                id="material-category"
+                value={purchasingCategory}
+                onChange={(event) => setPurchasingCategory(event.target.value)}
+                className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50 dark:bg-input/30"
+              >
+                <option value="">Not set</option>
+                {PURCHASING_CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {PURCHASING_CATEGORY_LABELS[category]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="material-lbs-per-case">Lbs / units per case</Label>
               <Input
                 id="material-lbs-per-case"
@@ -187,9 +212,6 @@ function MaterialEditForm({ material, onCancel, onSaved }: MaterialEditFormProps
                 className="h-10"
               />
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="material-lead-time">Lead time (days)</Label>
               <Input
@@ -323,25 +345,23 @@ function MaterialEditDialog({
 }
 
 export function PurchasingMaterialsPage() {
+  const { places, companyIds } = usePurchasingConfig();
   const [materials, setMaterials] = useState<MaterialWithOnHand[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [storageFilter, setStorageFilter] = useState("");
-  const [showInactive, setShowInactive] = useState(false);
+  const [filters, setFilters] = useState<string[]>([]);
   const [companyTab, setCompanyTab] = useState("all");
   const [editingMaterial, setEditingMaterial] =
     useState<MaterialWithOnHand | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [isSyncing, startSync] = useTransition();
-  const [isUploading, startUpload] = useTransition();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   async function loadMaterials() {
     setLoadError(null);
     const supabase = createClient();
-    const result = await fetchMaterialsWithOnHand(supabase);
+    const result = await fetchMaterialsWithOnHand(supabase, { companyIds });
     if (result.error) {
       setLoadError(result.error);
       setMaterials([]);
@@ -351,12 +371,19 @@ export function PurchasingMaterialsPage() {
     setIsLoading(false);
   }
 
+  const placeKey = companyIds?.join(",") ?? "";
+
   useEffect(() => {
     let active = true;
 
     (async () => {
       const supabase = createClient();
-      const result = await fetchMaterialsWithOnHand(supabase);
+      const ids = placeKey
+        ? placeKey.split(",").map((value) => Number(value))
+        : null;
+      const result = await fetchMaterialsWithOnHand(supabase, {
+        companyIds: ids,
+      });
       if (!active) return;
 
       if (result.error) {
@@ -371,7 +398,7 @@ export function PurchasingMaterialsPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [placeKey]);
 
   function handleSync() {
     setSyncMessage(null);
@@ -388,37 +415,28 @@ export function PurchasingMaterialsPage() {
     });
   }
 
-  function handleFileSelected(file: File | null) {
-    if (!file) return;
-    setSyncMessage(null);
-    setSyncError(null);
-    startUpload(async () => {
-      const formData = new FormData();
-      formData.set("file", file);
-      const result = await uploadInventoryFile(formData);
-      if (result.ok) {
-        setSyncMessage(result.message);
-        await loadMaterials();
-      } else {
-        setSyncError(result.message);
-      }
-    });
-  }
-
-  /** Which Odoo company (Yaya's, AvatarNaturalFoods, …) each material was
-   * bought under - materials are purchased per company, not shared. */
-  const companyTabs = useMemo<TabItem[]>(() => {
-    const counts = new Map<string, number>();
-    for (const material of materials) {
-      const key = material.odoo_company_name ?? "Unassigned";
-      counts.set(key, (counts.get(key) ?? 0) + 1);
+  const placePills = useMemo(() => {
+    if (!places.usingFallback && places.places.length > 0) {
+      return places.places.map((place) => place.name);
     }
-    const names = [...counts.keys()].sort((a, b) => a.localeCompare(b));
-    return [
-      { id: "all", label: "All places", count: materials.length },
-      ...names.map((name) => ({ id: name, label: name, count: counts.get(name) })),
-    ];
-  }, [materials]);
+    const names = new Set<string>();
+    for (const material of materials) {
+      if (material.odoo_company_name) names.add(material.odoo_company_name);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [places, materials]);
+
+  const storageFilter = filters
+    .find((id) => id.startsWith("storage:"))
+    ?.slice(8) as StorageType | undefined;
+  const categoryFilterRaw = filters
+    .find((id) => id.startsWith("category:"))
+    ?.slice(9);
+  const categoryFilter =
+    categoryFilterRaw === "uncategorized"
+      ? null
+      : (categoryFilterRaw as PurchasingCategory | undefined);
+  const showInactive = filters.includes("archived");
 
   const filteredMaterials = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -431,13 +449,26 @@ export function PurchasingMaterialsPage() {
       }
       if (!showInactive && !material.active) return false;
       if (storageFilter && material.storage_type !== storageFilter) return false;
+      if (categoryFilterRaw === "uncategorized") {
+        if (material.purchasing_category) return false;
+      } else if (categoryFilter && material.purchasing_category !== categoryFilter) {
+        return false;
+      }
       if (!query) return true;
       return (
         material.item_code.toLowerCase().includes(query) ||
         material.name.toLowerCase().includes(query)
       );
     });
-  }, [materials, search, storageFilter, showInactive, companyTab]);
+  }, [
+    materials,
+    search,
+    storageFilter,
+    categoryFilter,
+    categoryFilterRaw,
+    showInactive,
+    companyTab,
+  ]);
 
   const lastSyncLabel = useMemo(() => {
     const timestamps = materials
@@ -448,211 +479,185 @@ export function PurchasingMaterialsPage() {
   }, [materials]);
 
   return (
-    <div className="flex min-h-full flex-1 flex-col">
-      {/* Title and breadcrumb come from the page shell; the back arrow and
-          the icon were both saying what the breadcrumb already says. */}
-      <header className="border-b border-border bg-card px-3 py-2 sm:px-4">
-        <div className="flex w-full items-center gap-3">
-          <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-            Lead times, thaw buffers, and lbs per case.
-            {lastSyncLabel ? ` Last sync ${lastSyncLabel}.` : " Not synced yet."}
-          </p>
-          <div className="flex shrink-0 items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              onChange={(event) => {
-                handleFileSelected(event.target.files?.[0] ?? null);
-                event.target.value = "";
-              }}
-            />
-            <Button
+    <div className="flex min-h-full flex-1 flex-col gap-2 px-3 py-3 sm:px-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {placePills.length > 0 && (
+          <span className="flex overflow-hidden rounded-sm ring-1 ring-foreground/15">
+            <button
               type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isSyncing || isUploading}
-              title="Fallback: upload an Odoo inventory export"
+              onClick={() => setCompanyTab("all")}
+              aria-pressed={companyTab === "all"}
+              className={cn(
+                "h-7 px-2 text-[0.6875rem] font-semibold tracking-wide whitespace-nowrap uppercase transition-colors",
+                companyTab === "all"
+                  ? "bg-foreground text-background"
+                  : "bg-card text-muted-foreground hover:bg-muted"
+              )}
             >
-              {isUploading ? <Loader2 className="animate-spin" /> : <Upload />}
-              <span className="hidden lg:inline">Upload file</span>
-            </Button>
-            <Button
-              type="button"
-              onClick={handleSync}
-              disabled={isSyncing || isUploading}
-            >
-              {isSyncing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-              <span className="hidden sm:inline">Sync from Odoo</span>
-            </Button>
-          </div>
-        </div>
-      </header>
+              All
+            </button>
+            {placePills.map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => setCompanyTab(name)}
+                aria-pressed={companyTab === name}
+                className={cn(
+                  "h-7 px-2 text-[0.6875rem] font-semibold tracking-wide whitespace-nowrap uppercase transition-colors",
+                  companyTab === name
+                    ? "bg-foreground text-background"
+                    : "bg-card text-muted-foreground hover:bg-muted"
+                )}
+              >
+                {name}
+              </button>
+            ))}
+          </span>
+        )}
 
-      <div className="flex items-stretch border-b border-border bg-card">
-        <ButtonTabBar
-          items={companyTabs}
-          activeId={companyTab}
-          onSelect={setCompanyTab}
-          className="min-w-0 flex-1 border-b-0"
+        <SearchPanel
+          query={search}
+          onQueryChange={setSearch}
+          placeholder="Find a material…"
+          aria-label="Search materials"
+          filters={filters}
+          onFiltersChange={setFilters}
+          filterGroups={[
+            {
+              exclusive: true,
+              items: STORAGE_TYPES.map((type) => ({
+                id: `storage:${type}`,
+                label: STORAGE_LABELS[type],
+              })),
+            },
+            {
+              exclusive: true,
+              items: [
+                ...PURCHASING_CATEGORIES.map((category) => ({
+                  id: `category:${category}`,
+                  label: PURCHASING_CATEGORY_LABELS[category],
+                })),
+                { id: "category:uncategorized", label: "Uncategorized" },
+              ],
+            },
+            { items: [{ id: "archived", label: "Archived" }] },
+          ]}
+          className="sm:max-w-xl"
         />
+
+        <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">
+          {filteredMaterials.length} / {materials.length}
+          {lastSyncLabel ? ` · ${lastSyncLabel}` : ""}
+        </span>
+
+        <Button
+          type="button"
+          onClick={handleSync}
+          disabled={isSyncing}
+        >
+          {isSyncing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+          <span className="hidden sm:inline">Sync from Odoo</span>
+        </Button>
       </div>
 
-      <main className="mx-auto flex w-full max-w-none flex-1 flex-col gap-4 px-4 py-6">
-        {syncMessage && (
-          <p className="rounded-lg border border-green-600/30 bg-green-600/10 px-4 py-2 text-sm text-green-700 dark:text-green-400">
-            {syncMessage}
-          </p>
-        )}
-        {syncError && (
-          <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
-            {syncError}
-          </p>
-        )}
+      {syncMessage && (
+        <p className="rounded-md bg-success-muted px-3 py-2 text-sm text-success">
+          {syncMessage}
+        </p>
+      )}
+      {syncError && (
+        <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {syncError}
+        </p>
+      )}
 
-        <Card className="border shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-xl">Materials</CardTitle>
-            <CardDescription>
-              {filteredMaterials.length} of {materials.length} items shown.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="flex flex-1 flex-col gap-2">
-                <Label htmlFor="material-search">Search</Label>
-                <Input
-                  id="material-search"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Item code or name…"
-                  className="h-10"
-                />
-              </div>
-              <div className="flex flex-col gap-2 sm:w-44">
-                <Label htmlFor="material-storage-filter">Storage</Label>
-                <select
-                  id="material-storage-filter"
-                  value={storageFilter}
-                  onChange={(event) => setStorageFilter(event.target.value)}
-                  className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50 dark:bg-input/30"
-                >
-                  <option value="">All</option>
-                  {STORAGE_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {STORAGE_LABELS[type]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <label className="flex h-10 items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={showInactive}
-                  onChange={(event) => setShowInactive(event.target.checked)}
-                  className="size-4 accent-primary"
-                />
-                Show archived
-              </label>
-            </div>
-
-            {isLoading ? (
-              <div className="flex min-h-32 items-center justify-center">
-                <Loader2 className="size-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : loadError ? (
-              <p className="text-sm text-destructive">
-                Could not load materials: {loadError}
-              </p>
+      {isLoading ? (
+        <div className="flex min-h-32 items-center justify-center">
+          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : loadError ? (
+        <p className="text-sm text-destructive">
+          Could not load materials: {loadError}
+        </p>
+      ) : (
+        <DataTable>
+          <THead
+            columns={[
+              { label: "Item", className: "w-28" },
+              { label: "Material" },
+              { label: "Place" },
+              { label: "Storage" },
+              { label: "Category" },
+              { label: "Lbs/case", numeric: true },
+              { label: "Lead", numeric: true },
+              { label: "Thaw", numeric: true },
+              { label: "On hand", numeric: true },
+              { label: "", className: "w-10" },
+            ]}
+          />
+          <TBody>
+            {filteredMaterials.length === 0 ? (
+              <TableEmpty colSpan={10}>
+                {materials.length === 0
+                  ? "No materials yet. Run Sync from Odoo, or pick places under Configuration."
+                  : "No materials match the current filters."}
+              </TableEmpty>
             ) : (
-              <div className="overflow-x-auto rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-28">Code</TableHead>
-                      <TableHead className="min-w-64">Name</TableHead>
-                      <TableHead className="w-32">Storage</TableHead>
-                      <TableHead className="w-28 text-right">Lbs/case</TableHead>
-                      <TableHead className="w-28 text-right">Lead time</TableHead>
-                      <TableHead className="w-28 text-right">Thaw buffer</TableHead>
-                      <TableHead className="w-28 text-right">On hand</TableHead>
-                      <TableHead className="w-16" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredMaterials.length === 0 ? (
-                      <TableRow>
-                        <TableCell
-                          colSpan={8}
-                          className="h-24 text-center text-muted-foreground"
-                        >
-                          {materials.length === 0
-                            ? "No materials yet. Run the catalog sync or the backfill migration."
-                            : "No materials match the current filters."}
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredMaterials.map((material) => (
-                        <TableRow
-                          key={material.id}
-                          className={cn(!material.active && "opacity-50")}
-                        >
-                          <TableCell className="font-mono text-sm">
-                            {material.item_code}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            <span className="flex items-center gap-1.5">
-                              {material.name}
-                              {material.is_protein && (
-                                <Snowflake
-                                  className="size-3.5 shrink-0 text-sky-500"
-                                  aria-label="Protein (thaw buffer applies)"
-                                />
-                              )}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {material.storage_type
-                              ? STORAGE_LABELS[material.storage_type]
-                              : "—"}
-                          </TableCell>
-                          <TableCell className="text-right text-sm">
-                            {material.lbs_per_case?.toLocaleString() ?? "—"}
-                          </TableCell>
-                          <TableCell className="text-right text-sm">
-                            {material.lead_time_days}d
-                          </TableCell>
-                          <TableCell className="text-right text-sm">
-                            {material.is_protein
-                              ? `${material.thaw_buffer_days}d`
-                              : "—"}
-                          </TableCell>
-                          <TableCell className="text-right text-sm">
-                            {formatOnHand(material)}
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              onClick={() => setEditingMaterial(material)}
-                              aria-label={`Edit ${material.item_code}`}
-                            >
-                              <Pencil className="size-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
+              filteredMaterials.map((material) => (
+                <TR
+                  key={material.id}
+                  className={cn(!material.active && "opacity-50")}
+                  onClick={() => setEditingMaterial(material)}
+                >
+                  <TD mono>{material.item_code}</TD>
+                  <TD strong>
+                    <span className="flex items-center gap-1.5">
+                      {material.name}
+                      {material.is_protein && (
+                        <Snowflake
+                          className="size-3.5 shrink-0 text-sky-500"
+                          aria-label="Protein (thaw buffer applies)"
+                        />
+                      )}
+                    </span>
+                  </TD>
+                  <TD muted>{material.odoo_company_name ?? "—"}</TD>
+                  <TD muted>
+                    {material.storage_type
+                      ? STORAGE_LABELS[material.storage_type]
+                      : "—"}
+                  </TD>
+                  <TD muted>
+                    {material.purchasing_category
+                      ? PURCHASING_CATEGORY_LABELS[material.purchasing_category]
+                      : "—"}
+                  </TD>
+                  <TD numeric>{material.lbs_per_case?.toLocaleString() ?? "—"}</TD>
+                  <TD numeric>{material.lead_time_days}d</TD>
+                  <TD numeric>
+                    {material.is_protein ? `${material.thaw_buffer_days}d` : "—"}
+                  </TD>
+                  <TD numeric>{formatOnHand(material)}</TD>
+                  <TD>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setEditingMaterial(material);
+                      }}
+                      aria-label={`Edit ${material.item_code}`}
+                    >
+                      <Pencil className="size-4" />
+                    </Button>
+                  </TD>
+                </TR>
+              ))
             )}
-          </CardContent>
-        </Card>
-      </main>
+          </TBody>
+        </DataTable>
+      )}
 
       <MaterialEditDialog
         material={editingMaterial}

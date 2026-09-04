@@ -24,5 +24,8 @@ if (!ok) return;
 ```
 
 - `tone: "danger"` for irreversible actions (remove a count, delete a row).
-- An error that only needs OK: pass `cancelLabel: false`.
+## Module UI and settings
+
+Every app uses the same chrome. Configuration pages use `SettingsPage` and `DataTable` from `@/components/settings/shared` and `@/components/ui/data-table`. Saved config for a module lives in that module's React context (e.g. `usePurchasingConfig()`), not a "currently selected" summary band on the settings page.
+
 

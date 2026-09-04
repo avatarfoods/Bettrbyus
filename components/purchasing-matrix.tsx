@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   CalendarRange,
   Columns3,
+  ListFilter,
   Loader2,
   Package,
   Plus,
@@ -19,9 +20,18 @@ import {
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { departmentColor } from "@/lib/production/department-colors";
 import { syncFromOdoo } from "@/lib/purchasing/actions";
 import { defaultDemandRange } from "@/lib/purchasing/demand-range";
+import {
+  fetchProductionConfig,
+  isRealLine,
+  tabLines,
+  type ProductionLine,
+} from "@/lib/production/config";
+import {
+  PURCHASING_CATEGORIES,
+  PURCHASING_CATEGORY_LABELS,
+} from "@/lib/validations/purchasing-material";
 import {
   generateCycleLive,
   type GenerateLiveResult,
@@ -52,6 +62,7 @@ import {
   updatePurchaseLine,
 } from "@/lib/purchasing/update-line";
 import type { Material } from "@/lib/purchasing/types";
+import { usePurchasingConfig } from "@/components/purchasing/config-context";
 import { PurchasingFinalOrderDialog } from "@/components/purchasing-final-order-dialog";
 import { PurchasingPlanDialog } from "@/components/purchasing-plan-dialog";
 import { PurchasingProductDetailDialog } from "@/components/purchasing-product-detail";
@@ -104,6 +115,46 @@ const ONLY_TO_ORDER_STORAGE_KEY = "purchasing-matrix-only-to-order";
 
 const HIDE_PRODUCE_STORAGE_KEY = "purchasing-matrix-hide-produce";
 
+const SELECTED_LINE_STORAGE_KEY = "purchasing-matrix-selected-line";
+
+function loadSelectedLineId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(SELECTED_LINE_STORAGE_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+const GENERATE_CATEGORIES_STORAGE_KEY = "purchasing-matrix-generate-categories";
+
+/** "uncategorized" stands in for a null purchasing_category, same as Finalize Order. */
+const GENERATE_CATEGORY_KEYS = [...PURCHASING_CATEGORIES, "uncategorized"] as const;
+
+const GENERATE_CATEGORY_LABELS: Record<string, string> = {
+  ...PURCHASING_CATEGORY_LABELS,
+  uncategorized: "Uncategorized",
+};
+
+/** Default: every category included, same as today's behavior. */
+function loadGenerateCategories(): string[] {
+  if (typeof window === "undefined") return [...GENERATE_CATEGORY_KEYS];
+  try {
+    const raw = window.localStorage.getItem(GENERATE_CATEGORIES_STORAGE_KEY);
+    if (!raw) return [...GENERATE_CATEGORY_KEYS];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [...GENERATE_CATEGORY_KEYS];
+    const valid = parsed.filter(
+      (key): key is string =>
+        typeof key === "string" &&
+        (GENERATE_CATEGORY_KEYS as readonly string[]).includes(key)
+    );
+    return valid.length > 0 ? valid : [...GENERATE_CATEGORY_KEYS];
+  } catch {
+    return [...GENERATE_CATEGORY_KEYS];
+  }
+}
+
 /** Produce is ordered separately, but it still belongs in the full count. */
 function loadHideProduce(): boolean {
   if (typeof window === "undefined") return false;
@@ -114,13 +165,14 @@ function loadHideProduce(): boolean {
   }
 }
 
-/** Default shows the full Master PO list; buyers can narrow to shortages. */
+/** Default narrows to shortages; buyers can turn it off to see the full list. */
 function loadOnlyToOrder(): boolean {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined") return true;
   try {
-    return window.localStorage.getItem(ONLY_TO_ORDER_STORAGE_KEY) === "true";
+    const raw = window.localStorage.getItem(ONLY_TO_ORDER_STORAGE_KEY);
+    return raw === null ? true : raw === "true";
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -429,15 +481,15 @@ function MatrixLineRow({
   return (
     <TableRow
       className={cn(
-        "h-9 border-b border-border/60 hover:bg-accent/25",
+        "border-b border-border/60 hover:bg-accent/25",
         line.is_emergency && "bg-destructive/12 hover:bg-destructive/12",
         line.required_to_order > 0 &&
           !line.is_emergency &&
-          "bg-warning-muted/60 hover:bg-warning-muted/60"
+          "bg-warning-muted/40 hover:bg-warning-muted/40"
       )}
     >
       {visibleColumns.itemCode && (
-        <TableCell className="px-2 py-1 font-mono text-xs">
+        <TableCell className="px-2 py-0.5 font-mono text-xs">
           {material ? (
             <button
               type="button"
@@ -457,7 +509,7 @@ function MatrixLineRow({
         </TableCell>
       )}
       {visibleColumns.description && (
-        <TableCell className="px-2 py-1 text-xs">
+        <TableCell className="px-2 py-0.5 text-xs">
           <span className="flex items-center gap-1">
             {line.is_emergency && (
               <AlertTriangle className="size-3 shrink-0 text-destructive" />
@@ -484,7 +536,7 @@ function MatrixLineRow({
         </TableCell>
       )}
       {visibleColumns.casesRequired && (
-        <TableCell className="px-2 py-1 text-right text-xs tabular-nums">
+        <TableCell className="px-2 py-0.5 text-right text-xs tabular-nums">
           {editingCases ? (
             <Input
               ref={casesInputRef}
@@ -519,17 +571,17 @@ function MatrixLineRow({
         </TableCell>
       )}
       {visibleColumns.onHand && (
-        <TableCell className="px-2 py-1 text-right text-xs tabular-nums text-muted-foreground">
+        <TableCell className="px-2 py-0.5 text-right text-xs tabular-nums text-muted-foreground">
           {line.on_hand_cases != null ? line.on_hand_cases.toLocaleString() : "—"}
         </TableCell>
       )}
       {visibleColumns.requiredToOrder && (
-        <TableCell className="px-2 py-1 text-right text-xs font-semibold tabular-nums">
+        <TableCell className="px-2 py-0.5 text-right text-xs font-semibold tabular-nums">
           {line.required_to_order.toLocaleString()}
         </TableCell>
       )}
       {visibleColumns.totalLbs && (
-        <TableCell className="px-2 py-1 text-right text-xs tabular-nums text-muted-foreground">
+        <TableCell className="px-2 py-0.5 text-right text-xs tabular-nums text-muted-foreground">
           {line.lbs_required != null ? Math.round(line.lbs_required).toLocaleString() : "—"}
         </TableCell>
       )}
@@ -541,23 +593,25 @@ type CategorySectionHeaderProps = {
   label: string;
   lineCount: number;
   colSpan: number;
-  /** Picks this section's spine/tint from the shared department palette. */
-  colorIndex: number;
 };
 
+/**
+ * A category here is whatever Odoo's product category string happens to be,
+ * not a chosen department - so unlike the schedule grid's department rows,
+ * this doesn't rotate through the department color palette. One neutral
+ * style for every section keeps a long category list calm to scan.
+ */
 function CategorySectionHeader({
   label,
   lineCount,
   colSpan,
-  colorIndex,
 }: CategorySectionHeaderProps) {
-  const color = departmentColor(null, colorIndex);
   return (
-    <TableRow className={color.tint}>
-      <TableCell colSpan={colSpan} className="border-b border-border px-2 py-1.5">
+    <TableRow className="bg-muted/50 hover:bg-muted/50">
+      <TableCell colSpan={colSpan} className="border-b border-border px-2 py-1">
         <span className="flex items-center gap-1.5">
-          <span className={cn("h-3 w-1 shrink-0 rounded-[1px]", color.spine)} />
-          <span className="text-[0.625rem] font-semibold tracking-wider text-primary uppercase">
+          <span className="h-3 w-1 shrink-0 rounded-[1px] bg-muted-foreground/40" />
+          <span className="text-[0.625rem] font-semibold tracking-wider text-foreground uppercase">
             {label}
           </span>
           <span className="text-[0.625rem] text-muted-foreground">
@@ -574,6 +628,7 @@ type PurchasingMatrixProps = {
 };
 
 export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
+  const { companyIds } = usePurchasingConfig();
   const [cycles, setCycles] = useState<PurchaseCycle[]>([]);
   const [selectedCycleId, setSelectedCycleId] = useState<string | null>(
     initialCycleId ?? null
@@ -583,8 +638,15 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [onlyToOrder, setOnlyToOrder] = useState(false);
+  const [onlyToOrder, setOnlyToOrder] = useState(true);
   const [hideProduce, setHideProduce] = useState(false);
+  const [generateCategories, setGenerateCategories] = useState<string[]>([
+    ...GENERATE_CATEGORY_KEYS,
+  ]);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const categoriesMenuRef = useRef<HTMLDivElement | null>(null);
+  const [productionLines, setProductionLines] = useState<ProductionLine[]>([]);
+  const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [visibleColumns, setVisibleColumns] = useState<VisibleColumns>(
     DEFAULT_VISIBLE_COLUMNS
   );
@@ -667,6 +729,37 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
     setVisibleColumns(loadVisibleColumns());
     setOnlyToOrder(loadOnlyToOrder());
     setHideProduce(loadHideProduce());
+    setGenerateCategories(loadGenerateCategories());
+    setSelectedLineId(loadSelectedLineId());
+  }
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const supabase = createClient();
+      const config = await fetchProductionConfig(supabase);
+      if (!active) return;
+      const selectable = tabLines(config).filter(isRealLine);
+      setProductionLines(selectable);
+      // No saved/cycle pick yet - land on the first line rather than
+      // leaving the picker blank, so Generate never silently means "every
+      // line" without the buyer choosing that.
+      setSelectedLineId((current) =>
+        current ?? (selectable.length > 0 ? selectable[0].id : current)
+      );
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  function handleSelectLine(lineId: string) {
+    setSelectedLineId(lineId);
+    try {
+      window.localStorage.setItem(SELECTED_LINE_STORAGE_KEY, lineId);
+    } catch {
+      // ignore storage failures
+    }
   }
 
   useEffect(() => {
@@ -682,6 +775,37 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [columnsOpen]);
+
+  useEffect(() => {
+    if (!categoriesOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      if (
+        categoriesMenuRef.current &&
+        !categoriesMenuRef.current.contains(event.target as Node)
+      ) {
+        setCategoriesOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [categoriesOpen]);
+
+  function toggleGenerateCategory(key: string) {
+    setGenerateCategories((current) => {
+      const next = current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key];
+      try {
+        window.localStorage.setItem(
+          GENERATE_CATEGORIES_STORAGE_KEY,
+          JSON.stringify(next)
+        );
+      } catch {
+        // ignore storage failures
+      }
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!selectedCycleId) return;
@@ -705,6 +829,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
         const fallback = defaultDemandRange(result.cycle.required_date);
         setDemandFrom(match?.[1] ?? fallback.fromDate);
         setDemandTo(match?.[2] ?? fallback.toDate);
+        setSelectedLineId(result.cycle.line_id);
         setGroupTracking(loadGroupTracking(result.cycle.id));
         setFinalOrderSnapshot(loadFinalOrder(result.cycle.id));
       } else {
@@ -861,6 +986,14 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
 
   function handleGenerate() {
     if (!requiredDate || !demandFrom || !demandTo) return;
+    if (generateCategories.length === 0) {
+      setActionError("Pick at least one category to generate.");
+      return;
+    }
+    if (!selectedLineId) {
+      setActionError("Pick a production line to generate for.");
+      return;
+    }
     setActionMessage(null);
     setActionError(null);
     setGenerateResult(null);
@@ -870,6 +1003,9 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
         fromDate: demandFrom,
         toDate: demandTo,
         extraPercent: extraPercent.trim() === "" ? undefined : Number(extraPercent),
+        companyIds,
+        categories: generateCategories,
+        lineId: selectedLineId,
       });
       setGenerateResult(result);
       if (!result.ok) {
@@ -893,6 +1029,10 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
       setActionError("Pick a production date range to recalculate from.");
       return;
     }
+    if (generateCategories.length === 0) {
+      setActionError("Pick at least one category to generate.");
+      return;
+    }
     setActionMessage(null);
     setActionError(null);
     setGenerateResult(null);
@@ -902,6 +1042,9 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
         fromDate: demandFrom,
         toDate: demandTo,
         extraPercent: Number(extraPercent) || 0,
+        companyIds,
+        categories: generateCategories,
+        lineId: activeCycle.line_id,
       });
       setGenerateResult(result);
       if (!result.ok) {
@@ -960,7 +1103,8 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
       setFinalOrderSnapshot(result.snapshot);
       setFinalOrderOpen(true);
       setActionMessage(
-        `Final order ${result.snapshot.orderNumber} created (${result.snapshot.totals.lineCount} lines).`
+        `Final order ${result.snapshot.orderNumber} created (${result.snapshot.totals.lineCount} lines).` +
+          (result.warning ? ` ${result.warning}` : "")
       );
     });
   }
@@ -1070,6 +1214,21 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
             <span className="hidden lg:inline">Emergency</span>
           </Button>
         )}
+        {activeCycle && (
+          <>
+            <Hairline />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="border-destructive/40 text-destructive hover:bg-destructive/10"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 />
+              <span className="hidden sm:inline">Delete Master PO</span>
+            </Button>
+          </>
+        )}
       </div>
 
       {/* Sheet-style date tabs */}
@@ -1145,7 +1304,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
 
         {generateResult?.ok &&
           generateResult.unresolvedLines.length > 0 && (
-            <div className="rounded-md bg-warning-muted px-3 py-2 text-sm text-warning-foreground">
+            <div className="rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
               <p>
                 {generateResult.unresolvedLines.length} recipe line(s) have no
                 material or sub-recipe mapping — demand for these is not
@@ -1171,7 +1330,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
             </div>
           )}
         {generateResult?.ok && generateResult.warnings.length > 0 && (
-          <p className="rounded-md bg-warning-muted px-3 py-2 text-sm text-warning-foreground">
+          <p className="rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
             {generateResult.warnings.join(" ")}
           </p>
         )}
@@ -1188,7 +1347,41 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
               recipe BOM, then netted against on-hand. Every active,
               non-produce material lists, even at 0 cases needed.
             </p>
-            <div className="grid gap-3 sm:grid-cols-5 sm:items-end">
+
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="text-xs whitespace-nowrap text-muted-foreground">
+                Line:
+              </span>
+              {activeCycle ? (
+                <span className="text-xs font-semibold text-foreground">
+                  {productionLines.find((line) => line.id === activeCycle.line_id)
+                    ?.name ?? "Every line"}
+                </span>
+              ) : productionLines.length === 0 ? (
+                <span className="text-xs text-muted-foreground">Loading lines…</span>
+              ) : (
+                <span className="flex overflow-hidden rounded-sm ring-1 ring-foreground/15">
+                  {productionLines.map((line) => (
+                    <button
+                      key={line.id}
+                      type="button"
+                      onClick={() => handleSelectLine(line.id)}
+                      aria-pressed={line.id === selectedLineId}
+                      className={cn(
+                        "h-7 px-2 text-[0.6875rem] font-semibold tracking-wide whitespace-nowrap uppercase transition-colors",
+                        line.id === selectedLineId
+                          ? "bg-foreground text-background"
+                          : "bg-card text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      {line.name}
+                    </button>
+                  ))}
+                </span>
+              )}
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-5 sm:items-end">
               <div className="flex flex-col gap-1">
                 <Label htmlFor="matrix-required" className="text-xs">
                   Arrival (Thursday)
@@ -1206,7 +1399,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                       setDemandTo(range.toDate);
                     }
                   }}
-                  className="h-9"
+                  className="h-7"
                 />
               </div>
               <div className="flex flex-col gap-1">
@@ -1218,7 +1411,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                   type="date"
                   value={demandFrom}
                   onChange={(event) => setDemandFrom(event.target.value)}
-                  className="h-9"
+                  className="h-7"
                 />
               </div>
               <div className="flex flex-col gap-1">
@@ -1230,7 +1423,7 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                   type="date"
                   value={demandTo}
                   onChange={(event) => setDemandTo(event.target.value)}
-                  className="h-9"
+                  className="h-7"
                 />
               </div>
               <div className="flex flex-col gap-1">
@@ -1244,17 +1437,76 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                   step={1}
                   value={extraPercent}
                   onChange={(event) => setExtraPercent(event.target.value)}
-                  className="h-9"
+                  className="h-7"
                 />
               </div>
               <Button
                 type="button"
+                size="sm"
                 onClick={handleGenerate}
-                disabled={!requiredDate || !demandFrom || !demandTo || isGenerating}
+                disabled={
+                  !requiredDate ||
+                  !demandFrom ||
+                  !demandTo ||
+                  generateCategories.length === 0 ||
+                  !selectedLineId ||
+                  isGenerating
+                }
               >
                 {isGenerating ? <Loader2 className="animate-spin" /> : <Wand2 />}
                 Generate Master PO
               </Button>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">Categories:</span>
+              <div className="relative" ref={categoriesMenuRef}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCategoriesOpen((open) => !open)}
+                  aria-expanded={categoriesOpen}
+                  aria-haspopup="menu"
+                >
+                  <ListFilter />
+                  {generateCategories.length === GENERATE_CATEGORY_KEYS.length
+                    ? "All categories"
+                    : generateCategories.length === 0
+                      ? "None selected"
+                      : `${generateCategories.length} of ${GENERATE_CATEGORY_KEYS.length}`}
+                </Button>
+                {categoriesOpen && (
+                  <div
+                    role="menu"
+                    className="absolute left-0 z-20 mt-1 w-56 rounded-md bg-popover p-2 text-popover-foreground shadow-md ring-1 ring-foreground/10"
+                  >
+                    <p className="mb-1.5 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Include in this list
+                    </p>
+                    <div className="flex flex-col gap-0.5">
+                      {GENERATE_CATEGORY_KEYS.map((key) => (
+                        <label
+                          key={key}
+                          className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-muted"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={generateCategories.includes(key)}
+                            onChange={() => toggleGenerateCategory(key)}
+                            className="size-3.5 accent-primary"
+                          />
+                          <span>{GENERATE_CATEGORY_LABELS[key]}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {generateCategories.length === 0 && (
+                <span className="text-xs text-destructive">
+                  Pick at least one category to generate.
+                </span>
+              )}
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
               Arrival = when materials must be on site — POs land on
@@ -1265,11 +1517,14 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
           </div>
         )}
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-sm bg-card px-2 py-1.5 ring-1 ring-foreground/10">
+          <span className="text-xs text-muted-foreground">
             {activeCycle ? (
               <>
                 Master PO #{activeCycle.po_number ?? "—"}
+                {" · "}
+                {productionLines.find((line) => line.id === activeCycle.line_id)
+                  ?.name ?? "Every line"}
                 {finalOrderSnapshot
                   ? ` · Final ${finalOrderSnapshot.orderNumber}`
                   : ""}{" "}
@@ -1289,72 +1544,71 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
             ) : (
               "Pick a Master PO tab, or generate one from production dates."
             )}
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            {activeCycle && (
-              <div className="flex items-center gap-1.5">
-                <Label htmlFor="matrix-demand-from-live" className="text-xs whitespace-nowrap">
-                  Production
-                </Label>
-                <Input
-                  id="matrix-demand-from-live"
-                  type="date"
-                  value={demandFrom}
-                  onChange={(event) => setDemandFrom(event.target.value)}
-                  className="h-8 w-32 text-xs"
-                />
-                <span className="text-xs text-muted-foreground">–</span>
-                <Input
-                  id="matrix-demand-to-live"
-                  type="date"
-                  value={demandTo}
-                  onChange={(event) => setDemandTo(event.target.value)}
-                  className="h-8 w-32 text-xs"
-                />
-                <Label htmlFor="matrix-extra-live" className="text-xs whitespace-nowrap">
-                  EXTRA %
-                </Label>
-                <Input
-                  id="matrix-extra-live"
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={extraPercent}
-                  onChange={(event) => setExtraPercent(event.target.value)}
-                  className="h-8 w-16 text-xs"
-                  placeholder="0"
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={handleApplyExtra}
-                  disabled={isGenerating}
-                  title="Recalculate cases/lbs for this production date range and EXTRA %"
-                >
-                  {isGenerating ? <Loader2 className="animate-spin" /> : "Apply"}
-                </Button>
-              </div>
-            )}
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Filter item…"
-              className="h-8 w-44 text-xs"
-            />
-            <div className="relative" ref={columnsMenuRef}>
+          </span>
+
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Filter item…"
+            className="h-7 w-64 text-xs"
+          />
+
+          {activeCycle && (
+            <>
+              <Hairline />
+              <span
+                className="text-xs whitespace-nowrap text-muted-foreground"
+                title="Dates are locked once a Master PO is generated. Delete this one and start a new Master PO to use a different range."
+              >
+                Production{" "}
+                <span className="font-medium text-foreground tabular-nums">
+                  {formatTabDate(demandFrom)}–{formatTabDate(demandTo)}
+                </span>
+              </span>
+              <Label htmlFor="matrix-extra-live" className="text-xs whitespace-nowrap">
+                EXTRA %
+              </Label>
+              <Input
+                id="matrix-extra-live"
+                type="number"
+                min={0}
+                step={1}
+                value={extraPercent}
+                onChange={(event) => setExtraPercent(event.target.value)}
+                className="h-7 w-14 text-xs"
+                placeholder="0"
+              />
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => setColumnsOpen((open) => !open)}
-                aria-expanded={columnsOpen}
-                aria-haspopup="menu"
+                onClick={handleApplyExtra}
+                disabled={isGenerating || generateCategories.length === 0}
+                title={
+                  generateCategories.length === 0
+                    ? "Pick at least one category under Generate Master PO first"
+                    : "Recalculate cases/lbs for this production date range and EXTRA %"
+                }
               >
-                <Columns3 />
-                Columns
+                {isGenerating ? <Loader2 className="animate-spin" /> : "Apply"}
               </Button>
-              {columnsOpen && (
+            </>
+          )}
+
+          <Hairline />
+          <div className="relative" ref={columnsMenuRef}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setColumnsOpen((open) => !open)}
+              aria-expanded={columnsOpen}
+              aria-haspopup="menu"
+            >
+              <Columns3 />
+              Columns
+            </Button>
+            {columnsOpen && (
                 <div
                   role="menu"
                   className="absolute right-0 z-20 mt-1 w-56 rounded-md bg-popover p-2 text-popover-foreground shadow-md ring-1 ring-foreground/10"
@@ -1402,6 +1656,9 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                 </div>
               )}
             </div>
+
+            <Hairline />
+
             <label
               className="flex items-center gap-1.5 text-xs"
               title="Hide rows already covered by on hand (Req. to order = 0)"
@@ -1426,6 +1683,9 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
               />
               Hide produce
             </label>
+
+            {activeCycle && <Hairline />}
+
             {activeCycle && !finalOrderSnapshot && (
               <Button
                 type="button"
@@ -1478,19 +1738,6 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                 Reopen
               </Button>
             ) : null}
-            {activeCycle && (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => setDeleteOpen(true)}
-              >
-                <Trash2 />
-                <span className="hidden sm:inline">Delete Master PO</span>
-              </Button>
-            )}
-          </div>
         </div>
 
         {isLoading ? (
@@ -1554,13 +1801,12 @@ export function PurchasingMatrix({ initialCycleId }: PurchasingMatrixProps) {
                   </TableRow>
                 ) : (
                   <>
-                    {categorySections.map((section, index) => (
+                    {categorySections.map((section) => (
                       <Fragment key={section.key}>
                         <CategorySectionHeader
                           label={section.label}
                           lineCount={section.lines.length}
                           colSpan={visibleColumnCount}
-                          colorIndex={index}
                         />
                         {section.lines.map((line) => (
                           <MatrixLineRow

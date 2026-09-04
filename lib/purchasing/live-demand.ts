@@ -19,7 +19,9 @@ export async function fetchBom(supabase: SupabaseClient): Promise<{
   const [recipesResult, linesResult] = await Promise.all([
     supabase
       .from("purchasing_recipes")
-      .select("id, wip_code, name, department, batch_size, uom, is_finished_product")
+      .select(
+        "id, wip_code, name, department, batch_size, batch_yield, uom, is_finished_product"
+      )
       .eq("active", true),
     supabase
       .from("purchasing_recipe_lines")
@@ -37,6 +39,7 @@ export async function fetchBom(supabase: SupabaseClient): Promise<{
     name: string;
     department: string | null;
     batch_size: number | null;
+    batch_yield: number | null;
     uom: string | null;
     is_finished_product: boolean | null;
   };
@@ -49,6 +52,7 @@ export async function fetchBom(supabase: SupabaseClient): Promise<{
       name: row.name,
       department: row.department,
       batchSize: row.batch_size,
+      batchYield: row.batch_yield,
       uom: row.uom,
       isFinishedProduct: row.is_finished_product,
     });
@@ -74,23 +78,31 @@ export async function fetchBom(supabase: SupabaseClient): Promise<{
 }
 
 /**
- * What is actually committed to the floor, across every production line,
- * in a date window.
+ * What is actually committed to the floor, in a date window.
  *
  * Live schedules only - a draft is someone's in-progress edit, and a
  * purchase order should never move because of a number nobody has confirmed
  * yet. Each line has at most one schedule with status = 'live'
- * (production_schedules_one_live_per_line_idx), so this reads every one of
- * them rather than assuming a single global schedule.
+ * (production_schedules_one_live_per_line_idx).
+ *
+ * Pass `lineId` to scope to one production line (Bettr Bowl, Pita, Pizza
+ * Cupcake, ...) - each runs its own schedule, and mixing them sums demand
+ * across brands that may not even share materials. Omitted/null reads every
+ * line, which is the old behavior and stays available for anyone who really
+ * does want the combined total.
  */
 export async function fetchLiveScheduleDemand(
   supabase: SupabaseClient,
-  range: { fromDate: string; toDate: string }
+  range: { fromDate: string; toDate: string; lineId?: string | null }
 ): Promise<ScheduleDemandEntry[]> {
-  const { data: liveSchedules, error: scheduleError } = await supabase
+  let scheduleQuery = supabase
     .from("production_schedules")
     .select("id")
     .eq("status", "live");
+  if (range.lineId) {
+    scheduleQuery = scheduleQuery.eq("line_id", range.lineId);
+  }
+  const { data: liveSchedules, error: scheduleError } = await scheduleQuery;
   if (scheduleError) throw new Error(scheduleError.message);
 
   const scheduleIds = (liveSchedules ?? []).map((row) => row.id as string);

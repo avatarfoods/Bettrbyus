@@ -32,7 +32,7 @@ export default async function LoginPage({
         width={200}
         height={64}
         className="mb-8 h-auto w-full max-w-[180px] object-contain"
-        priority
+        loading="eager"
       />
       <LoginForm next={redirectTo} />
       <p className="mt-6 text-center text-xs text-muted-foreground">

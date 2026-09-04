@@ -38,6 +38,8 @@ export function LineSwitch({
     // whether it was open for typing do not carry across.
     search.delete("view");
     search.delete("edit");
+    // The areas are the other line's departments; this one has its own.
+    search.delete("dept");
     router.push(`/production/schedule?${search}`);
   }
 

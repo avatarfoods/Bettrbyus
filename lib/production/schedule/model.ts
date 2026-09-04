@@ -15,7 +15,10 @@
  * are worse than no dates.
  */
 
-import { isFinishedProduct } from "@/lib/production/wip-explode";
+import {
+  isFinishedProduct,
+  linePerOutputUnit,
+} from "@/lib/production/wip-explode";
 import type { WipRecipe, WipRecipeLine } from "@/lib/production/wip-explode";
 
 export type ScheduleEntry = {
@@ -203,14 +206,9 @@ export function deriveDemand(input: ScheduleInput): Map<string, RecipeDemand> {
       const child = recipesById.get(line.subRecipeId);
       if (!child) continue;
 
-      // Same arithmetic as the BOM explosion, so the plan and the batch sheet
-      // never disagree about how much a run takes.
-      const perParent =
-        recipe.batchSize !== null && recipe.batchSize !== 0
-          ? line.quantity / recipe.batchSize
-          : (isWeightUom(line.uom)
-              ? toOutputUnits(line.quantity, line.uom)
-              : line.quantity) * lossFactor(line.lossPct);
+      // The shared arithmetic, so the plan and the batch sheet never disagree
+      // about how much a run takes.
+      const perParent = linePerOutputUnit(recipe, line, lines).quantity;
 
       const quantity = multiplier * perParent;
       if (!quantity) continue;
@@ -735,18 +733,13 @@ export function buildScheduleTree(input: {
       }
 
       trail.add(recipeId);
-      for (const line of linesByRecipeId.get(recipeId) ?? []) {
+      const recipeLines = linesByRecipeId.get(recipeId) ?? [];
+      for (const line of recipeLines) {
         if (!line.subRecipeId) continue;
-        // Same arithmetic as the BOM explosion, so the tree and the cascade
-        // never disagree about how much of something a bowl takes.
+        // The shared arithmetic, so the tree and the cascade never disagree
+        // about how much of something a bowl takes.
         const quantity =
-          recipe.batchSize !== null && recipe.batchSize !== 0
-            ? (perRoot * line.quantity) / recipe.batchSize
-            : perRoot *
-              (isWeightUom(line.uom)
-                ? toOutputUnits(line.quantity, line.uom)
-                : line.quantity) *
-              lossFactor(line.lossPct);
+          perRoot * linePerOutputUnit(recipe, line, recipeLines).quantity;
 
         walk(line.subRecipeId, recipeId, depth + 1, quantity, trail);
       }
@@ -784,23 +777,6 @@ export function buildScheduleTree(input: {
   }
 
   return rows;
-}
-
-/** Loss is stored as -8 meaning 8% lost, so 8% more input is needed. */
-function lossFactor(lossPct: number | null): number {
-  if (lossPct === null || lossPct === 0) return 1;
-  return 1 + Math.abs(lossPct) / 100;
-}
-
-function isWeightUom(uom: string | null): boolean {
-  if (!uom) return true;
-  const value = uom.trim().toUpperCase();
-  return value === "LB" || value === "LBS" || value === "OZ" || value === "POUND";
-}
-
-/** Ounces written against a recipe measured in pounds. */
-function toOutputUnits(quantity: number, uom: string | null): number {
-  return (uom ?? "LB").trim().toUpperCase() === "OZ" ? quantity / 16 : quantity;
 }
 
 export type ResolvedWindow = {

@@ -15,6 +15,8 @@ export type PurchaseCycle = {
   status: "draft" | "in_progress" | "done" | "cancelled";
   import_id: string | null;
   created_at: string;
+  /** Production line this cycle's schedule demand was computed from. Null = every line. */
+  line_id: string | null;
 };
 
 export type PurchaseLine = {
@@ -46,6 +48,7 @@ export type PurchaseLine = {
     | "odoo_product_id"
     | "odoo_category"
     | "storage_type"
+    | "purchasing_category"
     | "department"
     | "lbs_per_case"
     | "is_protein"
@@ -65,10 +68,10 @@ export function lineItemName(line: PurchaseLine): string {
 }
 
 const MATERIAL_SELECT_WITH_DEPT =
-  "material:purchasing_materials ( id, item_code, name, odoo_product_id, odoo_category, storage_type, department, lbs_per_case, is_protein, thaw_buffer_days, lead_time_days, price )";
+  "material:purchasing_materials ( id, item_code, name, odoo_product_id, odoo_category, storage_type, purchasing_category, department, lbs_per_case, is_protein, thaw_buffer_days, lead_time_days, price )";
 
 const MATERIAL_SELECT_WITHOUT_DEPT =
-  "material:purchasing_materials ( id, item_code, name, odoo_product_id, odoo_category, storage_type, lbs_per_case, is_protein, thaw_buffer_days, lead_time_days, price )";
+  "material:purchasing_materials ( id, item_code, name, odoo_product_id, odoo_category, storage_type, purchasing_category, lbs_per_case, is_protein, thaw_buffer_days, lead_time_days, price )";
 
 const LINE_BASE_COLUMNS =
   "id, cycle_id, material_id, cases_required, lbs_required, on_hand_cases, required_to_order, order_by_date, status, arrival_date, is_emergency, required_time, notes";
@@ -170,7 +173,7 @@ export async function fetchCycles(
 ): Promise<{ data: PurchaseCycle[]; error: string | null }> {
   const { data, error } = await supabase
     .from("purchasing_cycles")
-    .select("id, po_number, required_date, week_label, status, import_id, created_at")
+    .select("id, po_number, required_date, week_label, status, import_id, created_at, line_id")
     .order("required_date", { ascending: false });
 
   if (error) {
@@ -234,7 +237,7 @@ export async function fetchCycleWithLines(
 ): Promise<{ cycle: PurchaseCycle | null; lines: PurchaseLine[]; error: string | null }> {
   const cycleRes = await supabase
     .from("purchasing_cycles")
-    .select("id, po_number, required_date, week_label, status, import_id, created_at")
+    .select("id, po_number, required_date, week_label, status, import_id, created_at, line_id")
     .eq("id", cycleId)
     .single();
 
@@ -282,7 +285,7 @@ export async function fetchOpenLines(
   supabase: SupabaseClient
 ): Promise<{ data: (PurchaseLine & { cycle: PurchaseCycle | null })[]; error: string | null }> {
   const cycleJoin =
-    "cycle:purchasing_cycles!purchasing_lines_cycle_id_fkey ( id, po_number, required_date, week_label, status, import_id, created_at )";
+    "cycle:purchasing_cycles!purchasing_lines_cycle_id_fkey ( id, po_number, required_date, week_label, status, import_id, created_at, line_id )";
 
   let rows: Record<string, unknown>[] = [];
   let lastError: string | null = null;
