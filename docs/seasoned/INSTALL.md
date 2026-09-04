@@ -152,11 +152,11 @@ supabase --version
 
 The CLI config (`supabase/config.toml`) is committed, so there is nothing to initialize. If it is ever missing, `supabase init` recreates it with defaults.
 
-The schema comes entirely from `supabase/migrations/`, starting with the baseline. Real data is optional: to work with the team's materials and recipes instead of empty tables, ask a teammate with access to the hosted project for a data-only dump and save it as `supabase/seed.sql`, which `supabase start` and `supabase db reset` load after the migrations. Someone with access produces it with `supabase link --project-ref <ref>` followed by `supabase db dump --data-only -f seed.sql`. Do not commit that file; it contains company data.
+The schema comes entirely from `supabase/migrations/`, starting with the baseline. Real data is optional, and the stack never loads it on its own: `[db.seed]` is disabled in `supabase/config.toml`, so a fresh database is empty by design and a `supabase/seed.sql` file is ignored even when present. To work with the team's materials and recipes instead of empty tables, ask a teammate with access to the hosted project for a data-only dump, save it as `supabase/seed.sql`, and load it by hand once the stack is running (step below). Someone with access produces it with `supabase link --project-ref <ref>` followed by `supabase db dump --data-only -f seed.sql`. Do not commit that file; it contains company data.
 
 Migration filenames follow the CLI's rule: `<14-digit timestamp>_<name>.sql`, and the timestamp must be unique because the CLI's history table keys on it. The files used to share 8-digit date prefixes, which is why they were renamed to `YYYYMMDDNN0000_name.sql`, where `NN` numbers the files of one day in the order they must run. When you add a migration, give it a timestamp later than every existing one; `supabase migration new <name>` does that for you.
 
-Start the stack. The first run downloads the Docker images (a few GB, several minutes). Every file in `supabase/migrations/` is applied in order, then `supabase/seed.sql` if present. Run it once and let it finish; two `supabase start` commands racing each other leave Docker with a half-created network and a `network supabase_network_Bettrbyus not found` error.
+Start the stack. The first run downloads the Docker images (a few GB, several minutes). Every file in `supabase/migrations/` is applied in order; nothing else is loaded. Run it once and let it finish; two `supabase start` commands racing each other leave Docker with a half-created network and a `network supabase_network_Bettrbyus not found` error.
 
 ```bash
 supabase start
@@ -170,9 +170,17 @@ Day-to-day commands:
 ```bash
 supabase stop            # stop the containers, keep the data
 supabase start           # bring them back
-supabase db reset        # wipe and replay all migrations plus seed.sql
+supabase db reset        # wipe and replay all migrations (no seed; reload a dump by hand afterwards)
 supabase stop --no-backup   # stop and discard the data
 ```
+
+To load a data dump (optional, see above), run it through `psql` against the local database. `brew install libpq` provides `psql` if you do not have Postgres installed. `supabase db reset` wipes the data again, so reload after every reset.
+
+```bash
+psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -f supabase/seed.sql
+```
+
+One setting in `supabase/config.toml` to keep in mind when you write queries: `[api] max_rows = 1000` caps every PostgREST response at 1000 rows, silently. The query succeeds, the array is a thousand long, and the rest of the table is simply missing. The hosted project has the same cap, and purchasing materials already exceed it, so any query over a table that can outgrow a thousand rows must go through `lib/supabase/all-rows.ts`, which pages until the rows run out, or paginate on its own.
 
 Create the first admin user. The command below talks to the local auth service with the service role key from `.env.local`; the trigger installed by the profiles migration creates the `profiles` row and copies `user_type` from the metadata, so the account is an admin straight away. Studio (Authentication, Users, Add user) does the same thing by hand, in which case set `user_type` to `admin` on the profile row afterwards. Any email and password work; these are local only.
 

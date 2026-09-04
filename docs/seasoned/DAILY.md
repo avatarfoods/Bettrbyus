@@ -79,10 +79,10 @@ Run these inside the worktree, where they address the lane's own stack:
 supabase status                  # URLs and keys of this lane's stack
 supabase migration new <name>    # new migration file with a fresh timestamp
 supabase migration up            # apply migration files the lane has not run yet
-supabase db reset                # wipe the lane's database and replay every migration (and seed.sql)
+supabase db reset                # wipe the lane's database and replay every migration (no seed)
 ```
 
-`supabase db reset` deletes the lane's users too; run `scripts/lane.sh up` afterwards to recreate the admin account.
+`supabase db reset` deletes the lane's users and any data dump you loaded by hand; run `scripts/lane.sh up` afterwards to recreate the admin account, then reload the dump (`INSTALL.md`, step 8, against the lane's database URL from `supabase status`).
 
 ## 7. Finish a task
 
