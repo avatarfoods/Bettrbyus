@@ -28,6 +28,13 @@ import {
   GearLink,
 } from "@/components/ui/gear-dialog";
 import { OnHandPanel } from "@/components/production/picking/on-hand-panel";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { downloadPickingExcel } from "@/components/production/picking/export";
 import { cn } from "@/lib/utils";
 
@@ -209,7 +216,11 @@ export function PickingView({
   return (
     <div className="flex flex-col gap-2.5 px-3 py-3 sm:px-4 print:px-0 print:py-0">
       {/* ------------------------------------------------ summary */}
+      {/* The numbers are the planner's; the floor gets the sheet and the
+          Print button, and nothing to read first. */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-sm bg-card px-3 py-2 ring-1 ring-foreground/10">
+        {isAdmin && (
+        <>
         <Big
           tone="blue"
           value={fmt(totals.cases, 1)}
@@ -251,6 +262,13 @@ export function PickingView({
             label="requested without a pack size"
             hint="Requested materials with no pack size in Odoo. They show pounds or pieces but no cases, and a red ? where the pack size would be. Filter to them with 'No pack size'."
           />
+        )}
+        </>
+        )}
+        {!isAdmin && (
+          <span className="text-xs text-muted-foreground">
+            {mode === "daily" ? "Daily usage" : "Open order"} · {from === to ? from : `${from} → ${to}`}
+          </span>
         )}
 
         <span className="ml-auto flex items-center gap-2 print:hidden">
@@ -463,8 +481,31 @@ export function PickingView({
           className="min-w-56 flex-1 sm:max-w-md"
         />
 
-        <span className="ml-auto text-[0.625rem] tabular-nums text-muted-foreground">
-          {rows.length} / {result.rows.length}
+        <span className="ml-auto flex items-center gap-1.5">
+          {result.warnings.length > 0 && (
+            <NoticeMark
+              tone="amber"
+              count={result.warnings.length}
+              title="Things to know about these numbers"
+              description="Each of these changes a number on the sheet a little. None of them stops the sheet."
+              items={result.warnings}
+            />
+          )}
+          {result.unresolved.length > 0 && (
+            <NoticeMark
+              tone="red"
+              count={result.unresolved.length}
+              title="Missing from this sheet"
+              description="Recipe lines that do not reach an Odoo product. Point them at the right product in the recipe editor and they appear."
+              items={result.unresolved.map(
+                (line) =>
+                  `${line.recipeName}: ${line.ingredientName}${line.totalLbs > 0 ? ` · ${fmt(line.totalLbs, 1)} lb` : ""}${line.totalUnits > 0 ? ` · ${fmt(line.totalUnits, 0)} ea` : ""}`
+              )}
+            />
+          )}
+          <span className="text-[0.625rem] tabular-nums text-muted-foreground">
+            {rows.length} / {result.rows.length}
+          </span>
         </span>
       </div>
 
@@ -480,40 +521,12 @@ export function PickingView({
       {notice && (
         <p className="rounded-sm bg-brand-muted px-3 py-1.5 text-xs text-primary print:hidden">{notice}</p>
       )}
-      {result.warnings.length > 0 && (
-        <details className="rounded-sm bg-warning-muted/60 px-3 py-1.5 text-xs text-warning-foreground print:hidden">
-          <summary className="cursor-pointer font-semibold">
-            {result.warnings.length} thing{result.warnings.length === 1 ? "" : "s"} to know about these numbers
-          </summary>
-          <ul className="mt-1 list-disc pl-4">
-            {result.warnings.slice(0, 40).map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))}
-          </ul>
-        </details>
-      )}
-      {result.unresolved.length > 0 && (
-        <details className="rounded-sm bg-destructive/10 px-3 py-1.5 text-xs text-destructive print:hidden">
-          <summary className="cursor-pointer font-semibold">
-            {result.unresolved.length} recipe line{result.unresolved.length === 1 ? "" : "s"} do not reach an Odoo product, so they are missing from this sheet
-          </summary>
-          <ul className="mt-1 list-disc pl-4">
-            {result.unresolved.slice(0, 40).map((line) => (
-              <li key={`${line.recipeName}|${line.ingredientName}`}>
-                {line.recipeName}: {line.ingredientName}
-                {line.totalLbs > 0 && ` · ${fmt(line.totalLbs, 1)} lb`}
-                {line.totalUnits > 0 && ` · ${fmt(line.totalUnits, 0)} ea`}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
 
       {/* ------------------------------------------------ the sheet */}
       <div className="flex items-start gap-3">
       <div className="min-w-0 flex-1">
       <div className="overflow-x-auto rounded-sm bg-card ring-1 ring-foreground/10">
-        <table className="w-full border-collapse text-sm">
+        <table className="w-full table-fixed border-collapse text-sm">
           <thead>
             <tr>
               <th className={cn(TH, "w-36")}>
@@ -531,7 +544,7 @@ export function PickingView({
                 />
               </th>
               <th className={cn(TH, "w-20")}>Item #</th>
-              <th className={cn(TH, "w-[38%] min-w-[16rem]")}>Item</th>
+              <th className={cn(TH, "w-[24rem]")}>Item</th>
               <th className={cn(TH, "w-20 text-center")}>
                 {/* Excel's filter on the column that matters: click the
                     header and the zero rows go away, click again and they
@@ -578,7 +591,7 @@ export function PickingView({
                   <Hint text="The total the recipes ask for on these dates, with the extra on top - pounds for weight, pieces for cartons and film. To pick is this divided by the pack size, rounded up to whole cases." />
                 </span>
               </th>
-              <th className={cn(TH, "w-40")}>Case</th>
+              <th className={TH}>Case</th>
               <th className={cn(TH, ON_HAND_TH)}>
                 <span className="inline-flex items-center gap-1">
                   On hand
@@ -780,6 +793,63 @@ function Row({
         </button>
       </td>
     </tr>
+  );
+}
+
+/**
+ * A small "?" where a banner used to be.
+ *
+ * The floor does not need a yellow and a red stripe across the page to pick
+ * from it. The planner does need to know, so the count sits in a mark that
+ * opens the list when asked.
+ */
+function NoticeMark({
+  tone,
+  count,
+  title,
+  description,
+  items,
+}: {
+  tone: "amber" | "red";
+  count: number;
+  title: string;
+  description: string;
+  items: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title={`${count} ${title.toLowerCase()}`}
+        aria-label={`${count} ${title.toLowerCase()}`}
+        className={cn(
+          "inline-flex h-4 min-w-4 items-center justify-center gap-0.5 rounded-sm px-1 text-[0.625rem] font-bold transition-colors",
+          tone === "amber"
+            ? "bg-warning-muted text-warning-foreground hover:brightness-95"
+            : "bg-destructive/10 text-destructive hover:bg-destructive/20"
+        )}
+      >
+        ?<span className="font-semibold tabular-nums">{count}</span>
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>{description}</DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-80 list-disc overflow-y-auto pl-5 text-xs leading-relaxed">
+            {items.slice(0, 80).map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+            {items.length > 80 && (
+              <li className="text-muted-foreground">…and {items.length - 80} more</li>
+            )}
+          </ul>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

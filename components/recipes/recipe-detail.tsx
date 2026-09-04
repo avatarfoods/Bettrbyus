@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { RecipeIdentity } from "@/components/recipes/recipe-identity";
 import {
   AlertTriangle,
   Check,
   ChevronDown,
+  Cloud,
+  CloudAlert,
+  CloudCheck,
+  CloudUpload,
   CornerUpRight,
   Network,
   Pencil,
@@ -15,7 +19,10 @@ import {
   Wheat,
 } from "lucide-react";
 import { ButtonTabBar, TabBody, type TabItem } from "@/components/ui/tab-bar";
-import { FinishedProductForm } from "@/components/production/finished-product-form";
+import {
+  FinishedProductForm,
+  type SpecSaveStatus,
+} from "@/components/production/finished-product-form";
 import { InstructionsTab } from "@/components/recipes/instructions-tab";
 import { RecipeGearMenu } from "@/components/recipes/recipe-gear-menu";
 import {
@@ -63,6 +70,8 @@ export type RecipeDetailData = {
   specOptions?: OdooFinishedOption[];
   specOdooError?: string | null;
   specMissingTable?: boolean;
+  /** What a case can be counted in, from Recipes > Settings. */
+  caseUnits?: string[];
   canEdit?: boolean;
   /** The printed method for this recipe. */
   steps?: InstructionStep[];
@@ -103,6 +112,9 @@ export type RecipeDetailData = {
 export function RecipeDetail({ data }: { data: RecipeDetailData }) {
   const { recipe, raws, usedIn, bom } = data;
   const [tab, setTab] = useState("ingredients");
+  /** Where the specification's saving stands, for the cloud by the name. */
+  const [specStatus, setSpecStatus] = useState<SpecSaveStatus | null>(null);
+  const specSaveNow = useRef<(() => void) | null>(null);
   const [showIssues, setShowIssues] = useState(false);
   /**
    * One edit mode for the whole recipe.
@@ -206,7 +218,7 @@ export function RecipeDetail({ data }: { data: RecipeDetailData }) {
       */}
       <div
         className={cn(
-          "border-b-2 border-b-foreground/20 px-3 py-2.5 sm:px-4",
+          "sticky top-[calc(var(--app-bar-height)+var(--page-shell-height,0px))] z-30 border-b-2 border-b-foreground/20 px-3 py-2.5 sm:px-4",
           finishedTreatment ? "bg-brand-muted" : deptLook.tint
         )}
       >
@@ -250,6 +262,10 @@ export function RecipeDetail({ data }: { data: RecipeDetailData }) {
               twice is one place too many to keep in agreement. */}
           <KindTag kind={recipe.kind} />
 
+          {specStatus && (
+            <SaveCloud status={specStatus} onSave={() => specSaveNow.current?.()} />
+          )}
+
           {/* The Review tab is gone; the badge opens what it used to hold. */}
           {recipe.issues.length > 0 && (
             <button
@@ -283,7 +299,11 @@ export function RecipeDetail({ data }: { data: RecipeDetailData }) {
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 bg-surface-sunk px-3 py-3 sm:px-4 lg:flex-row">
         <div className="flex min-w-0 flex-1 flex-col rounded-sm bg-card ring-1 ring-foreground/10">
-          <ButtonTabBar items={tabs} activeId={tab} onSelect={setTab} />
+          {/* Frozen: the tabs stay put while a long ingredient list or the
+              specification scrolls underneath them. */}
+          <div className="sticky top-[calc(var(--app-bar-height)+var(--page-shell-height,0px)+var(--recipe-band-height,4.25rem))] z-20 bg-card">
+            <ButtonTabBar items={tabs} activeId={tab} onSelect={setTab} />
+          </div>
 
           <TabBody className="flex-1 !px-0 !py-0">
             {tab === "ingredients" && (
@@ -358,8 +378,13 @@ export function RecipeDetail({ data }: { data: RecipeDetailData }) {
               <SpecificationTab
                 recipeId={recipe.id}
                 recipeName={recipe.name}
+                recipeCode={recipe.wipCode}
                 spec={data.spec ?? null}
                 missingTable={data.specMissingTable ?? false}
+                caseUnits={data.caseUnits}
+                canEdit={(data.canEdit ?? false) && editing}
+                onStatus={setSpecStatus}
+                saveNowRef={specSaveNow}
               />
             )}
             {tab === "bom" && (
@@ -723,13 +748,24 @@ function fmt(value: number, digits: number): string {
 function SpecificationTab({
   recipeId,
   recipeName,
+  recipeCode,
   spec,
   missingTable,
+  caseUnits,
+  canEdit,
+  onStatus,
+  saveNowRef,
 }: {
   recipeId: string;
   recipeName: string;
+  recipeCode: string;
   spec: FinishedProduct | null;
   missingTable: boolean;
+  caseUnits?: string[];
+  /** Edit recipe is the one switch: off, the specification is read only. */
+  canEdit: boolean;
+  onStatus: (status: SpecSaveStatus) => void;
+  saveNowRef: React.MutableRefObject<(() => void) | null>;
 }) {
   // Pallets is part of the specification, not a rival to it: how a case is
   // built and what is in it are the same document, read in one sitting.
@@ -753,8 +789,44 @@ function SpecificationTab({
       product={spec}
       recipeId={recipeId}
       recipeName={recipeName}
+      recipeCode={recipeCode}
+      caseUnits={caseUnits}
       section={view}
       onSectionChange={setView}
+      readOnly={!canEdit}
+      autosave={canEdit}
+      onStatus={onStatus}
+      saveNowRef={saveNowRef}
     />
+  );
+}
+
+/**
+ * The little cloud by the recipe's name.
+ *
+ * Green when the specification is stored, amber while a change waits its
+ * moment, pulsing while it writes, red if the write failed. Clicking it saves
+ * now rather than in a moment.
+ */
+function SaveCloud({ status, onSave }: { status: SpecSaveStatus; onSave: () => void }) {
+  const look = {
+    saved: { Icon: CloudCheck, tone: "text-success", label: "Specification saved" },
+    dirty: { Icon: Cloud, tone: "text-warning-foreground", label: "Changes waiting - saving in a moment. Click to save now." },
+    saving: { Icon: CloudUpload, tone: "text-primary animate-pulse", label: "Saving the specification…" },
+    error: { Icon: CloudAlert, tone: "text-destructive", label: "The specification could not be saved. Click to try again." },
+  }[status];
+  return (
+    <button
+      type="button"
+      onClick={onSave}
+      title={look.label}
+      aria-label={look.label}
+      className={cn(
+        "inline-flex size-7 items-center justify-center rounded-sm transition-colors hover:bg-muted",
+        look.tone
+      )}
+    >
+      <look.Icon className="size-4" />
+    </button>
   );
 }

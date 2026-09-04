@@ -26,11 +26,12 @@ import { fetchProductionConfig } from "@/lib/production/config";
 import { getCurrentUserProfile, isAdminProfile } from "@/lib/auth/profile";
 import { isMissingTable } from "@/lib/supabase/missing";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAppSettings } from "@/lib/settings/wallpaper";
 
 type Params = {
   params: Promise<{ id: string }>;
   /** `back` is set when you arrive from the plan - see the breadcrumb below. */
-  searchParams?: Promise<{ back?: string }>;
+  searchParams?: Promise<{ back?: string; tree?: string }>;
 };
 
 export async function generateMetadata({ params }: Params) {
@@ -42,14 +43,19 @@ export async function generateMetadata({ params }: Params) {
 
 export default async function RecipePage({ params, searchParams }: Params) {
   const { id } = await params;
-  const back = (await searchParams)?.back;
+  const query = await searchParams;
+  const back = query?.back;
+  const treeRootId = query?.tree;
   const supabase = await createClient();
   const catalog = await fetchRecipeCatalog(supabase);
 
   const recipe = catalog.byId.get(id);
   if (!recipe) notFound();
 
-  const profile = await getCurrentUserProfile(supabase);
+  const [profile, appSettings] = await Promise.all([
+    getCurrentUserProfile(supabase),
+    fetchAppSettings(supabase),
+  ]);
   const canEdit = isAdminProfile(profile);
 
   const instructions = await fetchInstructions(supabase, id);
@@ -292,12 +298,37 @@ export default async function RecipePage({ params, searchParams }: Params) {
 
   // catalog.recipes is already sorted by name, which is the order the list
   // shows - so paging here walks the list the user was just looking at.
-  const index = catalog.recipes.findIndex((entry) => entry.id === id);
-  const previous = index > 0 ? catalog.recipes[index - 1] : null;
-  const next =
-    index >= 0 && index < catalog.recipes.length - 1
-      ? catalog.recipes[index + 1]
-      : null;
+  /*
+    The pager walks the list you came from.
+
+    Opened from a tree, previous and next move through that tree in build
+    order - the bowl, what it is assembled from, down to the cuts - and stay
+    inside it, rather than through all 199 recipes alphabetically.
+  */
+  const treeRoot = treeRootId ? catalog.byId.get(treeRootId) : undefined;
+  const walkOrder: typeof catalog.recipes = [];
+  if (treeRoot) {
+    const seen = new Set<string>();
+    const walk = (entry: typeof treeRoot, depth: number, trail: Set<string>) => {
+      if (depth > 12 || trail.has(entry.id)) return;
+      if (!seen.has(entry.id)) {
+        seen.add(entry.id);
+        walkOrder.push(entry);
+      }
+      trail.add(entry.id);
+      for (const line of entry.lines) {
+        const child = line.subRecipeId ? catalog.byId.get(line.subRecipeId) : undefined;
+        if (child) walk(child, depth + 1, trail);
+      }
+      trail.delete(entry.id);
+    };
+    walk(treeRoot, 0, new Set());
+  }
+  const order = treeRoot && walkOrder.some((entry) => entry.id === id) ? walkOrder : catalog.recipes;
+  const carry = treeRoot ? `?tree=${treeRoot.id}` : "";
+  const index = order.findIndex((entry) => entry.id === id);
+  const previous = index > 0 ? order[index - 1] : null;
+  const next = index >= 0 && index < order.length - 1 ? order[index + 1] : null;
 
   const usedIn = whereUsed(catalog, id).map(({ recipe: parent, line }) => ({
     id: parent.id,
@@ -332,11 +363,11 @@ export default async function RecipePage({ params, searchParams }: Params) {
             {recipe.archivedAt ? "Archived" : "Active"}
           </span>
           <RecordPager
-          index={index}
-          total={catalog.recipes.length}
-          prevHref={previous ? `/recipes/${previous.id}` : null}
-          nextHref={next ? `/recipes/${next.id}` : null}
-          label="recipe"
+            index={index}
+            total={order.length}
+            prevHref={previous ? `/recipes/${previous.id}${carry}` : null}
+            nextHref={next ? `/recipes/${next.id}${carry}` : null}
+            label={treeRoot ? `in ${treeRoot.name}` : "recipe"}
           />
         </span>
       }
@@ -356,6 +387,7 @@ export default async function RecipePage({ params, searchParams }: Params) {
           usedIn,
           spec: spec.spec,
           specMissingTable: spec.missingTable,
+          caseUnits: appSettings.caseUnits,
           specOptions: specOptions.options,
           specOdooError: specOptions.error,
           canEdit,

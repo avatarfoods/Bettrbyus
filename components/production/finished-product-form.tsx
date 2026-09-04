@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Loader2, Trash2 } from "lucide-react";
 import {
@@ -24,18 +24,35 @@ import { cn } from "@/lib/utils";
  * type. Cases per pallet is never an input — typing it in two places is how
  * the workbook ended up disagreeing with itself.
  */
+export type SpecSaveStatus = "saved" | "dirty" | "saving" | "error";
+
+/** What a case can be counted in. */
+const CASE_UNITS = ["bowl", "burrito", "cup", "bag", "tray", "piece"];
+
 export function FinishedProductForm({
   product,
   recipeId,
   recipeName,
+  recipeCode,
+  caseUnits,
   section = "spec",
   onSectionChange,
+  readOnly = false,
+  autosave = false,
+  onStatus,
+  saveNowRef,
 }: {
   product: FinishedProduct | null;
   /** Set when the form is a tab on a recipe, which is the normal case. */
   recipeId?: string;
   /** Seeds the name so a new spec is not blank. */
   recipeName?: string;
+  /** Seeds the item code the same way - the recipe's own number. */
+  recipeCode?: string;
+  /** What a case can be counted in, from Recipes > Settings. */
+  caseUnits?: string[];
+  /** Read only until the recipe is opened for editing. */
+  readOnly?: boolean;
   /**
    * Which half of the specification to show. Carlos asked for the pallet to be
    * its own tab, so the same form renders twice - once for how it is stacked,
@@ -45,6 +62,12 @@ export function FinishedProductForm({
   section?: "all" | "pallet" | "spec";
   /** Switching between the two halves, when they share one tab. */
   onSectionChange?: (next: "spec" | "pallet") => void;
+  /** Write every change a moment after it stops, instead of waiting for Save. */
+  autosave?: boolean;
+  /** Where the saving stands, for a cloud somewhere up the page. */
+  onStatus?: (status: SpecSaveStatus) => void;
+  /** Filled with a function that saves right now, for that cloud to call. */
+  saveNowRef?: React.MutableRefObject<(() => void) | null>;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -57,11 +80,12 @@ export function FinishedProductForm({
     product ?? {
       id: "",
       odooProductId: 0,
-      itemCode: "",
+      itemCode: recipeCode ?? "",
       name: recipeName ?? "",
       customerGroup: null,
       storageType: "freezer",
       bowlsPerCase: null,
+      caseUnit: "bowl",
       productsPerCase: 1,
       netWeightPerCase: null,
       caseGtin: null,
@@ -101,10 +125,85 @@ export function FinishedProductForm({
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  /*
+    What is being typed, kept as text until the box is left.
+
+    Storing Number(raw) on every keystroke made "5." collapse back to 5, so a
+    decimal could never be typed: 5.625 was impossible. The number the form
+    holds still updates as you type; only the box keeps the raw text.
+  */
+  const [texts, setTexts] = useState<Partial<Record<keyof FinishedProduct, string>>>({});
   const numeric =
     <K extends keyof FinishedProduct>(key: K) =>
-    (raw: string) =>
-      set(key, (raw.trim() === "" ? null : Number(raw)) as FinishedProduct[K]);
+    (raw: string) => {
+      setTexts((current) => ({ ...current, [key]: raw }));
+      const trimmed = raw.trim().replace(",", ".");
+      if (trimmed === "") return set(key, null as FinishedProduct[K]);
+      const parsed = Number(trimmed);
+      if (Number.isFinite(parsed)) set(key, parsed as FinishedProduct[K]);
+    };
+  const numField = <K extends keyof FinishedProduct>(key: K) => ({
+    value: texts[key] ?? ((form[key] as number | null) ?? ""),
+    onChange: (event: React.ChangeEvent<HTMLInputElement>) => numeric(key)(event.target.value),
+    onBlur: () => setTexts((current) => ({ ...current, [key]: undefined })),
+  });
+
+  /*
+    Saved as you go.
+
+    Typing a number and moving to another tab used to lose it unless Save was
+    clicked, and nothing said so. Now every change is written a moment after
+    it stops, and the cloud beside the recipe's name says where things stand.
+    The manual Save still works, and the cloud can be clicked to save now.
+  */
+  const lastSaved = useRef(JSON.stringify(product ?? null));
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const save = useCallback(
+    (current: FinishedProduct) => {
+      setError(null);
+      onStatus?.("saving");
+      startTransition(async () => {
+        const result = await saveFinishedProduct({
+          ...current,
+          id: current.id || undefined,
+          recipeId,
+        });
+        if (result.ok) {
+          const settled = { ...current, id: result.id };
+          lastSaved.current = JSON.stringify(settled);
+          setForm((state) => (state.id === settled.id ? state : { ...state, id: settled.id }));
+          onStatus?.("saved");
+          if (!recipeId) router.push("/production/finished-products");
+          router.refresh();
+        } else {
+          onStatus?.("error");
+          setError(result.message);
+        }
+      });
+    },
+    [onStatus, recipeId, router]
+  );
+  useEffect(() => {
+    if (!autosave) return;
+    const snapshot = JSON.stringify(form);
+    if (snapshot === lastSaved.current) return;
+    onStatus?.("dirty");
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => save(form), 1200);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [form, autosave, save, onStatus]);
+  useEffect(() => {
+    if (!saveNowRef) return;
+    saveNowRef.current = () => {
+      if (timer.current) clearTimeout(timer.current);
+      if (JSON.stringify(form) !== lastSaved.current) save(form);
+    };
+    return () => {
+      saveNowRef.current = null;
+    };
+  }, [saveNowRef, form, save]);
 
   const math = palletMath(form);
   const warnings = specWarnings(form);
@@ -117,29 +216,18 @@ export function FinishedProductForm({
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
-    setError(null);
-    startTransition(async () => {
-      const result = await saveFinishedProduct({
-        ...form,
-        id: form.id || undefined,
-        recipeId,
-      });
-      if (result.ok) {
-        // As a tab on a recipe there is nowhere to navigate to - the page it
-        // belongs to is already open, so it just refreshes in place.
-        if (!recipeId) router.push("/production/finished-products");
-        router.refresh();
-      } else {
-        setError(result.message);
-      }
-    });
+    if (timer.current) clearTimeout(timer.current);
+    save(form);
   }
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4 px-3 py-3 sm:px-4">
-      {/* Two halves of one document, read in one sitting. */}
+      {/* Two halves of one document, read in one sitting. The switch sits
+          outside the read-only fieldset so both halves can be read without
+          opening the recipe for editing. */}
       {onSectionChange && (
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="flex items-center gap-1">
           {(
             [
               ["spec", "Specification"],
@@ -161,6 +249,22 @@ export function FinishedProductForm({
               {label}
             </button>
           ))}
+          </span>
+          {readOnly && (
+            <span className="text-xs text-muted-foreground">
+              Reading. Press <span className="font-semibold text-primary">Edit recipe</span> up top to change it.
+            </span>
+          )}
+        </div>
+      )}
+      <fieldset disabled={readOnly} className="contents">
+      {autosave && error && (
+        <div
+          role="alert"
+          className="flex items-start gap-2.5 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          {error}
         </div>
       )}
       {/*
@@ -204,33 +308,39 @@ export function FinishedProductForm({
           <div className="grid gap-3 lg:grid-cols-2">
               {showPallet && (
               <Fieldset title="Case">
-                  <Field label="Bowls per case" hint="How many units are in one case. 10/9 oz is 10.">
-                    <input
-                      inputMode="decimal"
-                      value={form.bowlsPerCase ?? ""}
-                      onChange={(e) => numeric("bowlsPerCase")(e.target.value)}
-                      className={cn(inputClass, "tabular-nums")}
-                    />
+                  <Field
+                    label="Units per case"
+                    hint="How many pieces are in one case, and what they are. A 10/9 oz bowl case is 10 bowls; a 12-carton family pack of 4 is 48 burritos."
+                  >
+                    <span className="flex gap-1.5">
+                      <input
+                        inputMode="decimal"
+                        {...numField("bowlsPerCase")}
+                        className={cn(inputClass, "min-w-0 flex-1 tabular-nums")}
+                      />
+                      <select
+                        value={form.caseUnit ?? "bowl"}
+                        onChange={(e) => set("caseUnit", e.target.value)}
+                        aria-label="Unit"
+                        className={cn(inputClass, "w-28 shrink-0")}
+                      >
+                        {[...new Set([...(caseUnits ?? CASE_UNITS), ...(form.caseUnit ? [form.caseUnit] : [])])].map((unit) => (
+                          <option key={unit} value={unit}>
+                            {unit}
+                          </option>
+                        ))}
+                      </select>
+                    </span>
                   </Field>
                   <Field
                     label="Products per case"
-                    hint="How many DIFFERENT products are packed together. An Aldi 20/2CT holds two flavours, so 2."
+                    hint="Cartons or packs in the case. A 12-carton case is 12; a two-flavour combo case is 2; a case of loose bowls is 1."
                   >
                     <input
                       inputMode="numeric"
                       value={form.productsPerCase}
                       onChange={(e) =>
                         set("productsPerCase", Number(e.target.value) || 1)
-                      }
-                      className={cn(inputClass, "tabular-nums")}
-                    />
-                  </Field>
-                  <Field label="Net weight per case" hint="Net contents, not the gross weight of the packed case.">
-                    <input
-                      inputMode="decimal"
-                      value={form.netWeightPerCase ?? ""}
-                      onChange={(e) =>
-                        numeric("netWeightPerCase")(e.target.value)
                       }
                       className={cn(inputClass, "tabular-nums")}
                     />
@@ -242,35 +352,54 @@ export function FinishedProductForm({
               {showPallet && (
               <>
               <Fieldset title="Weights">
-                  <Field label="Case weight (lb)">
+                  <Field
+                    label="Net weight per case (lb)"
+                    hint="What is inside: the food only. Decimals are fine - 5.625."
+                  >
                     <input
-                      type="number"
-                      step="any"
-                      min={0}
-                      value={form.caseWeightLb ?? ""}
-                      onChange={(e) =>
-                        set("caseWeightLb", e.target.value === "" ? null : Number(e.target.value))
-                      }
+                      inputMode="decimal"
+                      {...numField("netWeightPerCase")}
+                      placeholder="5.625"
+                      className={cn(inputClass, "tabular-nums")}
+                    />
+                  </Field>
+                  <Field
+                    label="Gross weight per case (lb)"
+                    hint="The packed case as it ships: food, cartons, trays and box. The pallet weight is built from this."
+                  >
+                    <input
+                      inputMode="decimal"
+                      {...numField("caseWeightLb")}
                       placeholder="6.8"
                       className={cn(inputClass, "tabular-nums")}
                     />
                   </Field>
+                  <dl className="mt-2 flex flex-col gap-1 border-t-2 border-t-brand/40 pt-2 text-sm">
+                    <Derived
+                      label="Packaging per case"
+                      value={
+                        form.caseWeightLb && form.netWeightPerCase
+                          ? Math.max(0, form.caseWeightLb - form.netWeightPerCase)
+                          : null
+                      }
+                      unit="lb"
+                      hint="gross minus net"
+                    />
+                  </dl>
               </Fieldset>
 
               <Fieldset title="Pallet">
                   <Field label="Cases per layer" hint="Ti - how many cases fit on one layer of the pallet.">
                     <input
                       inputMode="numeric"
-                      value={form.casesPerLayer ?? ""}
-                      onChange={(e) => numeric("casesPerLayer")(e.target.value)}
+                      {...numField("casesPerLayer")}
                       className={cn(inputClass, "tabular-nums")}
                     />
                   </Field>
                   <Field label="Layers high" hint="Hi - how many layers are stacked. Ti x Hi is cases per pallet.">
                     <input
                       inputMode="numeric"
-                      value={form.layersHigh ?? ""}
-                      onChange={(e) => numeric("layersHigh")(e.target.value)}
+                      {...numField("layersHigh")}
                       className={cn(inputClass, "tabular-nums")}
                     />
                   </Field>
@@ -290,44 +419,28 @@ export function FinishedProductForm({
                   <Field label="Case width (in)">
                     <input
                       inputMode="decimal"
-                      value={form.caseWidthIn ?? ""}
-                      onChange={(e) => numeric("caseWidthIn")(e.target.value)}
+                      {...numField("caseWidthIn")}
                       className={cn(inputClass, "tabular-nums")}
                     />
                   </Field>
                   <Field label="Case length (in)">
                     <input
                       inputMode="decimal"
-                      value={form.caseLengthIn ?? ""}
-                      onChange={(e) => numeric("caseLengthIn")(e.target.value)}
+                      {...numField("caseLengthIn")}
                       className={cn(inputClass, "tabular-nums")}
                     />
                   </Field>
                   <Field label="Case height (in)">
                     <input
                       inputMode="decimal"
-                      value={form.caseHeightIn ?? ""}
-                      onChange={(e) => numeric("caseHeightIn")(e.target.value)}
+                      {...numField("caseHeightIn")}
                       className={cn(inputClass, "tabular-nums")}
                     />
                   </Field>
                   <Field label="Pallet base height (in)">
                     <input
                       inputMode="decimal"
-                      value={form.palletBaseHeightIn ?? ""}
-                      onChange={(e) =>
-                        numeric("palletBaseHeightIn")(e.target.value)
-                      }
-                      className={cn(inputClass, "tabular-nums")}
-                    />
-                  </Field>
-                  <Field label="Max pallet height (in)">
-                    <input
-                      inputMode="decimal"
-                      value={form.maxPalletHeightIn ?? ""}
-                      onChange={(e) =>
-                        numeric("maxPalletHeightIn")(e.target.value)
-                      }
+                      {...numField("palletBaseHeightIn")}
                       className={cn(inputClass, "tabular-nums")}
                     />
                   </Field>
@@ -358,9 +471,9 @@ export function FinishedProductForm({
                         : null
                     }
                     unit="lb"
-                    hint="cases × case weight, pallet itself not included"
+                    hint="cases x gross case weight, pallet itself not included"
                   />
-                  <Derived label="Pallet height" value={math.palletHeightIn} unit="in" hint="base + (high × case)" />
+                  <Derived label="Pallet height" value={math.palletHeightIn} unit="in" hint="base + (high x case height), worked out, not typed" />
                   <Derived label="Cases per pallet space" value={math.casesPerPalletSpace} hint={`× ${form.palletsPerStack} stacked`} />
                   <Derived label="Stacked height" value={math.stackedHeightIn} unit="in" />
                 </dl>
@@ -426,13 +539,12 @@ export function FinishedProductForm({
                   printed large. A wrong offset shows up here rather than on a
                   carton.
                 */}
-                <div className="flex flex-wrap items-end gap-x-4 gap-y-2 pb-2">
-                  <Inline label="Shelf life">
+                  <Field label="Shelf life" hint="How long the product is good for from its production date.">
+                    <span className="flex gap-1.5">
                     <input
                       inputMode="numeric"
-                      value={form.shelfLifeValue ?? ""}
-                      onChange={(e) => numeric("shelfLifeValue")(e.target.value)}
-                      className={cn(inputClass, "w-16 tabular-nums")}
+                      {...numField("shelfLifeValue")}
+                      className={cn(inputClass, "w-20 tabular-nums")}
                     />
                     <select
                       value={form.shelfLifeUnit}
@@ -447,10 +559,11 @@ export function FinishedProductForm({
                       <option value="months">months</option>
                       <option value="days">days</option>
                     </select>
-                  </Inline>
+                    </span>
+                  </Field>
 
-                  <Inline
-                    label="Expiry offset"
+                  <Field
+                    label="Expiry offset (days)"
                     hint="Added to the shelf life. The workbook used -1, so a 365 day life expires the day before the anniversary."
                   >
                     <input
@@ -459,24 +572,22 @@ export function FinishedProductForm({
                       onChange={(e) =>
                         set("expirationOffsetDays", Number(e.target.value) || 0)
                       }
-                      className={cn(inputClass, "w-16 tabular-nums")}
+                      className={cn(inputClass, "tabular-nums")}
                     />
-                    <span className="text-xs text-muted-foreground">days</span>
-                  </Inline>
+                  </Field>
 
-                  <Inline
+                  <Field
                     label="Lot format"
                     hint="MMDDYYYY is the production date, which is what tells the app which day a bucket came from."
                   >
                     <input
                       value={form.lotFormat}
                       onChange={(e) => set("lotFormat", e.target.value)}
-                      className={cn(inputClass, "w-32 font-mono")}
+                      className={cn(inputClass, "font-mono")}
                     />
-                  </Inline>
-                </div>
+                  </Field>
 
-                <div className="grid gap-2 border-t-2 border-t-brand/50 pt-2 sm:grid-cols-2">
+                <div className="mt-2 grid gap-2 border-t-2 border-t-brand/40 pt-2 sm:grid-cols-2">
                   <Answer label="Lot if produced today" value={sampleLot || "—"} />
                   <Answer
                     label="It would expire"
@@ -580,7 +691,7 @@ export function FinishedProductForm({
               )}
           </div>
 
-          {error && (
+          {!autosave && error && (
             <div
               role="alert"
               className="flex items-start gap-2.5 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
@@ -591,21 +702,27 @@ export function FinishedProductForm({
           )}
 
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="submit"
-              disabled={pending}
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60"
-            >
-              {pending && <Loader2 className="size-4 animate-spin" />}
-              Save specification
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push("/production/finished-products")}
-              className="inline-flex h-9 items-center rounded-sm bg-card ring-1 ring-foreground/10 px-4 text-sm hover:bg-muted"
-            >
-              Cancel
-            </button>
+            {/* With the cloud saving as you go, a Save button is a second
+                way to do what already happened. */}
+            {!autosave && !readOnly && !recipeId && (
+              <>
+                <button
+                  type="submit"
+                  disabled={pending}
+                  className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60"
+                >
+                  {pending && <Loader2 className="size-4 animate-spin" />}
+                  Save specification
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/production/finished-products")}
+                  className="inline-flex h-9 items-center rounded-sm bg-card ring-1 ring-foreground/10 px-4 text-sm hover:bg-muted"
+                >
+                  Cancel
+                </button>
+              </>
+            )}
 
             {product && (
               <button
@@ -630,6 +747,7 @@ export function FinishedProductForm({
             )}
           </div>
       </>
+      </fieldset>
     </form>
   );
 }
@@ -696,35 +814,6 @@ function Field({
 }
 
 /** A field on one line with the others, for a rule read left to right. */
-function Inline({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="flex items-center gap-1 text-[0.625rem] font-semibold tracking-wider text-muted-foreground uppercase">
-        {label}
-        {hint && (
-          <span
-            title={hint}
-            aria-label={hint}
-            className="inline-flex size-3.5 cursor-help items-center justify-center rounded-sm bg-muted text-[0.5625rem] font-bold normal-case"
-          >
-            ?
-          </span>
-        )}
-      </span>
-      <span className="flex items-center gap-1.5">{children}</span>
-    </label>
-  );
-}
-
-/** What the rule above works out to. The thing people came to check. */
 function Answer({
   label,
   value,

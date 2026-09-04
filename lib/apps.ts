@@ -188,6 +188,12 @@ export const APPS: AppDefinition[] = [
             icon: CalendarRange,
           },
           {
+            group: "Planning",
+            label: "Print sheets",
+            href: "/production/settings/print",
+            icon: Printer,
+          },
+          {
             group: "Orders",
             label: "Order schedule",
             href: "/production/settings/orders",

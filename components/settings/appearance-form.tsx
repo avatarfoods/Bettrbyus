@@ -65,6 +65,9 @@ export function AppearanceForm({ settings }: AppearanceFormProps) {
     wallpaperImageUrl: imageUrl || null,
     showLogoWatermark,
     logoUrl: settings.logoUrl,
+    caseUnits: settings.caseUnits,
+    printSheets: settings.printSheets,
+    printPlan: settings.printPlan,
   });
 
   async function onSubmit(values: WallpaperSettingsValues) {

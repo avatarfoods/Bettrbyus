@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentUserProfile, isAdminProfile } from "@/lib/auth/profile";
 import { createClient } from "@/lib/supabase/server";
+import { isMissingColumn } from "@/lib/supabase/missing";
 
 export type SpecResult =
   | { ok: true; id: string }
@@ -29,17 +30,17 @@ const specSchema = z.object({
   odooProductId: z
     .number()
     .int()
-    .positive()
     .nullable()
     .optional()
-    .transform((value) => value ?? null),
+    .transform((value) => (value && value > 0 ? value : null)),
   itemCode: z.string().trim().min(1, "Item code is required").max(40),
   name: z.string().trim().min(1, "Name is required").max(200),
   customerGroup: z.string().trim().max(60).nullable(),
   storageType: z.enum(["freezer", "cooler", "dry"]).nullable(),
 
   bowlsPerCase: optionalNumber,
-  productsPerCase: z.number().int().min(1).max(50),
+  caseUnit: z.string().trim().max(20).nullable().optional(),
+  productsPerCase: z.number().int().min(1).max(500),
   netWeightPerCase: optionalNumber,
 
   caseGtin: z.string().trim().max(20).nullable(),
@@ -109,6 +110,7 @@ export async function saveFinishedProduct(input: unknown): Promise<SpecResult> {
     customer_group: v.customerGroup,
     storage_type: v.storageType,
     bowls_per_case: v.bowlsPerCase,
+    case_unit: v.caseUnit ?? null,
     products_per_case: v.productsPerCase,
     net_weight_per_case: v.netWeightPerCase,
     case_gtin: v.caseGtin,
@@ -142,11 +144,22 @@ export async function saveFinishedProduct(input: unknown): Promise<SpecResult> {
     updated_by: gate.userId,
   };
 
-  const query = v.id
-    ? supabase.from("finished_products").update(row).eq("id", v.id).select("id")
-    : supabase.from("finished_products").insert(row).select("id");
+  const write = (values: Record<string, unknown>) =>
+    (v.id
+      ? supabase.from("finished_products").update(values).eq("id", v.id).select("id")
+      : supabase.from("finished_products").insert(values).select("id")
+    ).maybeSingle();
 
-  const { data, error } = await query.maybeSingle();
+  let { data, error } = await write(row);
+
+  // The case unit arrived with 20260904_finished_products_case_unit. A
+  // database without it must still save everything else, rather than
+  // refusing the whole specification over one new column.
+  if (error && isMissingColumn(error)) {
+    const { case_unit: _caseUnit, ...withoutUnit } = row;
+    void _caseUnit;
+    ({ data, error } = await write(withoutUnit));
+  }
 
   if (error) {
     return {

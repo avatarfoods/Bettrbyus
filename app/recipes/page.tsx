@@ -24,6 +24,8 @@ export default async function RecipesPage({
     line?: string;
     /** "__finished__", or a department name. Absent means every department. */
     dept?: string;
+    /** A finished product's id: show its whole family tree. */
+    tree?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -89,6 +91,13 @@ export default async function RecipesPage({
       ? requestedDept
       : null;
 
+  const finished = catalog.recipes
+    .filter((recipe) => recipe.isFinished && recipe.archivedAt === null)
+    .filter((recipe) => !line || departmentLineMap(productionConfig).get(recipe.department ?? "") === line)
+    .map((recipe) => ({ id: recipe.id, wipCode: recipe.wipCode, name: recipe.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const tree = params.tree && catalog.byId.has(params.tree) ? params.tree : null;
+
   const needsReview = catalog.recipes.filter(
     (recipe) => recipe.issues.length > 0
   ).length;
@@ -114,8 +123,10 @@ export default async function RecipesPage({
         departmentColors={configured.map((entry) => [entry.name, entry.color])}
         lines={lines}
         departments={departments}
+        finished={finished}
         scopeLine={line}
-        scopeDept={dept}
+        scopeDept={tree ? null : dept}
+        treeRootId={tree}
         canCreate={isAdminProfile(profile)}
         odooOptions={odooOptions}
         odooError={odoo.error}

@@ -68,7 +68,35 @@ export type AppSettings = {
   showLogoWatermark: boolean;
   /** The logo in the top bar. Null means the one shipped with the app. */
   logoUrl: string | null;
+  /** What a case can be counted in on a specification: bowl, burrito, cup… */
+  caseUnits: string[];
+  /** What "Print all" prints, in order: release, batch, report. */
+  printSheets: string[];
+  /** Per department, which sheets Print all prints and in what order. */
+  printPlan: PrintPlan;
 };
+
+export const DEFAULT_PRINT_SHEETS = ["release", "batch", "report"];
+
+/** The three sheets Print all can print. A plain module, so a client page can read it. */
+export const PRINT_SHEET_IDS = ["batch", "release", "report"] as const;
+export type PrintSheetId = (typeof PRINT_SHEET_IDS)[number];
+
+/** Department name -> sheet ids ("batch" | "release" | "report"), in print order. */
+export type PrintPlan = Record<string, string[]>;
+
+/**
+ * What a department prints when nobody has said: Finished Product gets the
+ * batch record, the release and the report; everyone else the batch record
+ * and the report - nothing in a kitchen goes on a pallet.
+ */
+export function defaultSheetsFor(department: string, plan: PrintPlan): string[] {
+  const set = plan[department] ?? plan[department.trim().toUpperCase()];
+  if (Array.isArray(set)) return set;
+  return /finished/i.test(department) ? ["batch", "release", "report"] : ["batch", "report"];
+}
+
+export const DEFAULT_CASE_UNITS = ["bowl", "burrito", "cup", "bag", "tray", "piece"];
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   wallpaperPreset: "kitchen-green",
@@ -76,6 +104,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   wallpaperImageUrl: null,
   showLogoWatermark: true,
   logoUrl: null,
+  caseUnits: DEFAULT_CASE_UNITS,
+  printSheets: DEFAULT_PRINT_SHEETS,
+  printPlan: {},
 };
 
 export function presetById(id: WallpaperPresetId): WallpaperPreset | null {
@@ -139,6 +170,9 @@ type AppSettingsRow = {
   wallpaper_image_url: string | null;
   show_logo_watermark: boolean | null;
   logo_url?: string | null;
+  case_units?: string[] | null;
+  print_sheets?: string[] | null;
+  print_plan?: unknown;
 };
 
 function rowToSettings(row: AppSettingsRow | null): AppSettings {
@@ -158,7 +192,29 @@ function rowToSettings(row: AppSettingsRow | null): AppSettings {
       : null,
     showLogoWatermark: row.show_logo_watermark ?? true,
     logoUrl: isSafeImageUrl(row.logo_url) ? row.logo_url : null,
+    caseUnits:
+      Array.isArray(row.case_units) && row.case_units.length > 0
+        ? row.case_units.filter((unit): unit is string => typeof unit === "string")
+        : DEFAULT_CASE_UNITS,
+    printSheets:
+      Array.isArray(row.print_sheets) && row.print_sheets.length > 0
+        ? row.print_sheets.filter((sheet): sheet is string => typeof sheet === "string")
+        : DEFAULT_PRINT_SHEETS,
+    printPlan: parsePrintPlan(row.print_plan),
   };
+}
+
+function parsePrintPlan(value: unknown): PrintPlan {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: PrintPlan = {};
+  for (const [department, sheets] of Object.entries(value as Record<string, unknown>)) {
+    if (!Array.isArray(sheets)) continue;
+    out[department] = sheets.filter(
+      (sheet): sheet is string =>
+        typeof sheet === "string" && ["batch", "release", "report"].includes(sheet)
+    );
+  }
+  return out;
 }
 
 /**

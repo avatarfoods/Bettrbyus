@@ -20,6 +20,7 @@ import { FinishedStar } from "@/components/recipes/finished-star";
 import {
   RecipeScope,
   type ScopeDepartment,
+  type ScopeFinished,
 } from "@/components/recipes/recipe-scope";
 import { SearchPanel } from "@/components/ui/search-panel";
 import { Hint } from "@/components/settings/shared";
@@ -52,8 +53,10 @@ export function RecipeList({
   departmentColors = [],
   lines = [],
   departments = [],
+  finished = [],
   scopeLine = null,
   scopeDept = null,
+  treeRootId = null,
   canCreate = false,
   odooOptions = [],
   odooError = null,
@@ -71,6 +74,10 @@ export function RecipeList({
   scopeLine?: string | null;
   /** From the URL: "__finished__", a department name, or null for all. */
   scopeDept?: string | null;
+  /** Finished products offered in the Tree select. */
+  finished?: ScopeFinished[];
+  /** From the URL: show this finished product's family tree instead. */
+  treeRootId?: string | null;
   canCreate?: boolean;
   /** Finished goods from Odoo, so a new one is picked rather than typed. */
   odooOptions?: OdooFinishedOption[];
@@ -121,10 +128,43 @@ export function RecipeList({
   const sameName = (a: string | null, b: string) =>
     (a ?? "").trim().toUpperCase() === b.trim().toUpperCase();
 
+  /**
+   * One finished product's family, in build order.
+   *
+   * The bowl, then what it is assembled from, then what those are mixed
+   * from, down to the cuts - each recipe once, at the first depth it appears.
+   * For fixing a recipe and seeing everything it touches.
+   */
+  const tree = useMemo(() => {
+    if (!treeRootId) return null;
+    const byId = new Map(recipes.map((recipe) => [recipe.id, recipe]));
+    const root = byId.get(treeRootId);
+    if (!root) return null;
+    const order: { recipe: CatalogRecipe; depth: number }[] = [];
+    const depthOf = new Map<string, number>();
+    const walk = (recipe: CatalogRecipe, depth: number, trail: Set<string>) => {
+      if (depth > 12 || trail.has(recipe.id)) return;
+      if (!depthOf.has(recipe.id)) {
+        depthOf.set(recipe.id, depth);
+        order.push({ recipe, depth });
+      }
+      trail.add(recipe.id);
+      for (const line of recipe.lines) {
+        const child = line.subRecipeId ? byId.get(line.subRecipeId) : undefined;
+        if (child) walk(child, depth + 1, trail);
+      }
+      trail.delete(recipe.id);
+    };
+    walk(root, 0, new Set());
+    return { root, order, depthOf };
+  }, [recipes, treeRootId]);
+
   /** What the header narrowed the sheet to, before the search does its part. */
   const scoped = useMemo(
     () =>
-      recipes.filter((recipe) => {
+      tree
+        ? tree.order.map((entry) => entry.recipe)
+        : recipes.filter((recipe) => {
         if (
           scopeLine &&
           departmentLines[recipe.department ?? ""] !== scopeLine
@@ -135,7 +175,7 @@ export function RecipeList({
         if (scopeDept) return sameName(recipe.department, scopeDept);
         return true;
       }),
-    [recipes, scopeLine, scopeDept, departmentLines]
+    [recipes, scopeLine, scopeDept, departmentLines, tree]
   );
 
   const rows = useMemo(() => {
@@ -152,6 +192,9 @@ export function RecipeList({
       return haystack.includes(needle);
     });
 
+    // A tree reads top to bottom; sorting it would scramble the story.
+    if (tree) return filtered;
+
     return filtered.sort((a, b) => {
       const av = sort === "lines" ? a.lines.length : (a[sort] ?? "");
       const bv = sort === "lines" ? b.lines.length : (b[sort] ?? "");
@@ -162,7 +205,7 @@ export function RecipeList({
         String(av).localeCompare(String(bv), undefined, { numeric: true }) * dir
       );
     });
-  }, [scoped, query, kind, onlyIssues, showArchived, sort, dir]);
+  }, [scoped, query, kind, onlyIssues, showArchived, sort, dir, tree]);
 
   const grouped = useMemo(() => {
     if (!groupByDept) return null;
@@ -229,7 +272,9 @@ export function RecipeList({
 
   const COLUMNS = 9;
   const scopeLabel =
-    scopeDept === "__finished__"
+    tree
+      ? `recipes under ${tree.root.name}`
+      : scopeDept === "__finished__"
       ? "finished products"
       : scopeDept
         ? scopeDept
@@ -294,6 +339,8 @@ export function RecipeList({
           currentLine={scopeLine}
           departments={departments}
           currentArea={scopeDept ?? "__all__"}
+          finished={finished}
+          currentTree={treeRootId}
         />
 
         <SearchPanel
@@ -396,6 +443,8 @@ export function RecipeList({
                     key={recipe.id}
                     recipe={recipe}
                     look={looks.get(recipe.department ?? "—")}
+                    depth={tree?.depthOf.get(recipe.id) ?? 0}
+                    carry={tree ? `?tree=${tree.root.id}` : ""}
                     onOpen={router.push}
                   />
                 ))}
@@ -458,15 +507,21 @@ export function RecipeList({
 function Row({
   recipe,
   look,
+  depth = 0,
+  carry = "",
   onOpen,
 }: {
   recipe: CatalogRecipe;
   look: DepartmentColor | undefined;
+  /** How deep in the tree, when a tree is shown. Indents the name. */
+  depth?: number;
+  /** Query string to carry into the recipe page, so its pager walks the tree. */
+  carry?: string;
   onOpen: (href: string) => void;
 }) {
   return (
     <TR
-      onClick={() => onOpen(`/recipes/${recipe.id}`)}
+      onClick={() => onOpen(`/recipes/${recipe.id}${carry}`)}
       className={cn(recipe.archivedAt !== null && "opacity-60")}
     >
       <TD className={cn(CELL, "px-0 text-center")}>
@@ -476,7 +531,13 @@ function Row({
         {recipe.wipCode}
       </TD>
       <TD strong className={cn(CELL, recipe.isFinished && "text-primary")}>
-        {recipe.name}
+        <span
+          className="flex items-center gap-1.5"
+          style={{ paddingInlineStart: `${Math.min(depth, 6) * 1.1}rem` }}
+        >
+          {depth > 0 && <span aria-hidden className="text-muted-foreground/50">└</span>}
+          {recipe.name}
+        </span>
       </TD>
       <TD className={CELL}>
         <KindTag kind={recipe.kind} />

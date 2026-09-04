@@ -20,8 +20,12 @@ export type FinishedProduct = {
   customerGroup: string | null;
   storageType: StorageType | null;
 
+  /** Units in one case - bowls, burritos, cups. `caseUnit` says which. */
   bowlsPerCase: number | null;
+  caseUnit: string | null;
+  /** Cartons or products packed in one case; a two-flavour combo is 2. */
   productsPerCase: number;
+  /** Net contents of a case, in pounds. Decimals allowed (5.625). */
   netWeightPerCase: number | null;
 
   caseGtin: string | null;
@@ -185,9 +189,6 @@ export function specWarnings(product: FinishedProduct): string[] {
   }
   if (!product.caseHeightIn) {
     warnings.push("No case height — pallet height cannot be checked against the limit.");
-  }
-  if (!product.maxPalletHeightIn) {
-    warnings.push("No max pallet height — nothing verifies the stack fits.");
   }
   if (mathResult.fits === false && mathResult.fitMessage) {
     warnings.push(mathResult.fitMessage);

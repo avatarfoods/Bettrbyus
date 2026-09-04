@@ -18,11 +18,17 @@ export function PickingScope({
   currentLine,
   places,
   currentPlace,
+  basePath = "/production/picking",
+  allLinesLabel = "All lines",
 }: {
   lines: string[];
   currentLine: string | null;
   places: PickingPlace[];
   currentPlace: number | null;
+  /** Which page the buttons rewrite the URL of. */
+  basePath?: string;
+  /** The "every line" button's label; null leaves it out for pages that need one line. */
+  allLinesLabel?: string | null;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -31,13 +37,13 @@ export function PickingScope({
     const search = new URLSearchParams(params.toString());
     mutate(search);
     const query = search.toString();
-    router.push(query ? `/production/picking?${query}` : "/production/picking");
+    router.push(query ? `${basePath}?${query}` : basePath);
   }
 
   return (
     <span className="flex items-center gap-1.5">
       <span className="flex overflow-hidden rounded-sm ring-1 ring-foreground/15">
-        {[null, ...lines].map((name) => (
+        {[...(allLinesLabel === null ? [] : [null]), ...lines].map((name) => (
           <button
             key={name ?? "__all__"}
             type="button"
@@ -55,11 +61,13 @@ export function PickingScope({
                 : "bg-card text-muted-foreground hover:bg-muted"
             )}
           >
-            {name ?? "All lines"}
+            {name ?? allLinesLabel}
           </button>
         ))}
       </span>
 
+      {places.length > 0 && (
+      <>
       <ChevronRight className="size-3 shrink-0 text-muted-foreground/40" />
 
       <select
@@ -81,6 +89,8 @@ export function PickingScope({
           </option>
         ))}
       </select>
+      </>
+      )}
     </span>
   );
 }

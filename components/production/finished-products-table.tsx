@@ -118,7 +118,7 @@ export function FinishedProductsTable({
             { label: "Item" },
             { label: "Product" },
             { label: "Group" },
-            { label: "Bowls/cs", numeric: true },
+            { label: "Units/cs", numeric: true },
             { label: "Cases/pallet", numeric: true },
             { label: "Stack", numeric: true },
             { label: "Cases/space", numeric: true },

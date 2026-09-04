@@ -74,9 +74,10 @@ export function SpecSheet({
         </Block>
 
         <Block title="Case">
-          <Row label="Case count" value={spec?.bowlsPerCase} />
+          <Row label="Units per case" value={spec?.bowlsPerCase} unit={spec?.caseUnit ?? undefined} />
+          <Row label="Products per case" value={spec?.productsPerCase} />
           <Row label="Net weight per case" value={spec?.netWeightPerCase} unit="lb" />
-          <Row label="Case weight" value={spec?.caseWeightLb} unit="lb" />
+          <Row label="Gross weight per case" value={spec?.caseWeightLb} unit="lb" />
           <Row
             label="Case dimensions"
             value={dims(spec?.caseWidthIn ?? null, spec?.caseLengthIn ?? null, spec?.caseHeightIn ?? null)}

@@ -145,7 +145,7 @@
     app. 2px keeps an edge from looking accidentally jagged without ever
     reading as a pill.
   */
-  --radius: 0.125rem; /* 2px */
+  --radius: 0.3125rem; /* 5px - a little rounder than the 2px it was, everywhere at once */
 
   /* Height of the sticky app bar. Pages that need a full-viewport region
      subtract this instead of hard-coding a number. */

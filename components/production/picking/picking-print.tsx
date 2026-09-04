@@ -17,9 +17,9 @@ function fmt(value: number | null, digits = 1): string {
 /**
  * The picking order on paper.
  *
- * Black on white, one section per department (or type), a box per line for
- * the picker to tick, and the totals at the end. The browser's print dialog
- * saves it as a PDF, which is the file people email.
+ * Black on white, one section per department (or type), what is on hand in
+ * Odoo beside each line, and the totals at the end. The browser's print
+ * dialog saves it as a PDF, which is the file people email.
  */
 export function PickingPrintSheet({
   result,
@@ -112,7 +112,7 @@ export function PickingPrintSheet({
           className="w-full max-w-[8.5in] bg-white p-6 text-black shadow-sm print:max-w-none print:p-0 print:shadow-none"
           style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
         >
-          <header className="mb-3 flex items-end justify-between gap-4 border-b-2 border-black pb-2">
+          <header className="mb-3 flex items-end justify-between gap-4 border-b-2 border-zinc-700 pb-2">
             <div>
               <h1 className="text-lg font-bold tracking-tight uppercase">Picking order</h1>
               <p className="text-xs">
@@ -129,7 +129,7 @@ export function PickingPrintSheet({
 
           {ordered.map(([key, list]) => (
             <section key={key} className="print-keep mb-3">
-              <h2 className="mb-1 flex items-baseline gap-2 bg-black px-2 py-0.5 text-[0.6875rem] font-bold tracking-wider text-white uppercase">
+              <h2 className="mb-1 flex items-baseline gap-2 bg-zinc-800 px-2 py-1 text-[0.6875rem] font-bold tracking-wider text-white uppercase">
                 {key}
                 <span className="font-normal opacity-70">{list.length}</span>
                 <span className="ml-auto font-normal tabular-nums">
@@ -138,18 +138,19 @@ export function PickingPrintSheet({
               </h2>
               <table className="w-full border-collapse text-[0.75rem]">
                 <thead>
-                  <tr className="border-b border-black text-[0.5625rem] font-semibold tracking-wider uppercase">
+                  <tr className="border-b-2 border-zinc-700 bg-zinc-100 text-[0.5625rem] font-bold tracking-wider text-zinc-700 uppercase">
                     <th className="w-16 py-0.5 text-left">Item #</th>
                     <th className="py-0.5 text-left">Item</th>
                     <th className="w-20 py-0.5 text-center">To pick</th>
                     <th className="w-16 py-0.5 text-right">Pack</th>
                     <th className="w-10 py-0.5 text-left">U/M</th>
                     <th className="w-24 py-0.5 text-right">Requested</th>
+                    <th className="w-16 py-0.5 text-right">On hand</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="[&>tr:nth-child(even)]:bg-zinc-50">
                   {list.map((row) => (
-                    <tr key={row.materialId} className="border-b border-black/15">
+                    <tr key={row.materialId} className="border-b border-zinc-200">
                       <td className="py-1.5 font-mono text-[0.6875rem]">{row.itemCode}</td>
                       <td className="py-1.5 font-semibold">{row.name}</td>
                       <td className="py-1.5 text-center text-base font-extrabold tabular-nums">
@@ -159,6 +160,9 @@ export function PickingPrintSheet({
                       <td className="py-1.5">{row.packSize === null ? "" : (row.packUom ?? (row.unit === "lb" ? "lbs" : "unit")).toLowerCase()}</td>
                       <td className="py-1.5 text-right tabular-nums">
                         {row.need > 0 ? `${fmt(row.need, 1)} ${row.unit}` : ""}
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums text-black/60">
+                        {row.onHand === null ? "" : fmt(row.onHand, 0)}
                       </td>
                     </tr>
                   ))}
@@ -171,7 +175,7 @@ export function PickingPrintSheet({
             <p className="py-10 text-center text-sm">Nothing to pick for {when}.</p>
           )}
 
-          <footer className="mt-4 flex items-center justify-between border-t-2 border-black pt-2 text-xs">
+          <footer className="mt-4 flex items-center justify-between border-t-2 border-zinc-700 pt-2 text-xs text-zinc-600">
             <span>
               Total <span className="font-bold">{fmt(totalCases, 0)}</span> cases ·{" "}
               <span className="font-bold">{fmt(totalLbs, 0)}</span> lb

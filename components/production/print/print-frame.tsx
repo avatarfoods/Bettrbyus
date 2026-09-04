@@ -52,42 +52,84 @@ export function PrintFrame({
         </button>
       </div>
 
+      {/*
+        Sideways, every sheet, and nothing but the sheet.
+
+        The page rule itself, not a named page: named pages are ignored on the
+        positioned box the print stylesheet makes of this. Zero margin is what
+        stops the browser stamping its URL, date and "3/3" in the corners -
+        those live in the margin - so the sheet carries its own padding.
+      */}
+      <style>{`@media print { @page { size: 11in 8.5in; margin: 0; } }`}</style>
       <div className="flex justify-center px-2 py-4 print:p-0">
+        {/* The id the global print stylesheet shows. */}
         <div
           id="production-print"
-          className="w-full max-w-[8.5in] bg-white p-6 text-black shadow-sm print:max-w-none print:p-0 print:shadow-none"
+          data-print-landscape
+          className="w-full max-w-[11in] bg-white p-6 text-black shadow-sm print:max-w-none print:p-0 print:shadow-none"
+          style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
         >
-          {children}
+          <div className="print:px-[0.45in] print:py-[0.4in]">{children}</div>
         </div>
       </div>
     </div>
   );
 }
 
-/** The masthead every sheet carries, so a loose page can be identified. */
+/**
+ * The masthead every sheet carries - the batch record's, so the report, the
+ * release and the batch record read as one family: the name large, the code
+ * and department under it, the production date on the right with the one
+ * number that matters in a heavy box.
+ */
 export function SheetHeader({
   title,
   date,
   scheduleName,
+  subline,
+  figure,
   right,
 }: {
   title: string;
   date: string;
   scheduleName?: string;
+  /** Under the title: code | department, or whatever names the sheet. */
+  subline?: React.ReactNode;
+  /** The boxed number on the right: pallets, runs, batches. */
+  figure?: { label: string; value: string; note?: string };
   right?: React.ReactNode;
 }) {
   return (
-    <header className="mb-3 flex items-start justify-between gap-4 border-b-2 border-black pb-2">
-      <div>
-        <h2 className="text-lg font-bold tracking-tight uppercase">{title}</h2>
-        <p className="text-xs">
-          Avatar Foods
-          {scheduleName && ` · ${scheduleName}`}
+    <header className="mb-3 flex items-start justify-between gap-6 border-b-[3px] border-black pb-2">
+      <div className="min-w-0">
+        <h2 className="text-[1.375rem] leading-tight font-bold tracking-tight uppercase">{title}</h2>
+        <p className="mt-0.5 text-[0.6875rem] tracking-wide uppercase">
+          {subline ?? (
+            <>
+              <span className="font-bold">Avatar Foods</span>
+              {scheduleName && (
+                <>
+                  <span className="mx-1.5 text-neutral-400">|</span>
+                  {scheduleName}
+                </>
+              )}
+            </>
+          )}
         </p>
       </div>
-      <div className="text-right text-xs">
-        <p className="text-sm font-bold tabular-nums">{date}</p>
-        {right}
+      <div className="shrink-0 text-right">
+        <p className="text-[0.5625rem] font-bold tracking-[0.08em] text-neutral-600 uppercase">
+          Production date
+        </p>
+        <p className="text-[0.9375rem] font-bold tabular-nums">{date}</p>
+        {figure && (
+          <div className="mt-1.5 border-[3px] border-black px-3 py-1.5">
+            <p className="text-[0.5625rem] font-bold tracking-[0.08em] uppercase">{figure.label}</p>
+            <p className="text-[2rem] leading-none font-bold tabular-nums">{figure.value}</p>
+            {figure.note && <p className="text-[0.5625rem] uppercase">{figure.note}</p>}
+          </div>
+        )}
+        {right && <div className="mt-1 text-[0.6875rem] text-neutral-600">{right}</div>}
       </div>
     </header>
   );
@@ -96,11 +138,11 @@ export function SheetHeader({
 /** Blank lines someone signs on the floor. */
 export function SignoffRow({ labels }: { labels: string[] }) {
   return (
-    <div className="mt-4 flex flex-wrap gap-x-8 gap-y-4 text-[0.6875rem]">
+    <div className="mt-5 flex flex-wrap gap-x-8 gap-y-4 text-[0.625rem] text-zinc-600">
       {labels.map((label) => (
         <div key={label} className="min-w-40 flex-1">
-          <div className="h-6 border-b border-black" />
-          <span className="mt-0.5 block uppercase">{label}</span>
+          <div className="h-7 border-b border-zinc-500" />
+          <span className="mt-0.5 block tracking-wider uppercase">{label}</span>
         </div>
       ))}
     </div>

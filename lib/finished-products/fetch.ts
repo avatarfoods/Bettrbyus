@@ -47,6 +47,7 @@ function toProduct(row: Row): FinishedProduct {
     storageType: (str(row.storage_type) as FinishedProduct["storageType"]) ?? null,
 
     bowlsPerCase: num(row.bowls_per_case),
+    caseUnit: str(row.case_unit),
     productsPerCase: (row.products_per_case as number) ?? 1,
     netWeightPerCase: num(row.net_weight_per_case),
 

@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { PageShell } from "@/components/app-shell/page-shell";
 import { GroupsSettings } from "@/components/production/settings/groups-settings";
 import { RecipeGear } from "@/components/recipes/recipe-gear";
+import { CaseUnitsSettings } from "@/components/recipes/case-units-settings";
+import { fetchAppSettings } from "@/lib/settings/wallpaper";
 import { fetchGroups, fetchMaterialOptions } from "@/lib/groups/fetch-groups";
 import { getCurrentUserProfile, isAdminProfile } from "@/lib/auth/profile";
 import { createClient } from "@/lib/supabase/server";
@@ -19,9 +21,10 @@ export default async function RecipeSettingsPage() {
 
   if (!isAdminProfile(profile)) redirect("/recipes");
 
-  const [data, materials] = await Promise.all([
+  const [data, materials, settings] = await Promise.all([
     fetchGroups(supabase),
     fetchMaterialOptions(supabase),
+    fetchAppSettings(supabase),
   ]);
 
   const incomplete = data.groups.reduce((n, g) => n + g.incompleteCount, 0);
@@ -39,6 +42,9 @@ export default async function RecipeSettingsPage() {
         </span>
       }
     >
+      <div className="px-3 pt-3 sm:px-4">
+        <CaseUnitsSettings units={settings.caseUnits} />
+      </div>
       <GroupsSettings data={data} materials={materials} />
     </PageShell>
   );
