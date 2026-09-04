@@ -201,7 +201,7 @@ export function ScheduleGrid({
                   onClick={(e) => pickDate(date, e.shiftKey)}
                   title="Click to select · shift-click for a range"
                   className={cn(
-                    "sticky top-[calc(var(--app-bar-height)+var(--page-shell-height,0px))] z-30 w-[4rem] min-w-[4rem] cursor-pointer border-b px-0.5 py-1 text-center leading-tight select-none",
+                    "sticky top-[calc(var(--app-bar-height)+var(--page-shell-height,0px)+var(--schedule-bar-height,0px))] z-30 w-[4rem] min-w-[4rem] cursor-pointer border-b px-0.5 py-1 text-center leading-tight select-none",
                     // Only Mondays keep a divider; every column having one
                     // turned a fortnight into a wall of lines.
                     wd === 1 ? "border-l border-l-border" : "border-l border-l-border/30",
@@ -360,7 +360,7 @@ function Th({
     <th
       scope="col"
       className={cn(
-        "sticky top-[calc(var(--app-bar-height)+var(--page-shell-height,0px))] z-30 border-b border-border bg-brand-muted px-2 py-1.5 text-[0.5625rem] font-semibold tracking-wider text-primary uppercase",
+        "sticky top-[calc(var(--app-bar-height)+var(--page-shell-height,0px)+var(--schedule-bar-height,0px))] z-30 border-b border-border bg-brand-muted px-2 py-1.5 text-[0.5625rem] font-semibold tracking-wider text-primary uppercase",
         numeric ? "text-right" : "text-left",
         sticky && "z-40",
         !sticky && "border-l",
