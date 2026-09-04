@@ -4,13 +4,13 @@ This document explains the lane workflow for humans. The rules agents follow are
 
 ## What a lane is
 
-A lane is one unit of work: a Claude Code worktree at `.claude/worktrees/<name>` on branch `worktree-<name>`, plus what `scripts/lane.sh up` adds to it: its own `node_modules`, its own local Supabase stack running in Docker under project id `Bettrbyus-lane-<name>`, its own Next port, and its own `.env.local`. Nothing is shared between lanes or with the main checkout, so several agents (or a person and an agent) can build, run and test at the same time without stepping on each other.
+A lane is one unit of work: a Claude Code worktree at `.claude/worktrees/<name>` on branch `<name>`, plus what `scripts/lane.sh up` adds to it: its own `node_modules`, its own local Supabase stack running in Docker under project id `Bettrbyus-lane-<name>`, its own Next port, and its own `.env.local`. Nothing is shared between lanes or with the main checkout, so several agents (or a person and an agent) can build, run and test at the same time without stepping on each other.
 
 The result of a lane ships as a pull request against `seasoned`, and only a human merges it.
 
 ## The Claude Code features in use
 
-- **EnterWorktree** (agents) and `claude --worktree <name>` (people) create the worktree at `.claude/worktrees/<name>` on branch `worktree-<name>` and switch the session into it. The docs are at https://code.claude.com/docs/en/worktrees.
+- **EnterWorktree** (agents) and `claude --worktree <name>` (people) create the worktree at `.claude/worktrees/<name>` on branch `worktree-<name>` and switch the session into it; `scripts/lane.sh up` then renames the branch to `<name>`, because Claude Code has no setting for the prefix. The docs are at https://code.claude.com/docs/en/worktrees.
 - **`worktree.baseRef`** decides where the branch starts. The default, `fresh`, is `origin/main`, which is wrong for this branch; the setting has no way to name another ref, so each person sets it to `head` in their own Claude Code `settings.json` (snippet in `README.md`). Lanes are then cut from the main checkout's HEAD, which the workflow keeps on an up-to-date `seasoned`. `up` fetches and checks that the worktree contains the latest `origin/seasoned`: a lane without commits of its own is reset onto it (uncommitted changes are kept), a lane with its own commits is rebased onto it, and a rebase that conflicts is aborted with a warning so the worktree stays as it was.
 - **`.worktreeinclude`** in the project root lists gitignored files Claude Code copies into every new worktree. It holds `.env.local` and `supabase/seed.sql`, so a fresh worktree already has its environment and, if the main checkout has one, the company data dump. `up` also copies both itself in case the worktree was made another way.
 - **ExitWorktree** leaves the worktree. `keep` preserves the directory and branch, which is what a lane with an open pull request needs. `remove` deletes both directory and branch and refuses if there are uncommitted changes; it is for work that was abandoned or already merged. On session exit Claude Code asks the same question.

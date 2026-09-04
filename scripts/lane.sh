@@ -26,7 +26,7 @@ lane.sh — isolated Supabase stacks for Claude Code worktrees of ${PROJECT_NAME
 
 A lane is a Claude Code worktree (EnterWorktree, or "claude --worktree <name>")
 that lives at ${LANES_ROOT}/<name>
-on branch worktree-<name>, plus what this script adds to it: its own local
+on branch <name>, plus what this script adds to it: its own local
 Supabase stack in Docker, its own Next port, and its own ${ENV_FILE}. Many lanes
 run in parallel without sharing state.
 
@@ -278,6 +278,18 @@ stop_stack() {
   fi
 }
 
+# Claude Code names the branch worktree-<name>; a lane's branch is just <name>, so the pull request carries the task's name.
+rename_branch() {
+  local name="$1" dir="$2" current
+  current="$(git -C "$dir" branch --show-current)"
+  [ "$current" = "worktree-$name" ] || return 0
+  if git -C "$dir" show-ref --verify --quiet "refs/heads/$name"; then
+    echo "lane $name: WARNING: branch $name already exists; staying on $current" >&2
+    return 0
+  fi
+  git -C "$dir" branch -m "$name" && echo "lane $name: branch renamed from $current to $name"
+}
+
 # Make sure the lane contains the latest origin/$BASE_BRANCH. A lane without commits of its own is moved onto it
 # (uncommitted changes are kept); a lane with its own commits is rebased, and left untouched when the rebase conflicts.
 sync_with_base() {
@@ -305,6 +317,7 @@ up() {
   name="$(require_current_lane)"
   require_docker
   dir="$(lane_dir "$name")"
+  rename_branch "$name" "$dir"
 
   # Worktrees are cut from the main checkout's HEAD (worktree.baseRef = head); if that was stale, catch up with origin.
   sync_with_base "$name" "$dir"
