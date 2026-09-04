@@ -36,12 +36,12 @@ Inside a worktree (no name needed, the current worktree is the lane):
                                          of its own, rebase otherwise), allocate a
                                          port, write ${ENV_FILE}, point supabase/config.toml
                                          at the lane's own ports, install dependencies,
-                                         start the lane's Supabase stack (migrations and
-                                         supabase/seed.sql applied on first start), create
+                                         start the lane's Supabase stack (migrations applied
+                                         on first start; seeding is disabled), create
                                          the local admin user, and start the dev server in
                                          the background on the lane's port (log next to the
-                                         worktree). Idempotent: re-running reuses everything,
-                                         never re-seeds, and leaves a running server alone.
+                                         worktree). Idempotent: re-running reuses everything
+                                         and leaves a running server alone.
                                          --no-dev skips the dev server.
   scripts/lane.sh run <cmd...>           Run a command with PORT set, e.g. "run npm run build"
                                          then "run npm start". Next ignores PORT in .env
@@ -332,7 +332,8 @@ up() {
   write_managed_block "$dir/$ENV_FILE" "$port"
   write_lane_supabase_config "$dir" "$name" "$port" "$(studio_state "$dir")"
 
-  # Company data is optional and never committed; reuse the main checkout's copy if .worktreeinclude did not.
+  # Company data is optional, never committed and never loaded automatically ([db.seed] is off);
+  # reuse the main checkout's copy if .worktreeinclude did not, so it is there to load by hand.
   if [ -f "$MAIN_CHECKOUT/supabase/seed.sql" ] && [ ! -f "$dir/supabase/seed.sql" ]; then
     cp "$MAIN_CHECKOUT/supabase/seed.sql" "$dir/supabase/seed.sql"
   fi
@@ -346,7 +347,7 @@ up() {
     (cd "$dir" && supabase start)
   fi
   if ! $fresh; then
-    echo "lane $name: database already existed, seed skipped; applying pending migrations"
+    echo "lane $name: database already existed; applying pending migrations"
     (cd "$dir" && supabase migration up)
   fi
   create_admin_user "$dir" "$port"
@@ -356,7 +357,7 @@ up() {
   echo "lane $name ready"
   echo "  worktree:  $dir"
   echo "  branch:    $(git -C "$dir" branch --show-current)"
-  echo "  database:  $(project_id "$name")$($fresh && echo ' (created + migrated + seeded)' || echo ' (reused)')"
+  echo "  database:  $(project_id "$name")$($fresh && echo ' (created + migrated, no seed)' || echo ' (reused)')"
   if port_listening "$port"; then
     echo "  app:       http://localhost:$port   (dev server running; log: $(lane_log "$name"))"
   else

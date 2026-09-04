@@ -63,8 +63,11 @@ enabled = true
 schema_paths = []
 
 [db.seed]
-# If enabled, seeds the database after migrations during a db reset.
-enabled = true
+# Disabled on purpose: the repository ships no seed file, and the only one that ever existed
+# (`supabase/seed.sql`, gitignored) is a dump of company data that must not be committed.
+# A fresh stack is therefore empty by design; load a dump by hand with psql if you need real
+# data (see docs/seasoned/INSTALL.md, step 8).
+enabled = false
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
 sql_paths = ["./seed.sql"]
@@ -96,8 +99,10 @@ enabled = true
 port = 54323
 # External URL of the API server that frontend connects to.
 api_url = "http://127.0.0.1"
-# OpenAI API Key to use for Supabase AI in the Supabase Studio.
-openai_api_key = "env(OPENAI_API_KEY)"
+# OpenAI API Key to use for Supabase AI in the Supabase Studio. Left empty on purpose: the
+# Studio SQL assistant is not used here, and reading env(OPENAI_API_KEY) would quietly send
+# queries to OpenAI for anyone who has that variable exported for another project.
+openai_api_key = ""
 
 # Email testing server. Emails sent with the local dev setup are not actually sent - rather, they
 # are monitored, and you can view the emails that would have been sent from the web interface.
