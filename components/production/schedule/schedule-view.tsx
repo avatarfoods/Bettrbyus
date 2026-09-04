@@ -991,6 +991,41 @@ export function ScheduleView({
   }, [changed, localEntries]);
 
   /**
+   * Keep the changes without putting them live.
+   *
+   * The other half of the decision Confirm asks. It parks the draft under a
+   * name so it can be found again and hands back a clean plan to start the
+   * next one on - nothing reaches the floor. A name is asked for only when
+   * there is not one already, rather than blocking the button on it.
+   */
+  async function parkAsDraft() {
+    if (!myDraftId) return;
+    const existing = (draftName ?? myDraft?.name ?? "").trim();
+    const name = existing || `Draft ${new Date().toISOString().slice(0, 10)}`;
+
+    const ok = await confirm({
+      title: `Keep ${myChangeCount} change${myChangeCount === 1 ? "" : "s"} as a draft?`,
+      description: `Saved as "${name}". The floor keeps running the current plan until you confirm it to live.`,
+      confirmLabel: "Save as draft",
+      cancelLabel: "Cancel",
+    });
+    if (!ok) return;
+
+    setError(null);
+    startTransition(async () => {
+      const r = await renameDraft({ draftId: myDraftId, name, park: true });
+      if (!r.ok) {
+        setError(r.message);
+        return;
+      }
+      setSavedName(true);
+      setDraftName(null);
+      setLocalEntries([]);
+      router.refresh();
+    });
+  }
+
+  /**
    * The one action that changes what the floor runs.
    *
    * Two gates, deliberately: the first is the question, the second says out
@@ -1023,8 +1058,21 @@ export function ScheduleView({
     setError(null);
     startTransition(async () => {
       const r = await confirmDraft({ draftId: myDraftId });
-      if (r.ok) router.refresh();
-      else setError(r.message);
+      if (!r.ok) {
+        setError(r.message);
+        return;
+      }
+      /*
+        The draft is spent, so stop standing on it.
+
+        It is `confirmed` now, not `draft` - there is nothing left to type
+        into and nothing left to confirm. Staying put left the page in edit
+        mode over a dead draft, still offering the arrow back to live from a
+        plan that had just become live. So: back to live, locked.
+      */
+      setLocalEntries([]);
+      router.replace("/production/schedule?view=live");
+      router.refresh();
     });
   }
 
@@ -1295,6 +1343,25 @@ export function ScheduleView({
           )}
 
           {!readOnly && <EditPlanButton editing={editing} />}
+
+          {/*
+            Two ways out of a set of changes, side by side at the moment you
+            decide between them: park it as a draft to come back to, or put
+            it live. Keeping the draft option down in the banner made live
+            look like the only thing Confirm could mean.
+          */}
+          {!readOnly && myChangeCount > 0 && (
+            <button
+              type="button"
+              onClick={() => void parkAsDraft()}
+              disabled={pending || !myDraftId}
+              title="Keep these changes as a named draft. The floor keeps running the current plan."
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm text-muted-foreground hover:bg-muted disabled:opacity-60"
+            >
+              <Save className="size-3.5" />
+              Save as draft
+            </button>
+          )}
 
           {!readOnly && myChangeCount > 0 && (
             <button
