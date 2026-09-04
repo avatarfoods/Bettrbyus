@@ -29,6 +29,15 @@ function addDays(iso: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** YYYY-MM-DD, and a day that exists. */
+function isIsoDate(value: string | undefined): value is string {
+  return (
+    value !== undefined &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    !Number.isNaN(Date.parse(`${value}T00:00:00Z`))
+  );
+}
+
 export default async function PlanningPage({
   searchParams,
 }: {
@@ -88,18 +97,24 @@ export default async function PlanningPage({
   const profile = await getCurrentUserProfile(supabase);
   const drafts = liveId ? await fetchDrafts(supabase, liveId) : [];
 
-  const { data: mine } =
-    profile && liveId
-      ? await supabase
-          .from("production_schedules")
-          .select("id")
-          .eq("parent_schedule_id", liveId)
-          .eq("status", "draft")
-          .eq("created_by", profile.id)
-          .maybeSingle()
-      : { data: null };
+  /*
+    The working draft, not any draft.
 
-  const myDraftId = (mine?.id as string) ?? null;
+    Saving a draft parks it: it stays in the list with its changes and stops
+    being the one the grid overlays, so a person can have several. Asking
+    for "my draft" with maybeSingle() broke the moment there were two - it
+    errored, came back null, and locked the owner out of their own grid.
+    Read off the list already fetched, which knows which one is working.
+  */
+  const myDraftId =
+    (profile &&
+      drafts.find(
+        (draft) =>
+          draft.status === "draft" &&
+          draft.isWorking &&
+          draft.createdById === profile.id
+      )?.id) ??
+    null;
 
   /*
     Which plan is on screen.
@@ -110,10 +125,15 @@ export default async function PlanningPage({
   */
   const editing = params.edit === "1";
 
+  // A confirmed draft is spent: a stale tab still pointing at it would lay
+  // its zeroes over cells that have been re-added to live since.
   const viewing =
     params.view === "live"
       ? null
-      : params.view && drafts.some((draft) => draft.id === params.view)
+      : params.view &&
+          drafts.some(
+            (draft) => draft.id === params.view && draft.status === "draft"
+          )
         ? params.view
         : myDraftId;
 
@@ -147,8 +167,29 @@ export default async function PlanningPage({
   const entries = readOnly ? WORKBOOK_SEED : data.entries;
 
   const defaultFrom = readOnly ? WORKBOOK_SEED_START : today;
-  const from = params.from ?? defaultFrom;
-  const to = params.to && params.to >= from ? params.to : addDays(from, 13);
+  // A date that is not a date (?from=abc) used to reach addDays and throw.
+  const from = isIsoDate(params.from) ? params.from : defaultFrom;
+  const to =
+    isIsoDate(params.to) && params.to >= from ? params.to : addDays(from, 13);
+
+  /*
+    The area must belong to this line.
+
+    Switching line clears it, but a bookmark or a hand-typed URL can still
+    carry another line's department, which selected nothing in the dropdown
+    and left the grid saying "Nothing here". Anything unknown falls back to
+    finished products.
+  */
+  const areas = config.departments
+    .filter((entry) => entry.active && entry.lineName === line?.name)
+    .map((entry) => entry.name);
+  const dept =
+    params.dept === "__finished__" ||
+    params.dept === "__all__" ||
+    (params.dept !== undefined && areas.includes(params.dept))
+      ? params.dept
+      : undefined;
+  const canEdit = isAdminProfile(profile);
 
   return (
     <PageShell
@@ -167,10 +208,8 @@ export default async function PlanningPage({
             <LineSwitch
               lines={activeLines.map((entry) => entry.name)}
               current={line?.name ?? null}
-              areas={config.departments
-                .filter((entry) => entry.active && entry.lineName === line?.name)
-                .map((entry) => entry.name)}
-              currentArea={params.dept ?? "__finished__"}
+              areas={areas}
+              currentArea={dept ?? "__finished__"}
             />
             <PlanPicker
             scheduleId={liveId ?? ""}
@@ -181,7 +220,7 @@ export default async function PlanningPage({
             drafts={drafts}
             viewingId={viewing}
             myDraftId={myDraftId}
-              canEdit={isAdminProfile(profile)}
+              canEdit={canEdit}
               editing={editing}
             />
           </span>
@@ -196,6 +235,7 @@ export default async function PlanningPage({
         editing={editing}
         drafts={drafts}
         readOnly={readOnly}
+        canEdit={canEdit}
         setupError={ensured.error}
         today={today}
         from={from}
@@ -214,7 +254,7 @@ export default async function PlanningPage({
         ])}
         departmentColors={config.departments.map((d) => [d.name, d.color])}
         planLine={line?.name ?? null}
-        initialDept={params.dept}
+        initialDept={dept}
         initialQuery={params.q}
         recipes={data.recipes}
         entries={entries}

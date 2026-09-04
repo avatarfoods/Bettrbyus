@@ -248,8 +248,11 @@ export function PlanPicker({
                         from,
                         to,
                       });
-                      if (result.ok) router.refresh();
-                      else setError(result.message);
+                      if (!result.ok) return setError(result.message);
+                      // The copy landed in the draft; looking at live
+                      // would show nothing happened.
+                      if (result.draftId && viewingId === null) go(result.draftId);
+                      router.refresh();
                     });
                   }}
                 />
@@ -271,8 +274,9 @@ export function PlanPicker({
                     setMenu(false);
                     startTransition(async () => {
                       const result = await clearRange({ scheduleId, from, to });
-                      if (result.ok) router.refresh();
-                      else setError(result.message);
+                      if (!result.ok) return setError(result.message);
+                      if (result.draftId && viewingId === null) go(result.draftId);
+                      router.refresh();
                     });
                   }}
                 />
@@ -417,13 +421,21 @@ export function PlanPicker({
               </div>
             ))}
 
-            {error && (
-              <p className="bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
-                {error}
-              </p>
-            )}
           </div>
         </>
+      )}
+
+      {/* The gear menu closes before its action finishes, so its error has
+          to live outside both dropdowns or it is never seen. */}
+      {error && (
+        <button
+          type="button"
+          onClick={() => setError(null)}
+          title="Dismiss"
+          className="absolute top-8 right-0 z-[60] w-64 rounded-sm bg-destructive/10 px-2.5 py-1.5 text-left text-xs text-destructive shadow-md ring-1 ring-destructive/30"
+        >
+          {error}
+        </button>
       )}
     </span>
   );

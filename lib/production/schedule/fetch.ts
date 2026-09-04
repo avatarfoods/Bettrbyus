@@ -7,6 +7,7 @@ import {
 } from "@/lib/production/wip-explode";
 import type { ScheduleEntry, TimingWindow } from "@/lib/production/schedule/model";
 import { isMissingTable } from "@/lib/supabase/missing";
+import { allRows } from "@/lib/supabase/all-rows";
 
 /**
  * Everything the schedule grid needs, in one round trip per table.
@@ -261,14 +262,24 @@ export async function fetchScheduleData(
     const ids = [scheduleRow.id as string];
     if (draftId) ids.push(draftId);
 
-    const { data: entryRows } = await supabase
-      .from("production_schedule_entries")
-      .select("schedule_id, recipe_id, production_date, quantity")
-      .in("schedule_id", ids);
+    // A live plan plus a draft is easily past a thousand rows, and PostgREST
+    // stops there without a word - the grid would just be missing cells.
+    const entryRows = await allRows<{
+      schedule_id: string;
+      recipe_id: string;
+      production_date: string;
+      quantity: number | null;
+    }>((from, to) =>
+      supabase
+        .from("production_schedule_entries")
+        .select("schedule_id, recipe_id, production_date, quantity")
+        .in("schedule_id", ids)
+        .range(from, to)
+    );
 
     const merged = new Map<string, ScheduleEntry>();
 
-    for (const row of entryRows ?? []) {
+    for (const row of entryRows.rows) {
       const key = `${row.recipe_id}|${row.production_date}`;
       const isDraft = draftId != null && row.schedule_id === draftId;
 

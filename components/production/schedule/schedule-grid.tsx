@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Layers } from "lucide-react";
 import type { CellAllocation, RecipeDemand } from "@/lib/production/schedule/model";
 import type { ScheduleRecipe } from "@/lib/production/schedule/fetch";
 import { saveScheduleCell } from "@/lib/production/schedule/actions";
@@ -46,6 +46,8 @@ export type GridRow = {
   stockReason: string | null;
   /** Unique per position: the same recipe appears under every bowl using it. */
   path: string;
+  /** Where it really sits (0 = finished product), when `depth` is only indent. */
+  treeDepth?: number;
   parentPath: string | null;
   depth: number;
   perRoot: number | null;
@@ -90,10 +92,15 @@ type Props = {
   onLocalChange?: (recipeId: string, date: string, quantity: number | null) => void;
   /** A save landed in a draft - the caller may want to follow it there. */
   onDraftOpened?: (draftId: string) => void;
+  /** A save was refused; the cell has already gone back to what it was. */
+  onSaveError?: (message: string) => void;
   today: string;
   dates: string[];
   rows: GridRow[];
   styles: Map<string, DepartmentStyle>;
+  /** The arrow on the Dept header: rows gathered by department, or in build order. */
+  deptGrouped?: boolean;
+  onToggleDeptGroup?: () => void;
   expanded: Set<string>;
   onToggle: (recipeId: string) => void;
   onSelectionChange?: (range: { from: string; to: string } | null) => void;
@@ -125,22 +132,52 @@ export function ScheduleGrid({
   locked = false,
   onLocalChange,
   onDraftOpened,
+  onSaveError,
   today,
   dates,
   rows,
   styles,
+  deptGrouped = false,
+  onToggleDeptGroup,
   expanded,
   onToggle,
   onSelectionChange,
   onInspect,
   inspectedId,
 }: Props) {
-  const [anchor, setAnchor] = useState<string | null>(null);
-  const [range, setRange] = useState<{ from: string; to: string } | null>(null);
+  /*
+    The selection belongs to the dates on screen. Paging to next week keeps
+    this component mounted, so a plain useState carried a highlighted day
+    that was no longer visible - and the parent kept computing against it.
+  */
+  const datesKey = `${dates[0]}|${dates[dates.length - 1]}`;
+  const [picked, setPicked] = useState<{
+    key: string;
+    anchor: string | null;
+    range: { from: string; to: string } | null;
+  }>({ key: datesKey, anchor: null, range: null });
+  const anchor = picked.key === datesKey ? picked.anchor : null;
+  const range = picked.key === datesKey ? picked.range : null;
+  const setAnchor = (next: string | null) =>
+    setPicked((prev) => ({
+      key: datesKey,
+      anchor: next,
+      range: prev.key === datesKey ? prev.range : null,
+    }));
+  const setRange = (next: { from: string; to: string } | null) =>
+    setPicked((prev) => ({
+      key: datesKey,
+      anchor: prev.key === datesKey ? prev.anchor : null,
+      range: next,
+    }));
 
   const totals = useMemo(() => {
     const byDept = new Map<string, Map<string, number>>();
+    // A step under six bowls is six rows and one number.
+    const seen = new Set<string>();
     for (const row of rows) {
+      if (seen.has(row.recipe.id)) continue;
+      seen.add(row.recipe.id);
       const dept = row.recipe.department ?? "Unassigned";
       const perDate = byDept.get(dept) ?? new Map<string, number>();
       for (const [date, cell] of row.cells) {
@@ -182,7 +219,37 @@ export function ScheduleGrid({
             <Th sticky className="left-[4.5rem] z-40 w-[13rem] min-w-[13rem]">
               Recipe
             </Th>
-            <Th className="w-[7rem] min-w-[7rem]">Dept</Th>
+            <Th className="w-[7rem] min-w-[7rem]">
+              {onToggleDeptGroup ? (
+                <button
+                  type="button"
+                  onClick={onToggleDeptGroup}
+                  aria-pressed={deptGrouped}
+                  title={
+                    deptGrouped
+                      ? "Grouped by department. Click for build order."
+                      : "Group the rows by department"
+                  }
+                  className={cn(
+                    "-mx-1 inline-flex h-5 items-center gap-0.5 rounded-sm px-1 text-[0.5625rem] font-semibold tracking-wider uppercase transition-colors",
+                    deptGrouped
+                      ? "bg-primary text-primary-foreground"
+                      : "text-primary hover:bg-primary/10"
+                  )}
+                >
+                  {deptGrouped && <Layers className="size-2.5 shrink-0" />}
+                  Dept
+                  <ChevronDown
+                    className={cn(
+                      "size-3 shrink-0 transition-transform",
+                      deptGrouped && "rotate-180"
+                    )}
+                  />
+                </button>
+              ) : (
+                "Dept"
+              )}
+            </Th>
             <Th className="w-[5.5rem] min-w-[5.5rem]">Allergen</Th>
             {/* What is already in the cooler. Planning a run without it is
                 how you make 500 lb of something you already have 300 of. */}
@@ -240,70 +307,6 @@ export function ScheduleGrid({
           </tr>
         </thead>
 
-        {/*
-          Day totals per department, at the top where they are read.
-
-          Each in the unit that department counts in - a day is not "4,300"
-          of anything when it is stew, bowls and cases at once. They sit under
-          the dates rather than at the foot of two hundred rows, because the
-          question they answer ("can the kitchen take this?") is asked while
-          typing, not after scrolling to the end.
-        */}
-        <tbody>
-          {[...totals.entries()]
-            .filter(([, perDate]) => [...perDate.values()].some((v) => v > 0))
-            .sort((a, b) => a[0].localeCompare(b[0]))
-            .map(([dept, perDate], index) => {
-              const style = styles.get(dept) ?? {
-                unit: "lb" as const,
-                spine: "bg-muted-foreground/30",
-                tint: "bg-muted",
-              };
-              return (
-                <tr key={dept}>
-                  <th
-                    scope="row"
-                    colSpan={LEAD}
-                    className={cn(
-                      "sticky left-0 z-20 border-l border-border px-2 py-0.5 text-right",
-                      index === 0 && "border-t-2 border-t-brand/40",
-                      style.tint
-                    )}
-                  >
-                    <span className="flex items-center justify-end gap-1.5">
-                      <span
-                        className={cn("h-3 w-1 rounded-[1px]", style.spine)}
-                      />
-                      <span className="text-[0.625rem] font-bold tracking-wide uppercase">
-                        {dept}
-                      </span>
-                      <span className="text-[0.5625rem] text-muted-foreground">
-                        {style.unit}
-                      </span>
-                    </span>
-                  </th>
-                  {dates.map((date) => {
-                    const total = perDate.get(date) ?? 0;
-                    return (
-                      <td
-                        key={date}
-                        className={cn(
-                          "border-l border-border px-1 text-center text-[0.6875rem] font-bold tabular-nums",
-                          index === 0 && "border-t-2 border-t-brand/40",
-                          style.tint,
-                          inRange(date) && "bg-primary/15"
-                        )}
-                      >
-                        {total > 0 ? fmt(total) : ""}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-        </tbody>
-
-
         <tbody>
           {rows.map((row) => (
             <Row
@@ -312,7 +315,8 @@ export function ScheduleGrid({
               readOnly={readOnly}
               locked={locked}
               onLocalChange={onLocalChange}
-          onDraftOpened={onDraftOpened}
+              onDraftOpened={onDraftOpened}
+              onSaveError={onSaveError}
               dates={dates}
               row={row}
               style={
@@ -344,6 +348,68 @@ export function ScheduleGrid({
             </tr>
           </tbody>
         )}
+
+        {/*
+          Day totals per department, at the foot.
+
+          Each in the unit that department counts in - a day is not "4,300"
+          of anything when it is stew, bowls and cases at once. They close
+          the table the way a totals line closes a sheet, so the rows read
+          first and the sum is where the eye ends up.
+        */}
+        <tfoot>
+          {[...totals.entries()]
+            .filter(([, perDate]) => [...perDate.values()].some((v) => v > 0))
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([dept, perDate], index) => {
+              const style = styles.get(dept) ?? {
+                unit: "lb" as const,
+                spine: "bg-muted-foreground/30",
+                tint: "bg-muted",
+              };
+              return (
+                <tr key={dept}>
+                  <th
+                    scope="row"
+                    colSpan={LEAD}
+                    className={cn(
+                      "sticky left-0 z-20 border-l border-border px-2 py-0.5 text-right",
+                      index === 0 && "border-t-2 border-t-success/40",
+                      style.tint
+                    )}
+                  >
+                    <span className="flex items-center justify-end gap-1.5">
+                      <span
+                        className={cn("h-3 w-1 rounded-[1px]", style.spine)}
+                      />
+                      <span className="text-[0.625rem] font-bold tracking-wide uppercase">
+                        {dept}
+                      </span>
+                      <span className="text-[0.5625rem] text-muted-foreground">
+                        {style.unit}
+                      </span>
+                    </span>
+                  </th>
+                  {dates.map((date) => {
+                    const total = perDate.get(date) ?? 0;
+                    return (
+                      <td
+                        key={date}
+                        className={cn(
+                          "border-l border-border px-1 text-center text-[0.6875rem] font-bold tabular-nums",
+                          index === 0 && "border-t-2 border-t-success/40",
+                          style.tint,
+                          inRange(date) && "bg-primary/15"
+                        )}
+                      >
+                        {total > 0 ? fmt(total) : ""}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+        </tfoot>
       </table>
     </div>
   );
@@ -382,6 +448,7 @@ function Row({
   locked,
   onLocalChange,
   onDraftOpened,
+  onSaveError,
   dates,
   row,
   style,
@@ -398,6 +465,7 @@ function Row({
   onLocalChange?: (recipeId: string, date: string, quantity: number | null) => void;
   /** A save landed in a draft - the caller may want to follow it there. */
   onDraftOpened?: (draftId: string) => void;
+  onSaveError?: (message: string) => void;
   dates: string[];
   row: GridRow;
   style: DepartmentStyle;
@@ -626,6 +694,7 @@ function Row({
           locked={locked}
           onLocalChange={onLocalChange}
           onDraftOpened={onDraftOpened}
+          onSaveError={onSaveError}
           needed={
             // What this day is on the hook for. A run made early carries the
             // number of the day it is covering, so entering rice on the 5th
@@ -639,7 +708,9 @@ function Row({
           // against it IS the ship day, so there is no upstream demand to be
           // early for and nothing above it that could have asked for less.
           // Marking those cells would put a "?" on almost every number.
-          isSource={row.recipe.isFinished || row.depth === 0}
+          // `depth` is only how far to indent once a filter has hidden the
+          // parents; where the row really sits is treeDepth.
+          isSource={row.recipe.isFinished || (row.treeDepth ?? row.depth) === 0}
           suggested={row.suggestions.get(date) ?? 0}
           highlighted={inRange(date)}
           isToday={date === today}
@@ -660,6 +731,7 @@ function Cell({
   locked,
   onLocalChange,
   onDraftOpened,
+  onSaveError,
   needed,
   anyOpen,
   isSource,
@@ -678,6 +750,7 @@ function Cell({
   onLocalChange?: (recipeId: string, date: string, quantity: number | null) => void;
   /** A save landed in a draft - the caller may want to follow it there. */
   onDraftOpened?: (draftId: string) => void;
+  onSaveError?: (message: string) => void;
   needed: number;
   /** Whether this recipe still has demand nothing covers, anywhere in range. */
   anyOpen: boolean;
@@ -789,6 +862,7 @@ function Cell({
     // remembered - the number in the box goes back to what it was.
     if (locked) return;
 
+    const previous = lastSaved.current;
     onLocalChange?.(recipeId, date, quantity);
     if (cleared && inputRef.current) inputRef.current.value = "";
 
@@ -811,8 +885,17 @@ function Cell({
         // refreshing back to the number that was there before.
         if (result.draftId) onDraftOpened?.(result.draftId);
       } else {
+        /*
+          The database said no, so the box cannot keep saying yes. Left as
+          it was, the typed number stayed on screen, in the change count,
+          and in what Confirm offered to put live - with nothing behind it
+          but a tooltip.
+        */
         setTookSuggest(false);
         setError(result.message);
+        onLocalChange?.(recipeId, date, previous === "" ? null : Number(previous));
+        if (inputRef.current) inputRef.current.value = previous;
+        onSaveError?.(result.message);
       }
     });
   }
