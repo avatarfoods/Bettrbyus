@@ -768,18 +768,19 @@ export function ScheduleView({
       const unfolded =
         !expandAll &&
         needle === "" &&
-        (dept === "__finished__" || dept === "__all__") &&
+        dept === "__finished__" &&
         isExpandedChild(node.path);
       if (!unfolded) {
         /*
           Finished products is the tree's front door: opening the whole tree
           from there means every bowl open, so what hangs under them comes
-          through. Only a real department keeps the filter strict.
+          through. All areas is every recipe once, in tree order - the list
+          is flattened further down. Only a real department keeps the filter
+          strict.
         */
         if (dept === "__finished__" && !recipe.isFinished && !expandAll) {
           continue;
         }
-        if (dept === "__all__" && node.depth > 0 && !expandAll) continue;
         if (
           dept !== "__finished__" &&
           dept !== "__all__" &&
@@ -801,8 +802,30 @@ export function ScheduleView({
       );
     }
 
-    // Anything no finished product reaches still has to be plannable.
+    /*
+      Anything no finished product reaches still has to be plannable.
+
+      It has no place in the tree, so it borrows its department's: the level
+      the rest of that department sits at, rounded. A broccoli nobody's bowl
+      uses yet lists with the produce, not above the bowls as if it were one.
+      Whatever cannot be placed goes after everything that can.
+    */
     const inTree = new Set(tree.map((node) => node.recipeId));
+    const levelSum = new Map<string, { total: number; count: number }>();
+    let deepest = 0;
+    for (const node of tree) {
+      const key = departmentFamily(recipeById.get(node.recipeId)?.department);
+      const entry = levelSum.get(key) ?? { total: 0, count: 0 };
+      entry.total += node.depth;
+      entry.count += 1;
+      levelSum.set(key, entry);
+      deepest = Math.max(deepest, node.depth);
+    }
+    const borrowedDepth = (recipe: ScheduleRecipe) => {
+      if (recipe.isFinished) return 0;
+      const entry = levelSum.get(departmentFamily(recipe.department));
+      return entry ? Math.round(entry.total / entry.count) : deepest + 1;
+    };
     for (const recipe of recipes) {
       if (inTree.has(recipe.id)) continue;
       if (line && recipe.lineName !== line) continue;
@@ -820,7 +843,7 @@ export function ScheduleView({
         build(recipe, {
           path: recipe.id,
           parentPath: null,
-          depth: 0,
+          depth: borrowedDepth(recipe),
           perRoot: null,
           rootName: null,
           hasChildren: false,
@@ -931,10 +954,12 @@ export function ScheduleView({
       tree - no filter - still repeats, because there the parents are right
       there above it.
     */
+    // All areas is every recipe once, top of the tree to the bottom - not
+    // the bowls with whatever nothing reaches trailing underneath them.
     const parentsHidden =
       working ||
       groupByDept ||
-      (dept !== "__finished__" && dept !== "__all__") ||
+      dept !== "__finished__" ||
       query.trim() !== "";
     if (!parentsHidden) return withDepth;
 

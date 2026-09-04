@@ -182,8 +182,15 @@ export default async function PlanningPage({
     and left the grid saying "Nothing here". Anything unknown falls back to
     finished products.
   */
+  // The finished-product department is the "Finished products" view itself;
+  // listing it again gave the dropdown two of them.
   const areas = config.departments
-    .filter((entry) => entry.active && entry.lineName === line?.name)
+    .filter(
+      (entry) =>
+        entry.active &&
+        entry.lineName === line?.name &&
+        !/finished/i.test(entry.name)
+    )
     .map((entry) => entry.name);
   const dept =
     params.dept === "__finished__" ||

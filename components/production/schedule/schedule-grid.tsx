@@ -709,8 +709,8 @@ function Row({
           // early for and nothing above it that could have asked for less.
           // Marking those cells would put a "?" on almost every number.
           // `depth` is only how far to indent once a filter has hidden the
-          // parents; where the row really sits is treeDepth.
-          isSource={row.recipe.isFinished || (row.treeDepth ?? row.depth) === 0}
+          // parents; what makes a row a source is having nothing above it.
+          isSource={row.recipe.isFinished || row.parentPath === null}
           suggested={row.suggestions.get(date) ?? 0}
           highlighted={inRange(date)}
           isToday={date === today}
