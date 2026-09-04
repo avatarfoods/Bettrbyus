@@ -52,6 +52,8 @@ export default async function PlanningPage({
     edit?: string;
     /** Which line's plan. Each line runs its own week. */
     line?: string;
+    /** When a range was last cleared, so the grid drops what it had typed. */
+    cleared?: string;
     /** Which day's WIP the grid shows, or a span of them. */
     wip?: string;
     wipFrom?: string;
@@ -240,6 +242,7 @@ export default async function PlanningPage({
         today={today}
         from={from}
         to={to}
+        clearedAt={params.cleared}
         wipScope={wipScope}
         wipDate={wipDate}
         wipOnHand={[...wipOnHand.entries()].map(([id, held]) => [
