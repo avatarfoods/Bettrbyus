@@ -13,6 +13,8 @@ Claude Code does not discover this file on its own. Each person working on Seaso
 - `AGENTS.md`: the instructions themselves (files to leave alone, scope, conventions). Agents read this at the start of every session.
 - `README.md`: this file. Explains the setup for humans.
 - `INSTALL.md`: how to install the project and its dependencies on a new machine, from scratch.
+- `DAILY.md`: the day-to-day routine: start a lane and the app, the default admin login, Studio on demand, shutting down.
+- `LANES.md`: how the lane workflow works (Claude Code worktrees, each with its own Supabase stack and port). The tool itself is `scripts/lane.sh`; the rules agents follow are in `AGENTS.md`.
 
 ## Setup for your machine
 
@@ -27,6 +29,14 @@ At the start of every session, before doing any work, read `docs/seasoned/AGENTS
 ```
 
 After editing, restart the session or run `/memory` so Claude Code reloads the file.
+
+Lanes (see `LANES.md`) are Claude Code worktrees, and Claude Code cuts them from `origin/main` unless told otherwise. Add this to the `settings.json` in the same config dir so they are cut from the main checkout's HEAD instead, which the workflow keeps on `seasoned`:
+
+```json
+{
+  "worktree": { "baseRef": "head" }
+}
+```
 
 ## Conventions for files in this directory
 

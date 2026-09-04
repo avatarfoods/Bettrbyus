@@ -7,3 +7,18 @@
 ## Conventions
 
 - Do not hard-wrap Markdown. Write one paragraph per line.
+
+## Workflow: lanes
+
+Every task runs in its own lane: a Claude Code worktree with its own branch, local Supabase stack, Next port, and `.env.local`, so many instances of the project run in parallel without sharing state. Claude Code creates and removes the worktrees; `scripts/lane.sh` adds the stack, the port and the env file. `docs/seasoned/LANES.md` explains how it fits together.
+
+- The main checkout stays on `seasoned` at all times, kept current with `git pull`. Never commit, build, run servers, or test there. New worktrees are cut from the main checkout's HEAD (`worktree.baseRef` is `head`), so an outdated main checkout means an outdated lane.
+- Start every task by creating a worktree with the EnterWorktree tool, named after the task in short lowercase, like `fix-login-redirect`. It lands in `.claude/worktrees/<name>` on branch `worktree-<name>`, with `.env.local` copied in by `.worktreeinclude`.
+- Then run `scripts/lane.sh up` inside the worktree. It allocates the lane's port, writes `.env.local`, points the lane's `supabase/config.toml` at its own ports, installs dependencies, starts the lane's own Supabase stack with every migration applied (and `supabase/seed.sql` if the main checkout has one), and creates the local admin user (`admin@local.test` / `bettrbyus-local`). Re-running it is safe.
+- `up` needs Docker Desktop running. If it is not, ask the user to start it and wait; never install or start Docker yourself (see `INSTALL.md`, step 8).
+- Do all work inside the worktree with the project's usual commands. Start the dev server with `scripts/lane.sh run npm run dev`, because Next ignores `PORT` in `.env.local`; the same wrapper serves `npm run build`, `npm start`, and anything else that must land on the lane's port. Supabase commands (`supabase status`, `supabase db reset`, `supabase migration new <name>`) run from inside the worktree and address the lane's own stack.
+- Lanes start without Supabase Studio. If you need to inspect the database by hand, `scripts/lane.sh studio` turns it on (the stack restarts, data kept) and prints its URL; prefer `psql` on the lane's database URL or `supabase migration list` for quick checks. `docs/seasoned/DAILY.md` has the day-to-day commands and the admin login.
+- When the work is done: commit, push, open a pull request against `seasoned` with `gh pr create --base seasoned`, run `scripts/lane.sh down`, and leave the worktree with ExitWorktree using `keep`. Never use `remove` while the pull request is open: it deletes the branch that backs it. Merging is always the human's decision. A green CI run never implies permission to merge.
+- Kill lane processes only with `scripts/lane.sh down` (this lane) or `scripts/lane.sh sweep` (every lane). Both find exact PIDs by each lane's port and stop the Supabase stacks while keeping their data. Never use `pkill -f` or any other pattern kill. Run sweep at the end of every session.
+- After the PR is merged or abandoned: `scripts/lane.sh teardown <name>` from the main checkout. It deletes the lane's Supabase containers and data and removes the worktree if Claude Code has not already, but never deletes the branch; that is the human's or GitHub's job.
+- `scripts/lane.sh --help` has the full details; `scripts/lane.sh list` shows the live lanes and any Supabase data left behind by removed worktrees.
