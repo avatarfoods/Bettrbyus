@@ -182,6 +182,8 @@ psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -f supabase/seed.sq
 
 One setting in `supabase/config.toml` to keep in mind when you write queries: `[api] max_rows = 1000` caps every PostgREST response at 1000 rows, silently. The query succeeds, the array is a thousand long, and the rest of the table is simply missing. The hosted project has the same cap, and purchasing materials already exceed it, so any query over a table that can outgrow a thousand rows must go through `lib/supabase/all-rows.ts`, which pages until the rows run out, or paginate on its own.
 
+The same file enables `[experimental.pgdelta]`, the newer schema diff engine that `supabase db diff` and `supabase db pull` use to generate migration SQL. It is on deliberately, and it is what a fresh `supabase init` produces, so leave it on: the legacy migra engine writes different SQL for the same change, and two engines on one team would produce two shapes of migration file.
+
 Create the first admin user. The command below talks to the local auth service with the service role key from `.env.local`; the trigger installed by the profiles migration creates the `profiles` row and copies `user_type` from the metadata, so the account is an admin straight away. Studio (Authentication, Users, Add user) does the same thing by hand, in which case set `user_type` to `admin` on the profile row afterwards. Any email and password work; these are local only.
 
 ```bash
