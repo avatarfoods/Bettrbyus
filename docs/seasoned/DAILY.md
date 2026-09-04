@@ -15,7 +15,7 @@ A lane is a Claude Code worktree. Create one with a short lowercase name for the
 claude --worktree fix-login-redirect     # a person starting a session straight in a new lane
 ```
 
-Inside a running session, just state the task, for example "fix the redirect after login". Claude creates the worktree itself with a name taken from the request, here `fix-login-redirect`, and you can also name it yourself ("create a worktree named login-redirect and ..."). Either way the worktree lands in `.claude/worktrees/<name>` on branch `worktree-<name>`, with `.env.local` already copied in, and Claude runs `scripts/lane.sh up` before it starts on the task. Once the lane is up it tells you the app URL and the login from section 4, and when the task changes the UI it ends with the URL of the page where the change can be seen, on the lane's port.
+Inside a running session, just state the task, for example "fix the redirect after login". Claude creates the worktree itself with a name taken from the request, here `fix-login-redirect`, and you can also name it yourself ("create a worktree named login-redirect and ..."). Either way the worktree lands in `.claude/worktrees/<name>`, with `.env.local` already copied in, and Claude runs `scripts/lane.sh up` before it starts on the task, which also renames the branch from `worktree-<name>` to `<name>`. Once the lane is up it tells you the app URL and the login from section 4, and when the task changes the UI it ends with the URL of the page where the change can be seen, on the lane's port.
 
 Then, inside the worktree:
 
