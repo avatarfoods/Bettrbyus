@@ -117,6 +117,13 @@ export const APPS: AppDefinition[] = [
             href: "/production/schedule?view=live",
             icon: CalendarRange,
           },
+          {
+            // Admin-only: the page itself turns everyone else away.
+            group: "Plan",
+            label: "Plan history",
+            href: "/production/schedule/history",
+            icon: History,
+          },
           { group: "Plan", label: "Orders", href: "/orders", icon: CalendarDays },
           {
             group: "Thawing",

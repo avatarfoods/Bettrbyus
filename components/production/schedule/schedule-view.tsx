@@ -907,6 +907,44 @@ export function ScheduleView({
     return keys.size;
   }, [changed, localEntries]);
 
+  /**
+   * The one action that changes what the floor runs.
+   *
+   * Two gates, deliberately: the first is the question, the second says out
+   * loud what it does, so the same reflex click that opened the first cannot
+   * carry through both. Editing already asked once before any of this was
+   * typed. Declared here, below myChangeCount, because it reads it.
+   */
+  async function confirmToPlan() {
+    if (!myDraftId) return;
+
+    const ok = await confirm({
+      title: `Put ${myChangeCount} change${myChangeCount === 1 ? "" : "s"} into the live plan?`,
+      description:
+        "This replaces what the floor is working from right now, on every screen and every printed sheet.",
+      confirmLabel: "Yes, continue",
+      cancelLabel: "Not yet",
+    });
+    if (!ok) return;
+
+    const sure = await confirm({
+      title: "Last check — confirm to live?",
+      description:
+        "The live plan changes the moment you confirm. It is recorded against your name, and there is no undo.",
+      confirmLabel: "Confirm to live",
+      cancelLabel: "Cancel",
+      tone: "danger",
+    });
+    if (!sure) return;
+
+    setError(null);
+    startTransition(async () => {
+      const r = await confirmDraft({ draftId: myDraftId });
+      if (r.ok) router.refresh();
+      else setError(r.message);
+    });
+  }
+
   return (
     <div className="flex flex-col gap-2.5 px-3 py-3 sm:px-4">
       {/*
@@ -1164,14 +1202,7 @@ export function ScheduleView({
           {!readOnly && myChangeCount > 0 && (
             <button
               type="button"
-              onClick={() =>
-                myDraftId &&
-                startTransition(async () => {
-                  const r = await confirmDraft({ draftId: myDraftId });
-                  if (r.ok) router.refresh();
-                  else setError(r.message);
-                })
-              }
+              onClick={() => void confirmToPlan()}
               disabled={pending || !myDraftId}
               className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
             >
