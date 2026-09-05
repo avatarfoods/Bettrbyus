@@ -57,7 +57,8 @@ function directRequirements(
   bom: Awaited<ReturnType<typeof fetchBom>>,
   entries: ScheduleDemandEntry[]
 ): ReturnType<typeof computeMaterialRequirements> {
-  const requirements = new Map<string, { materialId: string; sourceNames: Set<string>; totalLbs: number; totalUnits: number }>();
+  const requirements: ReturnType<typeof computeMaterialRequirements>["requirements"] =
+    new Map();
   const unresolvedLines = new Map<string, { recipeId: string; recipeName: string; ingredientName: string; totalLbs: number; totalUnits: number }>();
   const warnings: string[] = [];
   for (const entry of entries) {
@@ -89,12 +90,27 @@ function directRequirements(
       const need = requirements.get(line.materialId) ?? {
         materialId: line.materialId,
         sourceNames: new Set<string>(),
+        byRecipe: new Map(),
         totalLbs: 0,
         totalUnits: 0,
       };
       need.sourceNames.add(recipe.name);
       need.totalLbs += lbs;
       need.totalUnits += units;
+      // The same split the open-order MRP keeps, so the panel that opens off
+      // a number reads the same in either mode.
+      const source = need.byRecipe.get(recipe.id) ?? {
+        recipeId: recipe.id,
+        wipCode: recipe.wipCode,
+        recipeName: recipe.name,
+        ingredientNames: new Set<string>(),
+        lbs: 0,
+        units: 0,
+      };
+      source.ingredientNames.add(line.ingredientName);
+      source.lbs += lbs;
+      source.units += units;
+      need.byRecipe.set(recipe.id, source);
       requirements.set(line.materialId, need);
     }
   }
@@ -346,6 +362,7 @@ export async function computePicking(
     const requirement = mrp.requirements.get(material.id) ?? {
       materialId: material.id,
       sourceNames: new Set<string>(),
+      byRecipe: new Map(),
       totalLbs: 0,
       totalUnits: 0,
     };
@@ -417,6 +434,25 @@ export async function computePicking(
       onHand: held,
       toPick,
       sources: [...requirement.sourceNames].sort(),
+      /*
+        Which recipes make up that number, biggest first.
+
+        In the row's own unit and with the same buffer applied, so the parts
+        add up to the total beside them rather than to something close to it.
+        A recipe whose whole contribution is in the other unit is dropped: it
+        is not part of this number, and listing it at zero only raises the
+        question of why it is there.
+      */
+      recipeSources: [...requirement.byRecipe.values()]
+        .map((source) => ({
+          recipeId: source.recipeId,
+          wipCode: source.wipCode,
+          name: source.recipeName,
+          ingredientNames: [...source.ingredientNames].sort(),
+          quantity: (unit === "lb" ? source.lbs : source.units) * factor,
+        }))
+        .filter((source) => source.quantity > 0.0001)
+        .sort((a, b) => b.quantity - a.quantity),
     });
   }
 

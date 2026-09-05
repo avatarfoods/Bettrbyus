@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronDown,
   ChevronLeft,
@@ -28,6 +28,7 @@ import {
   GearLink,
 } from "@/components/ui/gear-dialog";
 import { OnHandPanel } from "@/components/production/picking/on-hand-panel";
+import { SourcesPanel } from "@/components/production/picking/sources-panel";
 import {
   Dialog,
   DialogContent,
@@ -102,9 +103,37 @@ export function PickingView({
   /** The second date box, open only when a span was asked for. */
   const [ranged, setRanged] = useState(result.from !== result.to);
   const [gear, setGear] = useState(false);
-  /** The row whose Odoo stock is open beside the sheet. */
-  const [inspected, setInspected] = useState<string | null>(null);
-  const inspectedRow = result.rows.find((row) => row.materialId === inspected) ?? null;
+  /*
+    One slot for the panel beside the sheet, and two numbers that open it:
+    On hand shows the Odoo lots, From recipes shows the recipes behind the
+    figure. Two panels at once would push the sheet off the screen, so
+    opening one closes the other.
+  */
+  const [inspected, setInspected] = useState<
+    { materialId: string; view: "stock" | "sources" } | null
+  >(null);
+  const inspectedRow =
+    result.rows.find((row) => row.materialId === inspected?.materialId) ?? null;
+
+  function inspect(materialId: string, view: "stock" | "sources") {
+    setInspected((current) =>
+      current?.materialId === materialId && current.view === view
+        ? null
+        : { materialId, view }
+    );
+  }
+
+  /*
+    Where the recipe page sends you back to. The whole query string, so the
+    dates, the line and the search you were looking at are still there when
+    you come back rather than the sheet reset to today.
+  */
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const backHref = useMemo(() => {
+    const search = searchParams.toString();
+    return search ? `${pathname}?${search}` : pathname;
+  }, [pathname, searchParams]);
 
   const onlyRequested = filters.includes("requested");
   const onlyNoPack = filters.includes("nopack");
@@ -588,7 +617,7 @@ export function PickingView({
               <th className={cn(TH, "w-28 text-right")}>
                 <span className="inline-flex items-center gap-1">
                   From recipes
-                  <Hint text="The total the recipes ask for on these dates, with the extra on top - pounds for weight, pieces for cartons and film. To pick is this divided by the pack size, rounded up to whole cases." />
+                  <Hint text="The total the recipes ask for on these dates, with the extra on top - pounds for weight, pieces for cartons and film. To pick is this divided by the pack size, rounded up to whole cases. Click a number for the recipes behind it." />
                 </span>
               </th>
               <th className={TH}>Case</th>
@@ -631,8 +660,12 @@ export function PickingView({
                     key={row.materialId}
                     row={row}
                     look={looks.get(row.department ?? "—")}
-                    inspected={inspected === row.materialId}
-                    onInspect={() => setInspected((current) => (current === row.materialId ? null : row.materialId))}
+                    inspected={
+                      inspected?.materialId === row.materialId
+                        ? inspected.view
+                        : null
+                    }
+                    onInspect={(view) => inspect(row.materialId, view)}
                   />
                 )),
               ];
@@ -671,8 +704,16 @@ export function PickingView({
         </table>
       </div>
       </div>
-      {inspectedRow && (
+      {inspectedRow && inspected?.view === "stock" && (
         <OnHandPanel row={inspectedRow} onClose={() => setInspected(null)} />
+      )}
+      {inspectedRow && inspected?.view === "sources" && (
+        <SourcesPanel
+          row={inspectedRow}
+          backHref={backHref}
+          extraPct={result.extraPct}
+          onClose={() => setInspected(null)}
+        />
       )}
       </div>
 
@@ -708,8 +749,9 @@ function Row({
 }: {
   row: PickingRow;
   look: ReturnType<typeof departmentColor> | undefined;
-  inspected: boolean;
-  onInspect: () => void;
+  /** Which panel this row has open beside the sheet, if any. */
+  inspected: "stock" | "sources" | null;
+  onInspect: (view: "stock" | "sources") => void;
 }) {
   const empty = row.need <= 0.0001;
   return (
@@ -772,20 +814,36 @@ function Row({
       <td className={cn(TD, "text-xs text-muted-foreground")}>
         {row.packSize !== null ? (row.packUom ?? (row.unit === "lb" ? "lbs" : "unit")).toLowerCase() : ""}
       </td>
-      <td className={cn(TD, "text-right tabular-nums text-muted-foreground")}>
+      <td
+        className={cn(
+          TD,
+          "text-right tabular-nums text-muted-foreground",
+          inspected === "sources" && "bg-brand-muted"
+        )}
+      >
+        {/*
+          The number is the way to the recipes behind it. A row nothing asks
+          for has nothing to open, so it stays a blank cell rather than a
+          button that answers "no recipes".
+        */}
         {empty ? "" : (
-          <>
-            {fmt(row.need, 1)} <span className="text-[0.625rem]">{row.unit}</span>
-          </>
+          <button
+            type="button"
+            onClick={() => onInspect("sources")}
+            title={`Which recipes ask for this: ${row.recipeSources.length || "none"}`}
+            className="-mx-1 inline-flex h-5 items-center justify-end rounded-sm px-1 tabular-nums transition-colors hover:bg-primary/10 hover:text-primary"
+          >
+            {fmt(row.need, 1)} <span className="ml-0.5 text-[0.625rem]">{row.unit}</span>
+          </button>
         )}
       </td>
       <td className={cn(TD, "text-xs text-muted-foreground")}>
         <span className="block truncate">{row.caseDescription ?? ""}</span>
       </td>
-      <td className={cn(TD, ON_HAND_TD, inspected && "bg-sky-100 dark:bg-sky-900/40")}>
+      <td className={cn(TD, ON_HAND_TD, inspected === "stock" && "bg-sky-100 dark:bg-sky-900/40")}>
         <button
           type="button"
-          onClick={onInspect}
+          onClick={() => onInspect("stock")}
           title="What Odoo holds: lots, quantities, expiry"
           className="-mx-1 inline-flex h-5 min-w-8 items-center justify-end rounded-sm px-1 font-semibold tabular-nums text-sky-800 hover:bg-sky-200/70 dark:text-sky-200 dark:hover:bg-sky-800/60"
         >

@@ -37,13 +37,17 @@ const BY_KEY = new Map(DEPARTMENT_COLORS.map((color) => [color.key, color]));
  * `index` keeps the old behaviour for a department nobody has picked for: the
  * palette in order, so departments stay distinguishable from the first render
  * without anyone configuring anything.
+ *
+ * The index is wrapped rather than trusted. A recipe with no department yet -
+ * every recipe, for the moment between creating it and filling it in - hands
+ * this a -1 from a `findIndex` that matched nothing, and `[-1]` is undefined,
+ * which took the whole page down rather than showing it without a colour.
  */
 export function departmentColor(
   key: string | null | undefined,
   index: number
 ): DepartmentColor {
-  return (
-    (key ? BY_KEY.get(key) : undefined) ??
-    DEPARTMENT_COLORS[index % DEPARTMENT_COLORS.length]
-  );
+  const size = DEPARTMENT_COLORS.length;
+  const slot = Number.isFinite(index) ? (((index % size) + size) % size) : 0;
+  return (key ? BY_KEY.get(key) : undefined) ?? DEPARTMENT_COLORS[slot];
 }

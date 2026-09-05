@@ -4,8 +4,6 @@ import { useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
-  ChevronDown,
-  ChevronUp,
   GripVertical,
   Loader2,
   Lock,
@@ -218,17 +216,6 @@ export function IngredientsEditor({
     setLines((prev) =>
       prev.map((line, i) => (i === index ? { ...line, ...patch } : line))
     );
-  }
-
-  /** Ingredient order is the recipe's method order - saved as sort_order. */
-  function moveLine(index: number, direction: -1 | 1) {
-    setLines((prev) => {
-      const target = index + direction;
-      if (target < 0 || target >= prev.length) return prev;
-      const next = [...prev];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
   }
 
   /* Drag a line by its grip, same as arranging departments on the HR board. */
@@ -702,6 +689,7 @@ export function IngredientsEditor({
                                 : Number(event.target.value),
                           })
                         }
+                        onKeyDown={rowArrowKeys}
                         placeholder="—"
                         aria-label="Loss percent"
                         className={cn(
@@ -713,36 +701,16 @@ export function IngredientsEditor({
                   </Td>
                   <Td>
                     {live && (
-                      <span className="flex items-center gap-0.5">
-                        <button
-                          type="button"
-                          onClick={() => moveLine(index, -1)}
-                          disabled={index === 0}
-                          aria-label="Move up"
-                          className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-                        >
-                          <ChevronUp className="size-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => moveLine(index, 1)}
-                          disabled={index === lines.length - 1}
-                          aria-label="Move down"
-                          className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-                        >
-                          <ChevronDown className="size-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setLines((prev) => prev.filter((_, i) => i !== index))
-                          }
-                          aria-label="Remove line"
-                          className="text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setLines((prev) => prev.filter((_, i) => i !== index))
+                        }
+                        aria-label="Remove line"
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
                     )}
                   </Td>
                 </tr>
@@ -980,6 +948,51 @@ function Td({
  * has focus the raw text is kept exactly as typed, so "0.4" does not fight
  * the person entering it and become "0" halfway through.
  */
+/**
+ * Up and down move to the same box on the next line.
+ *
+ * The quantity column is a column of numbers and gets read and corrected like
+ * one, so it should walk like the plan's grid: arrow down, type, arrow down.
+ * These are number fields, where up and down otherwise nudge the value by one
+ * - which on a 0.14 lb line is not a small mistake - so the key is taken over
+ * rather than shared.
+ *
+ * Walked through the DOM rather than an array of refs: the row is whatever
+ * <tr> the field is in, and the box to move to is the one in the cell at the
+ * same position, which stays true as columns come and go with the loss toggle.
+ */
+function moveRowFocus(from: HTMLElement, direction: "up" | "down") {
+  const td = from.closest("td");
+  const tr = td?.closest("tr");
+  if (!td || !tr) return;
+
+  const cellIndex = Array.prototype.indexOf.call(tr.children, td);
+  let row =
+    direction === "up" ? tr.previousElementSibling : tr.nextElementSibling;
+
+  // Past the first or last line there is nothing to move to, and a row that
+  // has no field in that column (the empty-table message) is stepped over
+  // rather than treated as the end.
+  while (row) {
+    const target = row.children[cellIndex]?.querySelector<HTMLInputElement>(
+      "input:not([readonly])"
+    );
+    if (target) {
+      target.focus();
+      target.select();
+      return;
+    }
+    row = direction === "up" ? row.previousElementSibling : row.nextElementSibling;
+  }
+}
+
+/** The two arrow keys, for any field that sits in a line of the table. */
+function rowArrowKeys(event: React.KeyboardEvent<HTMLInputElement>) {
+  if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+  event.preventDefault();
+  moveRowFocus(event.currentTarget, event.key === "ArrowUp" ? "up" : "down");
+}
+
 function DecimalInput({
   value,
   readOnly,
@@ -1011,6 +1024,7 @@ function DecimalInput({
         const next = Number(event.target.value);
         onChange(Number.isFinite(next) ? next : 0);
       }}
+      onKeyDown={rowArrowKeys}
       aria-label={label}
       className={className}
     />

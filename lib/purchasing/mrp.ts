@@ -27,10 +27,29 @@ export type ScheduleDemandEntry = {
   quantity: number;
 };
 
+/**
+ * One recipe's share of a material's requirement.
+ *
+ * The recipe that actually lists the material, not the finished product at
+ * the top of the tree: "which recipe do I go and look at" is the question,
+ * and the answer is the one with the line in it.
+ */
+export type MaterialRecipeSource = {
+  recipeId: string;
+  wipCode: string;
+  recipeName: string;
+  /** How the line spells the ingredient, which is not always the material. */
+  ingredientNames: Set<string>;
+  lbs: number;
+  units: number;
+};
+
 export type MaterialRequirement = {
   materialId: string;
   /** Ingredient names that contributed to this requirement, for a tooltip. */
   sourceNames: Set<string>;
+  /** The same total split by the recipe that asked for it, keyed by recipe id. */
+  byRecipe: Map<string, MaterialRecipeSource>;
   totalLbs: number;
   totalUnits: number;
 };
@@ -87,18 +106,41 @@ export function computeMaterialRequirements(input: {
 
   function addMaterial(
     materialId: string,
+    recipe: WipRecipe,
     ingredientName: string,
     lbs: number,
     units: number
   ) {
     let requirement = requirements.get(materialId);
     if (!requirement) {
-      requirement = { materialId, sourceNames: new Set(), totalLbs: 0, totalUnits: 0 };
+      requirement = {
+        materialId,
+        sourceNames: new Set(),
+        byRecipe: new Map(),
+        totalLbs: 0,
+        totalUnits: 0,
+      };
       requirements.set(materialId, requirement);
     }
     requirement.sourceNames.add(ingredientName);
     requirement.totalLbs += lbs;
     requirement.totalUnits += units;
+
+    let source = requirement.byRecipe.get(recipe.id);
+    if (!source) {
+      source = {
+        recipeId: recipe.id,
+        wipCode: recipe.wipCode,
+        recipeName: recipe.name,
+        ingredientNames: new Set(),
+        lbs: 0,
+        units: 0,
+      };
+      requirement.byRecipe.set(recipe.id, source);
+    }
+    source.ingredientNames.add(ingredientName);
+    source.lbs += lbs;
+    source.units += units;
   }
 
   function addUnresolved(
@@ -192,7 +234,7 @@ export function computeMaterialRequirements(input: {
       }
 
       if (line.materialId) {
-        addMaterial(line.materialId, line.ingredientName, lbs, units);
+        addMaterial(line.materialId, recipe, line.ingredientName, lbs, units);
         continue;
       }
 

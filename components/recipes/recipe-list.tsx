@@ -318,12 +318,26 @@ export function RecipeList({
           label="allergens unverified"
           hint="An ingredient beneath the recipe never answered the allergen question in Odoo, so its allergen list is a floor, not the whole truth."
         />
+        {/*
+          Archiving takes a recipe out of every list, which also takes away the
+          way back to it - the filter that shows them again was in the search
+          panel and nobody found it. The count is the way in: tap it and the
+          archived rows appear, tap it again and they are gone.
+        */}
         {summary.archived > 0 && (
           <Big
             tone="muted"
             value={String(summary.archived)}
             label="archived"
-            hint="Out of every list and unpickable. Show them with the Archived filter."
+            hint="Out of every list and unpickable. Tap the number to show them here."
+            pressed={showArchived}
+            onClick={() =>
+              setFilters((current) =>
+                current.includes("archived")
+                  ? current.filter((id) => id !== "archived")
+                  : [...current, "archived"]
+              )
+            }
           />
         )}
       </div>
@@ -576,14 +590,19 @@ function Big({
   value,
   hint,
   tone,
+  onClick,
+  pressed,
 }: {
   label: string;
   value: string;
   hint?: string;
   tone: "blue" | "green" | "amber" | "muted";
+  /** Makes the number the way into what it counts. */
+  onClick?: () => void;
+  pressed?: boolean;
 }) {
-  return (
-    <span className="flex items-baseline gap-1">
+  const inner = (
+    <>
       <span
         className={cn(
           "text-lg font-bold tabular-nums",
@@ -599,6 +618,36 @@ function Big({
         {label}
         {hint && <Hint text={hint} />}
       </span>
+    </>
+  );
+
+  if (!onClick) {
+    return <span className="flex items-baseline gap-1">{inner}</span>;
+  }
+
+  /*
+    The hint is a button of its own, so the count cannot be one too - the
+    clickable part is the number and its label, and the "?" beside them keeps
+    working as the explanation it already was.
+  */
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      aria-pressed={pressed}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick();
+        }
+      }}
+      className={cn(
+        "-mx-1 flex cursor-pointer items-baseline gap-1 rounded-sm px-1 transition-colors hover:bg-muted",
+        pressed && "bg-foreground/10"
+      )}
+    >
+      {inner}
     </span>
   );
 }

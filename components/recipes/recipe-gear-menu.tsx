@@ -12,8 +12,10 @@ import {
   Printer,
   Settings2,
   Soup,
+  Trash2,
 } from "lucide-react";
 import {
+  deleteRecipe,
   setRecipeArchived,
   setRecipeFinishedProduct,
 } from "@/lib/recipes/actions";
@@ -30,10 +32,10 @@ import { cn } from "@/lib/utils";
  * The gear on a recipe.
  *
  * Home for the things that are ABOUT the recipe rather than in it: printing
- * it, changing what kind of thing it is, taking it out of service. They sit
- * behind a gear rather than on the page because two of the three are hard to
- * undo, and a control you have to go looking for is a control nobody flips by
- * accident on the way past.
+ * it, changing what kind of thing it is, taking it out of service, and
+ * removing it. They sit behind a gear rather than on the page because most of
+ * them are hard or impossible to undo, and a control you have to go looking
+ * for is a control nobody flips by accident on the way past.
  */
 export function RecipeGearMenu({
   recipeId,
@@ -55,9 +57,14 @@ export function RecipeGearMenu({
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState<"type" | "archive" | null>(null);
+  const [confirming, setConfirming] = useState<
+    "type" | "archive" | "delete" | null
+  >(null);
 
-  function run(action: () => Promise<{ ok: boolean; message?: string }>) {
+  function run(
+    action: () => Promise<{ ok: boolean; message?: string }>,
+    onDone?: () => void
+  ) {
     setError(null);
     startTransition(async () => {
       const result = await action();
@@ -67,7 +74,8 @@ export function RecipeGearMenu({
       }
       setConfirming(null);
       setOpen(false);
-      router.refresh();
+      if (onDone) onDone();
+      else router.refresh();
     });
   }
 
@@ -77,7 +85,7 @@ export function RecipeGearMenu({
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Recipe actions"
-        title="Print, change type, archive"
+        title="Print, change type, archive, delete"
         className="inline-flex size-8 items-center justify-center rounded-sm border border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
       >
         <Settings2 className="size-4" />
@@ -88,9 +96,10 @@ export function RecipeGearMenu({
           <DialogHeader>
             <DialogTitle>{recipeName}</DialogTitle>
             <DialogDescription>
-              Printing, and the two settings that change what this recipe is.
-              Tap <span className="font-semibold">?</span> on any of them to
-              see what it does.
+              Printing, and the settings that change what this recipe is or
+              takes it out of service. Tap{" "}
+              <span className="font-semibold">?</span> on any of them to see
+              what it does.
             </DialogDescription>
           </DialogHeader>
 
@@ -174,6 +183,43 @@ export function RecipeGearMenu({
                   onConfirm={() =>
                     run(() =>
                       setRecipeArchived({ recipeId, archived: !isArchived })
+                    )
+                  }
+                />
+
+                {/*
+                  Delete sits under archive because archive is nearly always
+                  the right answer: it takes the recipe out of service and
+                  keeps every plan, sheet and count that points at it working.
+                  Delete is for the recipe that should never have existed - a
+                  typo, a duplicate, a test - and it is refused outright the
+                  moment anything points at it, so the two cannot be confused
+                  by the wrong tap.
+                */}
+                <ActionCard
+                  icon={<Trash2 />}
+                  danger
+                  title="Delete this recipe"
+                  body={`Gone for good, along with its ingredients, instruction and timing window. There is no undo.${
+                    usedInCount > 0
+                      ? ` ${usedInCount} ${usedInCount === 1 ? "recipe lists" : "recipes list"} it, so this will be refused - archive it instead.`
+                      : " If anything is planned against it, counted from it, or lists it as an ingredient, it will be refused and you should archive it instead."
+                  }`}
+                  open={confirming === "delete"}
+                  onOpen={() =>
+                    setConfirming(confirming === "delete" ? null : "delete")
+                  }
+                  confirmLabel="Yes, delete it for good"
+                  pending={pending}
+                  onConfirm={() =>
+                    run(
+                      () => deleteRecipe({ recipeId }),
+                      // The page this menu is on is the recipe that just went,
+                      // so there is nothing to refresh onto - go back to the list.
+                      () => {
+                        router.push("/recipes");
+                        router.refresh();
+                      }
                     )
                   }
                 />

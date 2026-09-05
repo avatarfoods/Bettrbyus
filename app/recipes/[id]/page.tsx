@@ -342,12 +342,15 @@ export default async function RecipePage({ params, searchParams }: Params) {
     <PageShell
       breadcrumbs={[
         { label: "Production" },
-        // Opening a recipe from the plan is a detour, not a change of place.
-        // The crumb names where you actually came from and carries the range
-        // and filters back with it, so one click returns you to your spot.
+        // Opening a recipe from the plan or the picking sheet is a detour,
+        // not a change of place. The crumb names where you actually came from
+        // and carries the range and filters back with it, so one click
+        // returns you to your spot.
         back?.startsWith("/production/schedule")
           ? { label: "Planning", href: back }
-          : { label: "Recipes", href: "/recipes" },
+          : back?.startsWith("/production/picking")
+            ? { label: "Picking order", href: back }
+            : { label: "Recipes", href: "/recipes" },
         { label: recipe.name },
       ]}
       contentClassName="pb-10"
@@ -378,8 +381,13 @@ export default async function RecipePage({ params, searchParams }: Params) {
             config.departments.find(
               (entry) => entry.name === recipe.department
             )?.color ?? null,
-          departmentIndex: config.departments.findIndex(
-            (entry) => entry.name === recipe.department
+          // A recipe with no department yet matches nothing; keep that as
+          // "first colour" rather than passing the -1 down.
+          departmentIndex: Math.max(
+            0,
+            config.departments.findIndex(
+              (entry) => entry.name === recipe.department
+            )
           ),
           recipe,
           raws: explodeRawMaterials(catalog, id),

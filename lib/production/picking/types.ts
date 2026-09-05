@@ -39,6 +39,24 @@ export type PickingRow = {
   toPick: number | null;
   /** Recipe lines that led here, for the tooltip. */
   sources: string[];
+  /**
+   * The same `need`, split by the recipe that asked for it - biggest first.
+   *
+   * Enough to answer "what is this quantity for" without leaving the sheet,
+   * and to open the recipe it names. In `unit`, with the buffer already on,
+   * so the parts sum to `need`.
+   */
+  recipeSources: PickingMaterialSource[];
+};
+
+/** One recipe's share of a material's requirement, for the panel. */
+export type PickingMaterialSource = {
+  recipeId: string;
+  wipCode: string;
+  name: string;
+  /** How that recipe's lines spell the ingredient. */
+  ingredientNames: string[];
+  quantity: number;
 };
 
 export type PickingDriver = {
